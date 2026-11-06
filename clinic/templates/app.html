@@ -1,0 +1,66 @@
+{% load static %}<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Hamada App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'styles.css' %}" />
+  </head>
+  <body>
+    <div class="login-wrap" id="loginView" hidden>
+      <div class="card login-card">
+        <h2>Hamada App</h2>
+        <p class="card-sub">Sign in to your clinic</p>
+        <form id="loginForm" class="stack" style="margin-top:14px;gap:10px">
+          <label class="field">Username <input id="loginUser" autocomplete="username" required /></label>
+          <label class="field">Password <input id="loginPass" type="password" autocomplete="current-password" required /></label>
+          <button class="btn" type="submit">Sign in</button>
+          <p class="form-error" id="loginError" role="alert"></p>
+        </form>
+      </div>
+    </div>
+
+    <div class="app" id="appView" hidden>
+      <aside class="side">
+        <div>
+          <p class="clinic-name" style="font-size:19px">Hamada App</p>
+          <p class="clinic-sub">Clinic management, made simple</p>
+        </div>
+        <div>
+          <p class="side-label">Clinic</p>
+          <p class="clinic-name" id="clinicName"></p>
+          <p class="clinic-sub" id="clinicSub"></p>
+        </div>
+        <nav class="main-nav" id="mainNav" aria-label="Main">
+          <button class="nav-btn active" data-go="today">Today</button>
+          <button class="nav-btn" data-go="inventory">Inventory</button>
+          <button class="nav-btn" data-go="finances">Finances</button>
+          <button class="nav-btn" data-go="rx">Prescription</button>
+          <button class="nav-btn" data-go="online">Online consultations</button>
+          <button class="nav-btn" data-go="team">Team &amp; settings</button>
+        </nav>
+        <div class="side-foot">One app for many specialties. Each clinic sees the services, medicines and stock list that fit its specialty.</div>
+      </aside>
+
+      <main>
+        <div class="wrap">
+          <div class="topbar">
+            <p class="today-date" id="todayDate"></p>
+            <div class="user-box"><span class="who" id="whoAmI"></span><button class="btn ghost small" id="logout">Sign out</button></div>
+          </div>
+          <div class="load-error" id="loadError" role="alert" hidden></div>
+          <div class="alert-bar" id="stockAlert" role="alert"></div>
+          <div class="page-head"><h1 id="pageTitle"></h1><p id="pageSub"></p></div>
+          <div id="page"></div>
+        </div>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="{% static 'app.js' %}"></script>
+  </body>
+</html>
