@@ -7,7 +7,9 @@ Status: draft 2, 2026-11-07, for Saged's review. Draft 2 adds the business day, 
 
 Hamada is a clinic management platform for private clinics, Egypt first. One platform serves many clinics and many specialties. Each clinic sees the services, medicines and stock list for its specialty.
 
-v2 rebuilds the platform from scratch so that it holds up to 250,000 doctors. The current Django prototype (`clinic/`, `static/`) and the first demo (`C:\work\hamada-app`) are domain references only.
+v2 rebuilds the platform from scratch so that it holds up to 250,000 doctors. The current Django prototype (`clinic/`, `static/`) is a domain reference only.
+
+**The first demo is the model for the screens** (Saged, 2026-11-07): `C:\work\hamada-app`, published at https://hamada-app-ghunim.vercel.app/. v2 keeps its sections (Today, Inventory, Finances, Prescription, Online consultations, Team & settings), its layout and its look: the colours, cards, side navigation and the way each screen works. Arabic and right to left come first, with English as the second language. The data is real and saved on the server, where the demo keeps it in memory. Each milestone's screens are checked side by side against the demo before they are approved.
 
 What a clinic does in Hamada:
 - book patients and run the day's queue;

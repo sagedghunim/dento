@@ -285,3 +285,201 @@ msgstr ""
 
 msgid "I saved them, continue"
 msgstr "حفظتها، متابعة"
+
+msgid ""
+"A payment with a booking is only for today. Book, then take the payment."
+msgstr "الدفع مع الحجز لزيارات اليوم فقط. احجز أولًا ثم سجّل الدفع."
+
+msgid "A visit can be marked arrived only on its own day."
+msgstr "لا يمكن تسجيل وصول المريض إلا في يوم زيارته."
+
+msgid "Check the date of birth."
+msgstr "راجع تاريخ الميلاد."
+
+msgid "Describe the line."
+msgstr "اكتب وصف البند."
+
+msgid "Enter a price."
+msgstr "أدخل السعر."
+
+msgid "Enter a valid mobile number."
+msgstr "أدخل رقم موبايل صحيحًا."
+
+msgid "Enter an amount."
+msgstr "أدخل المبلغ."
+
+msgid "Enter the patient's name."
+msgstr "أدخل اسم المريض."
+
+msgid "Lower the discount before removing this line."
+msgstr "قلّل الخصم قبل حذف هذا البند."
+
+msgid "More has been paid than the new total. Refund first."
+msgstr "المدفوع أكبر من الإجمالي الجديد. ردّ المبلغ أولًا."
+
+msgid "Only payments can be refunded."
+msgstr "لا يُرد إلا الدفعات."
+
+msgid "Pick a day from today up to a year ahead."
+msgstr "اختر يومًا من اليوم وحتى سنة قادمة."
+
+msgid "Pick a patient or enter a new one."
+msgstr "اختر مريضًا أو أدخل مريضًا جديدًا."
+
+msgid "Pick a time for this doctor."
+msgstr "اختر موعدًا لهذا الطبيب."
+
+msgid "Pick one of the doctor's times."
+msgstr "اختر أحد مواعيد الطبيب."
+
+msgid "Refund the payments before cancelling this visit."
+msgstr "ردّ المدفوعات قبل إلغاء هذه الزيارة."
+
+msgid "Refund the payments before voiding this invoice."
+msgstr "ردّ المدفوعات قبل إلغاء هذه الفاتورة."
+
+msgid "Someone changed this patient meanwhile. Reload and try again."
+msgstr ""
+"عدّل شخص آخر بيانات هذا المريض في الأثناء. أعد التحميل وحاول مرة أخرى."
+
+msgid "The amount is more than what is owed."
+msgstr "المبلغ أكبر من المستحق."
+
+msgid "The discount can't be more than the invoice."
+msgstr "لا يمكن أن يزيد الخصم على قيمة الفاتورة."
+
+msgid "The discount changed meanwhile. Reload and try again."
+msgstr "تغيّر الخصم في الأثناء. أعد التحميل وحاول مرة أخرى."
+
+msgid "The refund is more than what is left of this payment."
+msgstr "المبلغ المردود أكبر من المتبقي من هذه الدفعة."
+
+msgid "This action doesn't apply to a visit in that status."
+msgstr "هذا الإجراء لا يناسب زيارة في هذه الحالة."
+
+msgid "This appointment wasn't found."
+msgstr "لم يُعثر على هذا الحجز."
+
+msgid "This doctor doesn't work on that day."
+msgstr "هذا الطبيب لا يعمل في ذلك اليوم."
+
+msgid "This doctor wasn't found."
+msgstr "لم يُعثر على هذا الطبيب."
+
+msgid "This doctor's day is fully booked."
+msgstr "حجوزات هذا الطبيب في ذلك اليوم مكتملة."
+
+msgid "This invoice was voided."
+msgstr "أُلغيت هذه الفاتورة."
+
+msgid "This invoice wasn't found."
+msgstr "لم يُعثر على هذه الفاتورة."
+
+msgid "This line wasn't found."
+msgstr "لم يُعثر على هذا البند."
+
+msgid "This patient wasn't found."
+msgstr "لم يُعثر على هذا المريض."
+
+msgid "This payment wasn't found."
+msgstr "لم يُعثر على هذه الدفعة."
+
+msgid "This service isn't offered any more."
+msgstr "هذه الخدمة لم تعد متاحة."
+
+msgid "This service wasn't found."
+msgstr "لم يُعثر على هذه الخدمة."
+
+msgid "This time is already booked."
+msgstr "هذا الموعد محجوز بالفعل."
+
+msgid "This visit was cancelled."
+msgstr "أُلغيت هذه الزيارة."
+
+msgid "This visit's status changed meanwhile."
+msgstr "تغيّرت حالة هذه الزيارة في الأثناء."
+
+msgid "Active"
+msgstr "نشطة"
+
+msgid "City"
+msgstr "المدينة"
+
+msgid "Clinic"
+msgstr "العيادة"
+
+msgid ""
+"Clinic created. Give the owner this temporary password. It is shown once and"
+" expires in 72 hours:"
+msgstr ""
+"أُنشئت العيادة. أعطِ المالك كلمة المرور المؤقتة هذه. تظهر مرة واحدة فقط "
+"وتنتهي صلاحيتها بعد 72 ساعة:"
+
+msgid "Clinic name"
+msgstr "اسم العيادة"
+
+msgid "Clinic not found."
+msgstr "لم يُعثر على العيادة."
+
+msgid "Clinics"
+msgstr "العيادات"
+
+msgid "Clinics and their owners only. The platform never shows patient data."
+msgstr "العيادات وأصحابها فقط. المنصة لا تعرض بيانات المرضى أبداً."
+
+msgid "Clinics on the platform"
+msgstr "العيادات على المنصة"
+
+msgid "Create clinic"
+msgstr "إنشاء العيادة"
+
+msgid "Members"
+msgstr "الأعضاء"
+
+msgid "Moving"
+msgstr "جارٍ النقل"
+
+msgid "New clinic"
+msgstr "عيادة جديدة"
+
+msgid "No clinics yet."
+msgstr "لا توجد عيادات بعد."
+
+msgid "Owner's full name"
+msgstr "الاسم الكامل للمالك"
+
+msgid "Owner's mobile (optional)"
+msgstr "موبايل المالك (اختياري)"
+
+msgid "Owner's username"
+msgstr "اسم المستخدم للمالك"
+
+msgid "Pick a specialty from the list."
+msgstr "اختر تخصصاً من القائمة."
+
+msgid "Platform"
+msgstr "المنصة"
+
+msgid "Reactivate"
+msgstr "إعادة التفعيل"
+
+msgid "Shard"
+msgstr "قاعدة البيانات"
+
+msgid "Specialty"
+msgstr "التخصص"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Suspend"
+msgstr "إيقاف"
+
+msgid "Suspended"
+msgstr "موقوفة"
+
+msgid "That mobile number already has an account."
+msgstr "رقم الموبايل هذا مسجّل لحساب آخر بالفعل."
+
+msgid "The clinic is being moved. Try again later."
+msgstr "جارٍ نقل بيانات العيادة. حاول مرة أخرى لاحقاً."

@@ -64,6 +64,10 @@ INSTALLED_APPS = [
     "accounts",
     "directory",
     "clinics",
+    "patients",
+    "summaries",
+    "scheduling",
+    "billing",
     "audit",
     "web",
 ]
@@ -173,6 +177,8 @@ if not DEBUG:
         "staticfiles": {"BACKEND": "core.storage.ModuleManifestStaticFilesStorage"},
     }
 APP_VERSION = env("HAMADA_APP_VERSION", "2.0.0-dev")
+# Seconds between Today polls; operations raise it to slow every screen at once (design 5.11).
+POLL_AFTER_SECONDS = int(env("HAMADA_POLL_AFTER", "5"))
 CSRF_FAILURE_VIEW = "core.views.csrf_failure"
 LOGIN_URL = "/login"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

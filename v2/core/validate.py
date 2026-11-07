@@ -30,3 +30,33 @@ def boolean(data, name, default=False):
     if not isinstance(value, bool):
         raise ApiError("invalid", f"{name} must be true or false", fields={name: "boolean"})
     return value
+
+
+MAX_ID = 2**63 - 1
+
+
+def ident(value, name="id"):
+    """A row id from a body or a query string: a positive bigint (as a number or digits)."""
+    if isinstance(value, str) and value.strip().isdigit():
+        value = int(value.strip())
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_ID:
+        raise ApiError("invalid", f"{name} must be an id", fields={name: "id"})
+    return value
+
+
+def path_id(value, not_found):
+    """A row id from the URL. Anything out of range is simply not found."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_ID:
+        raise not_found
+    return value
+
+
+def iso_day(value, name="day"):
+    import datetime as dt
+
+    if isinstance(value, str):
+        try:
+            return dt.date.fromisoformat(value.strip())
+        except ValueError:
+            pass
+    raise ApiError("invalid", f"{name} must be a date (YYYY-MM-DD)", fields={name: "date"})

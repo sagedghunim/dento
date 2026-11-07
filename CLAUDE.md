@@ -10,6 +10,7 @@ The platform is being rebuilt from scratch to grow to 250,000 doctors. Requireme
 - First-time setup: `powershell -ExecutionPolicy Bypass -File v2\scripts\pg.ps1 init` creates the database and writes `v2\.env`. Start and stop PostgreSQL only through `v2\scripts\pg.ps1`; stopping it stops it for the warehouse too.
 - Python is 3.15 (`py -3.15`); `python` on PATH is the Microsoft Store stub. Use `v2\.venv\Scripts\python.exe`.
 - Tests run against PostgreSQL: `cd v2` then `.venv\Scripts\python manage.py test`.
+- Screens follow the first demo (`C:\work\hamada-app`, https://hamada-app-ghunim.vercel.app/): the same sections, layout and look, in Arabic right to left first (requirements 1).
 - Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout. A design or a milestone goes to the three seniors and the judge for review, then the chief judge decides.
 
 ## Commands (Windows)

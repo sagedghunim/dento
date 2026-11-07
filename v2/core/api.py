@@ -15,12 +15,12 @@ import hashlib
 import json
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import quote
 
 from django.conf import settings
 from django.db import OperationalError, connections, transaction
-from django.http import JsonResponse
+from django.http import HttpResponseNotModified, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext as _
 from psycopg import errors as pg_errors
@@ -42,6 +42,7 @@ class Result:
     status: int = 200
     target_type: str = ""
     target_id: int | None = None
+    headers: dict = field(default_factory=dict)  # e.g. ETag and Poll-After (design 5.11)
 
 
 def client_ip(request):
@@ -81,7 +82,12 @@ def _request_key(request):
 def _respond(request, result, key=None):
     if not isinstance(result, Result):
         result = Result(result or {})
-    response = JsonResponse(result.body, status=result.status, json_dumps_params={"ensure_ascii": False})
+    if result.status == 304:
+        response = HttpResponseNotModified()
+    else:
+        response = JsonResponse(result.body, status=result.status, json_dumps_params={"ensure_ascii": False})
+    for name, value in result.headers.items():
+        response[name] = value
     if key is not None:
         response["Idempotency-Key"] = str(key)
     return response
@@ -325,3 +331,19 @@ def page(perm=None, member=True, allow_password_change=False, template_403="web/
         return inner
 
     return wrap
+
+
+def by_method(**views):
+    """One URL, several methods: by_method(GET=search_view, POST=create_view).
+
+    Each view keeps its own @api declaration; `api_views` lets tests read them from the URL configuration.
+    """
+
+    def dispatch(request, *args, **kwargs):
+        view = views.get(request.method)
+        if view is None:
+            return _error_response(request, ApiError("method_not_allowed", _("This method isn't allowed here."), 405))
+        return view(request, *args, **kwargs)
+
+    dispatch.api_views = views
+    return dispatch
