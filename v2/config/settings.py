@@ -62,6 +62,9 @@ INSTALLED_APPS = [
     "procrastinate.contrib.django",
     "core",
     "accounts",
+    "directory",
+    "clinics",
+    "audit",
 ]
 
 # Background jobs live in each app's jobs.py (design 3.1).
@@ -94,24 +97,39 @@ TEMPLATES = [
     },
 ]
 
-# PostgreSQL only (design 3.1). Web requests get short lock and statement
-# timeouts (design 5.0); jobs and migrations raise them per session.
-_timeouts = f"-c lock_timeout={env('PG_LOCK_TIMEOUT', '2s')} -c statement_timeout={env('PG_STATEMENT_TIMEOUT', '5s')}"
-DATABASES = {
-    "default": {
+# PostgreSQL only. `default` is the directory; each shard holds whole clinics
+# (design 3.3). Timeouts are per-role settings (design 4.0), not connection
+# options, so they survive PgBouncer's transaction pooling.
+def _database(name):
+    return {
         "ENGINE": "django.db.backends.postgresql",
         "HOST": env("PGHOST", "127.0.0.1"),
         "PORT": env("PGPORT", "5432"),
-        "NAME": env("PGDATABASE", "hamada"),
+        "NAME": name,
         "USER": env("PGUSER", "hamada"),
         "PASSWORD": env("PGPASSWORD", ""),
         "CONN_MAX_AGE": int(env("PG_CONN_MAX_AGE", "60")),
         "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {"options": _timeouts},
-        # Behind PgBouncer in transaction mode (design 9).
+        # Behind PgBouncer in transaction mode (design 9.4).
         "DISABLE_SERVER_SIDE_CURSORS": env_bool("PG_BEHIND_PGBOUNCER", False),
     }
-}
+
+
+DATABASES = {"default": _database(env("PGDATABASE", "hamada_dir"))}
+# HAMADA_SHARDS=shard_1=hamada_s001,shard_2=hamada_s002
+SHARDS = {}
+for _item in env_list("HAMADA_SHARDS", "shard_1=hamada_s001"):
+    _alias, _name = _item.split("=", 1)
+    if not _alias.startswith("shard_") or not _alias[6:].isdigit():
+        raise ImproperlyConfigured(f"Shard aliases look like shard_<n>, not {_alias!r}.")
+    DATABASES[_alias] = _database(_name)
+    SHARDS[_alias] = int(_alias[6:])
+DATABASE_ROUTERS = ["core.routing.ShardRouter"]
+
+# Encrypts two-factor secrets (design 5.9).
+FIELD_KEY = env("HAMADA_FIELD_KEY", "")
+if not FIELD_KEY and not DEBUG:
+    raise ImproperlyConfigured("HAMADA_FIELD_KEY is not set.")
 
 # Redis is optional (design 3.1): without it, the cache is per process and
 # sessions live in PostgreSQL.

@@ -1,22 +1,27 @@
-"""Monthly partitions for the log tables (design 4.10). Reused from the warehouse project.
+"""Monthly partitions for the log tables (design 4.10).
 
-- A parent table is created with RunSQL, partitioned by month on its timestamp, with a primary key of (id, <timestamp>).
-- There is no DEFAULT partition. A missing partition makes inserts fail loudly instead of hiding rows.
-- `ensure_partitions()` creates the current month and the next `months_ahead` months. A daily job runs it, and an alert fires when fewer than 2 future partitions exist.
-- To add an index to an existing large partitioned table, use `add_index_online()`. It creates the index ON ONLY the parent, builds it on each partition concurrently, and attaches each one.
+- The parent is created by hand with RunSQL, partitioned by month on its time column.
+- There is no DEFAULT partition: a missing partition makes inserts fail loudly.
+- A new partition is created standalone, with a CHECK matching its bounds, and
+  then attached. ATTACH takes only a ShareUpdateExclusiveLock on the parent, so
+  inserts (every file open writes one) don't wait, as they would behind
+  CREATE TABLE ... PARTITION OF. The CHECK lets ATTACH skip scanning the table.
+- `ensure_partitions()` keeps the current month and `months_ahead` more. A daily
+  job runs it; fewer than 2 future partitions logs an error for the alert.
+- Old partitions leave with DETACH PARTITION ... CONCURRENTLY (`detach_partition`).
 """
 
 import datetime as dt
 import logging
 
-from django.db import connection
+from django.db import connections
 
 log = logging.getLogger(__name__)
 
-# table -> (partition column, months kept online)
+# table -> (database kind, time column, months kept online)
 PARTITIONED_TABLES = {
-    "audit_event": ("at", 24),
-    "accounts_login_event": ("at", 12),
+    "audit_access": ("shard", "at", 24),
+    "accounts_account_event": ("directory", "at", 12),
 }
 
 
@@ -33,7 +38,7 @@ def partition_name(table, month):
     return f"{table}_y{month.year}m{month.month:02d}"
 
 
-def existing_partitions(table):
+def existing_partitions(connection, table):
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid "
@@ -43,13 +48,20 @@ def existing_partitions(table):
         return [row[0] for row in cursor.fetchall()]
 
 
-def ensure_partitions(months_ahead=3, today=None, tables=None):
-    """Create missing monthly partitions. Returns {table: number of future partitions}."""
+def tables_for(alias):
+    kind = "directory" if alias == "default" else "shard"
+    return [table for table, (table_kind, _, _) in PARTITIONED_TABLES.items() if table_kind == kind]
+
+
+def ensure_partitions(alias, months_ahead=3, today=None, tables=None):
+    """Create missing monthly partitions on one database. Returns {table: future partitions}."""
+    connection = connections[alias]
     today = today or dt.datetime.now(dt.UTC).date()
     current = _month_start(today)
     result = {}
-    for table in tables or PARTITIONED_TABLES:
-        existing = set(existing_partitions(table))
+    for table in tables or tables_for(alias):
+        column = PARTITIONED_TABLES[table][1]
+        existing = set(existing_partitions(connection, table))
         with connection.cursor() as cursor:
             for offset in range(0, months_ahead + 1):
                 start = _add_months(current, offset)
@@ -57,34 +69,39 @@ def ensure_partitions(months_ahead=3, today=None, tables=None):
                 if name in existing:
                     continue
                 end = _add_months(start, 1)
+                lower, upper = f"'{start.isoformat()} 00:00:00+00'", f"'{end.isoformat()} 00:00:00+00'"
+                cursor.execute(f'CREATE TABLE IF NOT EXISTS "{name}" (LIKE "{table}" INCLUDING DEFAULTS INCLUDING CONSTRAINTS)')
                 cursor.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{name}" PARTITION OF "{table}" '
-                    f"FOR VALUES FROM ('{start.isoformat()} 00:00:00+00') TO ('{end.isoformat()} 00:00:00+00')"
+                    f'ALTER TABLE "{name}" ADD CONSTRAINT "{name}_bounds" '
+                    f'CHECK ("{column}" IS NOT NULL AND "{column}" >= {lower} AND "{column}" < {upper})'
                 )
+                # A partition read directly would skip the parent's policy, so it gets the
+                # same one, before it is attached (design 4.10).
+                cursor.execute("SELECT relforcerowsecurity FROM pg_class WHERE relname = %s", [table])
+                if cursor.fetchone()[0]:
+                    from core.rls import enable_sql
+
+                    for statement in enable_sql(name):
+                        cursor.execute(statement)
+                cursor.execute(f'ALTER TABLE "{table}" ATTACH PARTITION "{name}" FOR VALUES FROM ({lower}) TO ({upper})')
+                # The bound check has done its job; the partition constraint replaces it.
+                cursor.execute(f'ALTER TABLE "{name}" DROP CONSTRAINT "{name}_bounds"')
                 existing.add(name)
         future = sum(1 for name in existing if name > partition_name(table, current))
         result[table] = future
         if future < 2:
-            log.error("Only %s future partitions exist for %s", future, table)
+            log.error("Only %s future partitions exist for %s on %s", future, table, alias)
     return result
 
 
-def add_index_online(table, index_name, definition):
-    """Add an index to a partitioned table without locking every partition at once.
-
-    `definition` is the part after the table name, e.g. "USING btree (sku_id, at)".
-    Must run outside a transaction (CREATE INDEX CONCURRENTLY can't run inside one).
-    """
-    with connection.cursor() as cursor:
-        cursor.execute(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON ONLY "{table}" {definition}')
-        for partition in existing_partitions(table):
-            child = f"{partition}_{index_name}"[:63]
-            cursor.execute(f'CREATE INDEX CONCURRENTLY IF NOT EXISTS "{child}" ON "{partition}" {definition}')
-            cursor.execute(f'ALTER INDEX "{index_name}" ATTACH PARTITION "{child}"')
-
-
-def droppable_partitions(table, keep_months, today=None):
+def droppable_partitions(alias, table, keep_months, today=None):
     """Partitions older than the retention window, oldest first."""
     today = today or dt.datetime.now(dt.UTC).date()
     cutoff = partition_name(table, _add_months(_month_start(today), -keep_months))
-    return [name for name in existing_partitions(table) if name < cutoff]
+    return [name for name in existing_partitions(connections[alias], table) if name < cutoff]
+
+
+def detach_partition(alias, table, name):
+    """Must run outside a transaction (DETACH ... CONCURRENTLY can't run inside one)."""
+    with connections[alias].cursor() as cursor:
+        cursor.execute(f'ALTER TABLE "{table}" DETACH PARTITION "{name}" CONCURRENTLY')

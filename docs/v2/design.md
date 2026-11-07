@@ -1,7 +1,8 @@
 # Hamada v2: design
 
-Status: draft 2, 2026-11-07.
+Status: draft 2.1, 2026-11-07.
 - Draft 2 applies the 29 changes the chief judge required after reviewing draft 1 (`docs/v2/reviews/draft1-chief-judge.md`). Appendix A maps each change to the sections that apply it; Appendix B maps the requirements.
+- Draft 2.1 fixes the 6 blocking problems from the chief judge's check of draft 2 and takes its improvements I1–I4 (`docs/v2/reviews/draft2-chief-check.md`; Appendix C).
 - The four reviews of draft 1 are in `docs/v2/reviews/`.
 Requirements: `docs/v2/requirements.md`. References like (R4.3) point to its sections.
 
@@ -114,11 +115,12 @@ Rules:
 
 - New clinics go to the least-full shard.
 - **Moving a clinic** (rehearsed in M5), in the 04:00–09:00 Cairo window:
-  1. freeze the clinic: the directory marks it moving, and requests get 503 with `Retry-After`;
-  2. copy its rows by `clinic_id`, table by table, to the target shard;
-  3. verify row counts and sums;
-  4. set `owned` on the target and clear it on the source, then switch the directory;
+  1. freeze the clinic: the directory marks it moving, **and the source shard clears `owned`**, so a request routed by a stale cache is refused there too (503 with `Retry-After`);
+  2. wait until no transaction that started before that change is still running (`pg_stat_activity.xact_start`);
+  3. copy its rows by `clinic_id`, table by table, to the target shard, and verify row counts and sums;
+  4. set `owned` on the target, then switch the directory;
   5. delete the rows on the source in batches.
+- A request checks the clinic (`owned`, status) **before** it claims its request key, and a missing clinic row counts as not owned (5.0).
 
 ### 3.5 Deployment
 
@@ -147,7 +149,9 @@ Rules:
 - **Database roles** (production; development and tests use one owner role without BYPASSRLS, which `FORCE` subjects to the policies):
   - `hamada_owner` owns the tables and runs migrations. It has BYPASSRLS, for backfills.
   - `hamada_web` and `hamada_worker` have no bypass, DML grants only, and only INSERT and SELECT on the audit tables.
-  - `hamada_maint` has BYPASSRLS for cross-clinic upkeep (partitions, request-key cleanup, platform counts from `clinic_day`), and no grants on patient tables.
+  - `hamada_maint` has BYPASSRLS for cross-clinic DML upkeep (request-key cleanup, platform counts from `clinic_day`), and no grants on patient tables. It is never a member of `hamada_owner`.
+  - **Partition DDL** (create, attach, detach) needs to own the parent, so it runs as `hamada_owner` from a management command, like `migrate_all` (4.10).
+  - Per-clinic jobs run as `hamada_worker`, with `set_config` in each transaction. A process that needs two roles uses two database aliases for the same shard (for example `shard_1` and `shard_1_maint`).
   - Timeouts are per-role settings (`ALTER ROLE … SET lock_timeout, statement_timeout, idle_in_transaction_session_timeout`). Any exception uses `SET LOCAL`.
 - **Money** is `bigint` piastres with a `CHECK` on its sign.
 - **Times** are `timestamptz` in UTC. A `day date` column holds the **business day** in the clinic's time zone: a time before the clinic's `day_ends_at` (default 04:00) belongs to the previous calendar day. One server helper, `business_day(clinic, instant)`, computes it everywhere; the browser never does.
@@ -244,7 +248,7 @@ Platform admins hold no memberships. This is checked when a member is added and 
   - `UNIQUE (clinic_id, id)`. Composite foreign keys to patient, membership (doctor) and service.
   - `updated_at` is never indexed.
 - `summaries_doctor_day`: doctor_id, day, last_queue_no, booked (active bookings, for `max_bookings`), done, collected, refunded. `UNIQUE (clinic_id, day, doctor_id)`. Every counter >= 0.
-- `summaries_clinic_day`: day, version, done, collected, refunded, expenses. `UNIQUE (clinic_id, day)`. Every counter >= 0.
+- `summaries_clinic_day`: day, version, done, collected, refunded, expenses, changed_since_recompute (set by every change to that day's sources, cleared by the recompute, 5.10). `UNIQUE (clinic_id, day)`. Every counter >= 0.
 - Status counts on Today come from the day's rows that Today already reads, so the summaries hold only what finance, limits and the version need. Fewer counters means less to drift.
 
 ### 4.5 Billing
@@ -256,11 +260,11 @@ Platform admins hold no memberships. This is checked when a member is added and 
 - `billing_invoice_line`: invoice_id, kind (`service` | `procedure` | `material` | `other`), service_id, item_id, description, qty, unit_price, amount, from_list. `CHECK (amount = qty * unit_price AND qty > 0)`. Index `(clinic_id, invoice_id, id)`.
 - `billing_payment`: invoice_id, patient_id, doctor_id (copied at insert), kind (`payment` | `refund`), method (`cash` | `card` | `wallet` | `instapay` | `other`), amount, refunded, refund_of_id, received_at, day, received_by_id, note.
   - CHECKs: `amount > 0`, `0 <= refunded <= amount`, only payment rows have refunded > 0, a refund row has refund_of_id.
-  - Index `(clinic_id, invoice_id, id)`; index `(clinic_id, patient_id, received_at DESC, id DESC)`; index `(clinic_id, day, received_by_id)` for the day closing.
+  - `UNIQUE (clinic_id, id)` (refunds reference payments). Index `(clinic_id, invoice_id, id)`; index `(clinic_id, patient_id, received_at DESC, id DESC)`; index `(clinic_id, day, received_by_id)` for the day closing.
 
 ### 4.6 Clinical
 
-- `clinical_visit_note`: appointment_id, patient_id, doctor_id, complaint, diagnosis, notes, version, created_at, updated_at, updated_by_id. `UNIQUE (clinic_id, appointment_id)`. Index `(clinic_id, patient_id, created_at DESC, id DESC)`.
+- `clinical_visit_note`: appointment_id, patient_id, doctor_id, complaint, diagnosis, notes, version, created_at, updated_at, updated_by_id. `UNIQUE (clinic_id, appointment_id)`, `UNIQUE (clinic_id, id)`. Index `(clinic_id, patient_id, created_at DESC, id DESC)`.
 - `clinical_visit_note_revision`: note_id, version, the old complaint, diagnosis and notes, replaced_at, replaced_by_id. Written when a note is edited after its visit day. Index `(clinic_id, note_id, version)`.
 - `clinical_medicine`: name, form, default_dose, is_active. `UNIQUE (clinic_id, name)`.
 - `clinical_prescription`: number, patient_id, doctor_id, appointment_id, notes, created_at. `UNIQUE (clinic_id, number)`, `UNIQUE (clinic_id, id)`. Index `(clinic_id, patient_id, created_at DESC, id DESC)`.
@@ -268,13 +272,13 @@ Platform admins hold no memberships. This is checked when a member is added and 
 
 ### 4.7 Inventory
 
-- `inventory_item`: name, unit, pack, quantity, threshold, unit_cost, is_active. `UNIQUE (clinic_id, name)`. `CHECK (quantity >= 0 AND threshold >= 0 AND unit_cost >= 0)`. No partial low-stock index: its predicate would make every stock use a non-HOT update, and a clinic's few hundred items scan in under a millisecond.
+- `inventory_item`: name, unit, pack, quantity, threshold, unit_cost, is_active. `UNIQUE (clinic_id, name)`, `UNIQUE (clinic_id, id)`. `CHECK (quantity >= 0 AND threshold >= 0 AND unit_cost >= 0)`. No partial low-stock index: its predicate would make every stock use a non-HOT update, and a clinic's few hundred items scan in under a millisecond.
 - `inventory_movement`: item_id, kind (`purchase` | `use` | `adjust`), qty (signed), balance_after, unit_cost, patient_id, appointment_id, expense_id, reason, created_by_id, at. Index `(clinic_id, item_id, at DESC, id DESC)`; index `(clinic_id, at DESC, id DESC) WHERE kind = 'use'`.
 
 ### 4.8 Finance
 
-- `finance_category`: name, is_system. `UNIQUE (clinic_id, name)`.
-- `finance_expense`: category_id, name, amount, day, purchase (bool), created_at, created_by_id, voided_at, voided_by_id. `CHECK (amount > 0)`. Index `(clinic_id, day DESC, id DESC)`. A purchase's expense can only be reversed together with the purchase (M3).
+- `finance_category`: name, is_system. `UNIQUE (clinic_id, name)`, `UNIQUE (clinic_id, id)`.
+- `finance_expense`: category_id, name, amount, day, purchase (bool), created_at, created_by_id, voided_at, voided_by_id. `CHECK (amount > 0)`. `UNIQUE (clinic_id, id)`. Index `(clinic_id, day DESC, id DESC)`. A purchase's expense can only be reversed together with the purchase (M3).
 - `finance_staff_pay`: membership_id, name, title, kind (`fixed` | `percent`), amount, percent. `CHECK (percent BETWEEN 0 AND 100)`.
 
 ### 4.9 Online consultations (M3)
@@ -291,19 +295,19 @@ Platform admins hold no memberships. This is checked when a member is added and 
 
 ### 4.10 Logs
 
-- `audit_change` (shard): actor_kind, membership_id, action, target_type, target_id, details (`jsonb`, before and after), ip, request_id, at. Index `(clinic_id, at DESC, id DESC)` and `(clinic_id, target_type, target_id, at DESC)`. Low volume. Kept as long as the financial records; **Open:** the legal period (likely at least 5 years).
+- `audit_change` (shard): actor_kind, membership_id, action, target_type, target_id, details (`jsonb`, before and after), ip, request_id, at. Index `(clinic_id, at DESC, id DESC)` and `(clinic_id, target_type, target_id, at DESC, id DESC)`. Low volume. Kept as long as the financial records; **Open:** the legal period (likely at least 5 years).
 - `audit_access` (shard), partitioned by month on `at`:
   - membership_id, patient_id, action (`smallint`: open, print, export, note, prescription, invoice, history), at, ip, request_id;
-  - `PRIMARY KEY (clinic_id, at, id)`, which also serves a clinic's newest-first list; index `(clinic_id, patient_id, at)` for "who opened this file";
+  - `PRIMARY KEY (clinic_id, at, id)`, which also serves a clinic's newest-first list; index `(clinic_id, patient_id, at, id)` for "who opened this file";
   - kept 24 months online, then detached, archived and dropped.
 - `accounts_account_event` (directory, 4.1).
-- **Partition upkeep** (`core/partitions.py`), as `hamada_maint`: each new partition is created standalone with a CHECK matching its bounds, then attached (ShareUpdateExclusiveLock, so file opens don't wait). Old partitions leave by `DETACH PARTITION … CONCURRENTLY`. A daily job keeps 3 months ahead, and an alert fires below 2.
+- **Partition upkeep** (`core/partitions.py`, `manage.py ensure_partitions`), as `hamada_owner`: each new partition is created standalone with a CHECK matching its bounds, **given RLS and the standard policy before it is attached**, then attached (ShareUpdateExclusiveLock, so file opens don't wait). Old partitions leave by `DETACH PARTITION … CONCURRENTLY`. A daily run keeps 3 months ahead, and an alert fires below 2. CI runs the upkeep once under the production roles (M5).
 
 **Why the business tables aren't partitioned by time.** Appointments, invoices, payments and the stock ledger are read per clinic across all time, and other rows refer to them. Time partitions would force the partition column into every foreign key and unique key, and turn a patient's history into a probe of every partition. They grow out by shards instead.
 
 ### 4.11 Request keys
 
-- `core_request_key` in every shard: `PRIMARY KEY (clinic_id, key)`, membership_id, endpoint, request_hash (SHA-256 of the method, the path and the canonical body), target_type, target_id, created_at. BRIN index on created_at. Forced RLS like every tenant table.
+- `core_request_key` in every shard: `PRIMARY KEY (clinic_id, key)`, membership_id, endpoint, request_hash (SHA-256 of the method, the path and the canonical body), status (the HTTP status of the first answer), target_type, target_id, created_at. BRIN index on created_at. Forced RLS like every tenant table.
 - The directory's copy is keyed by (user_id, key), for account and platform endpoints.
 - No response body and no patient data are stored: a replay rebuilds the answer from the target.
 - Rows live at least 72 hours. A nightly job, as `hamada_maint`, deletes older rows in batches of about 5,000 in the 04:00–09:00 window.
@@ -316,13 +320,13 @@ Platform admins hold no memberships. This is checked when a member is added and 
 **One transaction per request, on the clinic's shard.** `@api` (and the page decorator) does, in order:
 1. checks the method, the session, `must_change_password`, the two-factor state (5.9) and `X-Membership` against the session's active membership (409 `clinic_changed`);
 2. opens a transaction on the shard and runs `SELECT set_config('app.clinic_id', <id>, true)`. Never a session `SET`;
-3. for a mutating request, claims the request key (5.0 "Repeats");
-4. loads the membership and the clinic (`owned`, status) in one query, and computes the effective codes;
-5. checks the view's declared permission, builds the `Ctx` and calls the view.
+3. loads the membership and the clinic (`owned`, status) in one query. A missing clinic row, or one not `owned`, is 503 with `Retry-After` (3.4). It computes the effective codes;
+4. for a mutating request, claims the request key (5.0 "Repeats");
+5. checks the view's declared permission, builds the `Ctx` and calls the view. Any answer other than 2xx rolls the transaction back, the key claim included.
 
 **`Ctx`** carries the clinic, the membership, the user, the actor kind (`member`, `system` or `platform`), the effective codes, `mfa_verified`, the request id and the IP. Only the decorators and the job runner build it. Services that read patient data refuse `system` and `platform` contexts.
 
-**Repeats.** Every mutating request carries an `Idempotency-Key` header (a UUID), required by `@api`.
+**Repeats.** Every mutating request carries an `Idempotency-Key` header (a UUID), required by `@api`. The exceptions are sign-in, the code and sign-out, which are naturally single-use: a replayed code request never signs anyone in again, because the code's step is already used.
 - `INSERT INTO core_request_key … ON CONFLICT DO NOTHING RETURNING 1`, right after `set_config`.
 - Claimed: do the work and record the target in the same transaction.
 - Conflict, with the same endpoint, hash and membership: replay the first result, rebuilt from the target. Anything else is 422 `request_key_reused`.
@@ -336,27 +340,30 @@ Platform admins hold no memberships. This is checked when a member is added and 
 3. the invoice;
 4. payment rows;
 5. inventory items;
-6. counter rows, in the order `patient_file`, `invoice`, `prescription`;
-7. `summaries_doctor_day` rows;
-8. `summaries_clinic_day` rows.
+6. expenses;
+7. counter rows, in the order `patient_file`, `invoice`, `prescription`;
+8. `summaries_doctor_day` rows;
+9. `summaries_clinic_day` rows.
+
+A flow writes **all** its changes to one summary table in **one statement**, in key order (doctor-days by (day, doctor_id), clinic-days by day), for example a payment on a past day's visit that changes the payment day's `collected` and the visit day's version.
 
 Several rows of one table are locked in one statement in key order (`ORDER BY id FOR NO KEY UPDATE`; doctor-days by (day, doctor_id); clinic-days by day). Inserting a new row is not a lock anyone waits on, except through a unique index.
 
 | Flow | Locks, in order |
 |---|---|
-| Booking (5.1), with optional arrive and payment | key → [new patient: counter patient_file] → [payment: counter invoice] → doctor_day (upsert) → clinic_day (upsert) |
+| Booking (5.1), with optional arrive and payment | key → [new patient: counter patient_file] → [payment: counter invoice, taken here and kept for `ensure_invoice`] → doctor_day (one upsert: turn, booked, collected) → clinic_day (one upsert) |
 | Status change (5.2) | key → appointment (conditional UPDATE) → doctor_day → clinic_day |
 | Finish with payment | key → appointment → invoice (or counter invoice for a new one) → doctor_day → clinic_day |
 | Reschedule | key → appointment → both doctor_day rows in one statement → both clinic_day rows in one statement |
 | Cancel | key → appointment → invoice (read; void if empty) → doctor_day → clinic_day |
 | Payment, line, discount, void (5.3) | key → appointment → invoice (or counter invoice) → doctor_day → clinic_day |
-| Refund | key → appointment → invoice → the payment → doctor_day (refund day) → clinic_day (refund day and the appointment's day) |
+| Refund | key → appointment → invoice → the payment → doctor_day (refund day) → clinic_day (refund day and the appointment's day, one statement) |
 | Stock use, several items (5.4) | key → items in one statement by id → clinic_day (only if an item crosses its threshold) |
 | Purchase, adjustment | key → item → clinic_day (purchase: expenses) |
 | Expense and its void | key → expense → clinic_day |
 | Prescription (5.5) | key → counter prescription |
 | Visit note (5.6) | key → note (conditional on version) |
-| End-of-day sweep (5.10) | the day's open appointments in one statement by id → that clinic-day's doctor_day rows in one statement → clinic_day |
+| End-of-day sweep (5.10) | the day's open appointments in one statement by id → for in-room visits without an invoice, counter invoice → that clinic-day's doctor_day rows in one statement → clinic_day |
 | Recompute (5.10) | that clinic-day's doctor_day rows `FOR UPDATE` in one statement → clinic_day `FOR UPDATE` → aggregate the source rows (no locks) → write |
 
 - **Deadlocks** (`40P01`): the server retries the whole transaction once. **Lock timeouts** (`55P03`): the request has already waited 2 s, so it answers 409 `busy` with `Retry-After`, and the client resends the same key.
@@ -372,7 +379,7 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
    - the day is the current business day or up to a year ahead;
    - for slot doctors, the time is on that weekday's grid;
    - a new patient needs `patients.edit`, and a payment needs `billing.collect`.
-2. A new patient gets a file number from the counter.
+2. A new patient gets a file number from the counter. With a payment, the invoice number is taken right after it and kept for `ensure_invoice`, so the counters come before the summary rows, as in every other flow. A payment inside a booking is accepted only for the current business day; a prepayment for a later day uses the payment endpoint after booking.
 3. **Fee and the follow-up rule** (an assumption for Saged, R4.1):
    - a consultation for a patient whose last consultation with the same doctor arrived or was paid within the follow-up window, counted back from the new appointment's day, uses the price of the consultation's `follow_up_service_id`, and `is_follow_up` is set;
    - a follow-up doesn't start a new window;
@@ -390,8 +397,8 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
    ```
    No row returned means the day is full: 409 `day_full`.
 5. Insert the appointment. A taken slot violates the slot index; the whole transaction rolls back, the turn number included, and the answer is 409 `slot_taken`.
-6. With `arrive`: status `waiting` and arrived_at now (only on the current business day). With a payment: the payment flow in 5.3, inside the same transaction.
-7. `clinic_day`: version + 1.
+6. With `arrive`: status `waiting` and arrived_at now (only on the current business day). With a payment: the payment flow in 5.3 inside the same transaction, using the invoice number from step 2. The turn, `booked` and `collected` go into the step 4 upsert, so `doctor_day` is written once.
+7. `clinic_day`: version + 1 (and `collected` with a payment), in one upsert.
 
 The answer is the new row (turn, invoice id, amount due) and the new version.
 
@@ -435,9 +442,27 @@ A schedule change that would leave a future slot booking off the grid, or outsid
   5. `doctor_day.collected` (payment day, doctor) and `clinic_day.collected` (payment day) go up; the version of the appointment's day is bumped.
 - **Lines:** `POST /api/v1/invoices/{id}/lines` adds a line. A list price needs `billing.collect`; any other price needs `billing.discount`. `DELETE /api/v1/invoices/{id}/lines/{line}` removes one, only while `paid` stays <= the new total.
 - **Discount:** `PUT /api/v1/invoices/{id}/discount` with `{discount, expected_discount}`, absolute, under `billing.discount`. It is refused if the expected value doesn't match or if `paid` would exceed the new total. Audited.
-- **Refund** (`billing.refund`): `UPDATE billing_payment SET refunded = refunded + :a WHERE … AND refunded + :a <= amount`; insert a refund row (its own business day, the original's doctor); take the amount off `invoice.paid`; `doctor_day.refunded` and `clinic_day.refunded` go up on the refund's day. Audited.
+- **Refund** (`billing.refund`): lock the appointment, then the invoice; `UPDATE billing_payment SET refunded = refunded + :a WHERE … AND refunded + :a <= amount`; insert a refund row (its own business day, the original's doctor); take the amount off `invoice.paid`; `doctor_day.refunded` and `clinic_day.refunded` go up on the refund's day. Audited.
 - **Void** (`billing.refund`): only while paid = 0. Audited. A void invoice no longer blocks a new one for the visit, since the one-invoice index covers only open invoices.
 - Revenue is counted when cash comes in (`payment.day`). Net revenue = collected − refunded, per doctor and per clinic.
+
+**Counters each action changes.** The recompute (5.10) and the invariant tests (T7) both read this table. Every row also sets `changed_since_recompute` on each `clinic_day` it touches.
+
+| Action | `doctor_day` | `clinic_day` | Recompute formula |
+|---|---|---|---|
+| book | appointment's day and doctor: `last_queue_no` + 1, booked + 1 | appointment's day: version | booked = appointments of that doctor-day not cancelled; `last_queue_no` is never lowered |
+| arrive, undo_arrive, call | | version | |
+| finish | done + 1 | done + 1, version | done = appointments with status done |
+| cancel | booked − 1 | version | (as book) |
+| reschedule | old row booked − 1, new row booked + 1 and a turn (one statement) | version on both days (one statement) | (as book) |
+| sweep: booked → no_show; waiting → no_show; in_room → done | done + 1 for in-room visits | done, version | (as above) |
+| pay | payment day, appointment's doctor: collected + a | payment day: collected + a; appointment's day: version (one statement) | collected = Σ payment rows of that day (and doctor) |
+| refund | refund day, original doctor: refunded + a | refund day: refunded + a; appointment's day: version | refunded = Σ refund rows of that day (and doctor) |
+| line, discount, void | | appointment's day: version | |
+| expense; its void | | expense day: expenses ± amount | expenses = Σ expenses of that day not voided |
+| purchase | | today: expenses + amount | (as expense) |
+| stock use crossing a threshold | | today: version | |
+| patient edit, schedule change | | today: version | |
 
 ### 5.4 Stock
 
@@ -488,7 +513,7 @@ A schedule change that would leave a future slot booking off the grid, or outsid
 - **Adding a member:**
   - a new account: created in the directory with a temporary password that expires in 72 hours (5.12);
   - an existing account (M3): an invitation its holder accepts. The answer is the same for known and unknown usernames;
-  - clinic endpoints change memberships only, never `accounts_user`.
+  - clinic endpoints change memberships, and may create a new account, but never change an existing account.
 - Every change writes an `audit_change` event with the before and after. Permissions are read from the membership row on every request, so a change applies at once.
 - **Changing the specialty** (M3) copies the new template's services, medicines and stock items that the clinic doesn't have yet. It never deletes or deactivates anything. Audited.
 
@@ -508,7 +533,7 @@ A schedule change that would leave a future slot booking off the grid, or outsid
    - After the code, the session key changes and `mfa_verified` is set.
 3. `@api` refuses everything except changing the password while `must_change_password` is set, and everything except code set-up while a required code isn't set up. The password must be changed before the code is set up. Code set-up shows the QR code (segno, as SVG) and 10 recovery codes, which are stored hashed.
 4. **The active clinic:** with one active membership it becomes the active one; with several, the picker. `POST /api/v1/me/clinic` re-checks the membership on the shard. When the chosen clinic requires a code and `mfa_verified` isn't set, the code is asked for first.
-5. **Sessions:** `cached_db` only (database-backed, with Redis as a cache later), a fixed 12 hours, never saved by a poll. `GET /api/v1/me` returns `session_expires_at`. A password change signs out the other sessions.
+5. **Sessions:** the `db` backend until a shared Redis exists, and `cached_db` only over Redis: a per-process cache would keep a signed-out session valid on other workers. A fixed 12 hours, never saved by a poll. `GET /api/v1/me` returns `session_expires_at`. A password change signs out the other sessions.
 - TOTP secrets are encrypted with an application key (`HAMADA_FIELD_KEY`, AES-GCM through Python's standard library primitives or a vetted package; rotation is a runbook).
 
 ### 5.10 Jobs
@@ -519,7 +544,7 @@ All periodic jobs fan out by shard and by batches of about 500 clinics, with one
   - `booked` → `no_show`;
   - `waiting` → `no_show` with `arrived_at` kept and `auto_closed` set ("left without being seen", pending Saged);
   - `in_room` → `done` with `auto_closed` set, its invoice ensured and flagged for the owner.
-- **Recompute**, per clinic-day, for every past day whose rows changed since the last run (tracked on `clinic_day`). It runs after the business day ends. It locks the summary rows `FOR UPDATE` first, then aggregates the source rows, then writes. A difference is fixed, logged, and counted in a metric.
+- **Recompute**, one clinic-day per transaction, for every past day whose `changed_since_recompute` is set. It runs after the business day ends. It locks the summary rows `FOR UPDATE` first, then aggregates the source rows, then writes. A difference is fixed, logged, and counted in a metric.
 - **Request-key cleanup**, partition upkeep, expired sessions and throttles, and the `user_clinic` reconciliation, as `hamada_maint`.
 - Jobs run with a system `Ctx`. Their audit actor is "system", and their `created_by_id` is null.
 - The Procrastinate worker connects straight to PostgreSQL for LISTEN, not through PgBouncer's transaction mode; or it polls.
@@ -550,7 +575,10 @@ Each is a sequence of idempotent steps with its own request key. A failed step i
   3. shard: insert `clinics_clinic` (`owned`), the owner's membership, the specialty template's services, medicines and stock items, the counters and the categories;
   4. directory: insert the owner's `user_clinic` row.
   A step that finds its row already there succeeds without changing it. A nightly reconciliation repairs a half-finished run.
-- **Add a member with a new account** (team, M3): directory account first (step 2 above), then the shard membership, then `user_clinic`.
+- **Add a member with a new account** (team, M3): directory account first, then the shard membership, then `user_clinic`.
+  - The account step reuses an account **only if this same request created it**: the account records the creating clinic and request key until its first sign-in. Any other existing username goes through the invitation path, with the same answer, so the step never attaches someone else's account or reveals that a username exists.
+  - A replay shows no temporary password, and offers to issue a new one.
+- The shard step of "create a clinic" is idempotent by clinic id and claims no shard request key (the clinic row doesn't exist yet); the platform request key in the directory covers the whole flow.
 - **Suspend or reactivate a clinic:** directory status first, then the shard's `clinics_clinic.status`. Requests check the shard's status.
 - **Transfer ownership, support resets** (platform admin): a `directory_support_action` with a reason, a second admin's approval, an `audit_change` event in the clinic's log, and a notice to the account at its next sign-in. Ownership moves only to an active doctor of the clinic. Django's admin site is off in production.
 - Platform admins see clinic names, statuses and usage counts (from `clinic_day`, read as `hamada_maint`), never patient data.
@@ -644,11 +672,11 @@ Each is a sequence of idempotent steps with its own request key. A failed step i
 - Confirmations name the patient ("Called in: Mohamed Ahmed"). Cancel asks for confirmation with the patient's name.
 
 **Saving (the browser half of safe repeats):**
-- A form's request key is made when the form opens, and reused for every send until a definite answer: a 2xx, or a 4xx that wrote nothing.
+- A form's request key is made when the form opens, and reused for every send until a definite answer: a 2xx, or a 4xx that wrote nothing. **409 `busy` and 503 are never definite**: the same key is resent after `Retry-After`.
 - After a timeout or a network error the outcome is unknown. The form locks its fields, says "not confirmed yet, checking", and resends the same key and body with backoff. It offers only "try again" and "discard".
-- `{url, key, body, user, membership}` is kept in `sessionStorage`. After a reload or a new sign-in, it is settled first, only for the same user and membership. It is cleared at sign-out and when another person signs in. No patient data ever goes into `localStorage`.
+- `{url, key, body, user, membership, created_at}` is kept in `sessionStorage`. After a reload or a new sign-in, it is settled first, only for the same user and membership. A pending request older than 24 hours is never resent: the screen says "outcome unknown, check the record", because its key row may already be gone (4.11). It is cleared at sign-out and when another person signs in. No patient data ever goes into `localStorage`.
 - "Saved" shows only for an answer that echoes the key. "Still saving" shows after 3 s; retries stop after about 20 s.
-- Retries happen only after network errors, timeouts, 502, 503, 504, and 429 or 503 after `Retry-After`. Never after a 500.
+- Retries happen only after network errors, timeouts, 502, 503, 504, 409 `busy`, and 429 after `Retry-After`. Never after a 500.
 - Where `crypto.randomUUID` is missing (plain http), keys are built from `crypto.getRandomValues`.
 
 **The sign-in overlay:**
@@ -755,6 +783,7 @@ Restore a database; fail over; migrate across shards; move a clinic; partition u
   - concurrent first payments: no invoice-number gap;
   - payment against cancel: never a paid cancelled visit;
   - crossing reschedules: no deadlock;
+  - "book, collect and print" against a finish with payment for the same doctor and day: no deadlock;
   - a payment, a refund and a discount on one invoice;
   - the last unit of stock;
   - the recompute against live writes;
@@ -763,7 +792,7 @@ Restore a database; fail over; migrate across shards; move a clinic; partition u
 - **T7, money invariants** after random sequences, including cancel after payment, reschedule after prepayment, refunds on another day, and void then re-invoice: `invoice.paid = Σ payments − Σ refunds`; doctor-day sums equal clinic-day sums; summaries equal the recompute.
 - **T8, time:** `day_ends_at`, a session crossing midnight, Egypt's clock changes in April and October, a clinic in another time zone.
 - **T9, the access log:** every view declared `access` writes exactly one event, and no other view returns patient fields.
-- **T10, security:** CSP, `no-store`, CSRF on every mutating method, a new session key at sign-in and after the code, a pending or must-change-password session gets 403 elsewhere, the code-guess limit.
+- **T10, security:** a session signed out through one process is refused by another; CSP, `no-store`, CSRF on every mutating method, a new session key at sign-in and after the code, a pending or must-change-password session gets 403 elsewhere, the code-guess limit.
 - **T11, row-level security:** no setting gives no rows; a reused connection gives no rows; another clinic's id in WHERE gives nothing; an INSERT for another clinic is refused; every shard table with `clinic_id` is forced and has the standard policy.
 - **T12, routing and shards:** clinics on two shards; a tenant query without a context raises; a wrong-shard request is refused; every sequence is in its shard's range.
 - **T13, the SQL shape:** a test-time `execute_wrapper` fails any statement whose root tenant table isn't filtered on `clinic_id`.
@@ -874,3 +903,19 @@ The requirements' open questions (R7, including the new ones in R7.8), plus:
 | R5 language, devices, time, money | 4.0, 6.1, 7.2 | M0 |
 | R5 runbooks | 9.5 | M5 |
 | R6 out of scope, R7 open questions | 14; R7 | |
+
+## Appendix C: changes from the check of draft 2
+
+| # | Change | Applied in |
+|---|---|---|
+| B1 | Booking with payment takes the invoice number before the summary rows; each summary table written in one statement; payment inside a booking only for the current business day; T5 cases | 5.0, 5.1, 10 |
+| B2 | 409 `busy` and 503 are never final for a form's key; no resend after 24 hours | 7.4 |
+| B3 | The `db` session backend until a shared Redis exists; a two-process sign-out test | 5.9, 10 |
+| B4 | Partition DDL as `hamada_owner`; RLS on a partition before it is attached; `hamada_maint` DML-only and never a member of the owner | 4.0, 4.10 |
+| B5 | The move clears `owned` on the source first and waits out older transactions; the clinic is checked before the key is claimed; any non-2xx rolls back | 3.4, 5.0 |
+| B6 | Adding a member reuses only an account the same request created; otherwise the invitation path; "never change an existing account"; no temporary password on replay | 5.8, 5.12 |
+| I1 | `UNIQUE (clinic_id, id)` on payment, item, visit note, category and expense; audit list indexes end with `id` | 4.5–4.8, 4.10 |
+| I2 | The counters table; `changed_since_recompute`; one clinic-day per recompute transaction | 4.4, 5.3, 5.10 |
+| I3 | `status` on request keys; the endpoints that take no key | 4.11, 5.0 |
+| I4 | Refund lock order in the text; the sweep's lock row; expenses in the global order; one statement for two clinic-days | 5.0, 5.3 |
+
