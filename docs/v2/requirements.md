@@ -37,7 +37,7 @@ What a clinic does in Hamada:
 
 | Role | Who | Uses Hamada for |
 |---|---|---|
-| Owner | The doctor who owns the clinic. Exactly one per clinic | Everything, including team, permissions, prices and finances |
+| Owner | The doctor who owns the clinic or the medical center. Exactly one per clinic or center | Everything, including team, permissions, prices and finances |
 | Doctor | Associate doctors | Their queue, patient files, visit notes and prescriptions; more if granted |
 | Assistant | Receptionists and assistants | Booking, the queue, payments, stock use; more if granted |
 | Platform admin | Hamada staff | Creating clinics and owners, suspending clinics, support. No access to patient data |
@@ -51,6 +51,11 @@ What a clinic does in Hamada:
 
 ### 4.1 Clinic setup
 
+- **A clinic or a medical center** (Saged, 2026-11-07). Each place in Hamada is one of:
+  - a **clinic**, with one specialty, such as a dental clinic or a children's clinic;
+  - a **medical center**, with several sections under one roof, each with its own specialty, for example dental, pediatrics and dermatology.
+  - Each section has its own doctors' sessions, services and prices, medicine list and stock list. **Assumption:** the center has one front desk, one patient file per person across all its sections, one owner, one team and one set of accounts. Today can be filtered by section or doctor.
+  - A clinic can become a center later by adding sections.
 - Clinic profile: name, city, address, phone, time zone (default Africa/Cairo) and specialty.
 - Services and prices per clinic, copied from the specialty's template when the clinic is created: name, kind (consultation, follow-up or procedure), price and duration.
 - **Follow-up rule.** **Assumption** (draft 2, for Saged to confirm): a consultation booked within 14 days of the patient's last consultation with the same doctor that arrived or was paid uses the follow-up price. The days are counted from the new appointment's day. Each consultation service names its follow-up service, and a follow-up doesn't start a new window. The number of days is a clinic setting.
@@ -122,7 +127,14 @@ What a clinic does in Hamada:
 
 - Sign in with a username or mobile number and a password. Owners also enter a code from an authenticator app.
 - Change password. An account created by someone else must change its password at first sign-in.
-- Later: self-service clinic sign-up, and password reset by SMS or email.
+- **Self-service sign-up** (Saged, 2026-11-07), from a link on the sign-in page, before the person is inside any clinic:
+  1. Choose a clinic or a medical center with several sections.
+  2. Choose the specialty, such as dental or pediatrics. A center picks the specialty of each section.
+  3. Enter the place's name, city and phone, then the owner's name, mobile number, username and password.
+  4. Set up two-step sign-in, then land in the new place.
+  - Someone who already has an account adds another place from the clinic picker, and becomes its owner.
+  - **Assumption:** a new place works at once, and the platform admin can suspend it. Checking the mobile number by SMS comes with the SMS provider (7.6).
+- Later: password reset by SMS or email.
 
 ### 4.11 Platform admin
 
@@ -162,7 +174,7 @@ Patient app and public online booking; real video calls; insurance and claims; l
 7. Subscription plans and billing the clinics. Not in v2's scope.
 8. Raised by the design review, all for Saged:
    - Is the follow-up rule in 4.1 right?
-   - May the desk undo "arrived" and "called in" when tapped by mistake? (4.3 allows no other changes yet.)
+   - May the desk undo "arrived" and "called in" when tapped by mistake? (4.3 allows no other changes yet.) **Assumption** (2026-11-07, Saged left the call to Claude): yes. "Arrived" goes back to booked and "called in" back to waiting, only from the status right after, and each undo is recorded.
    - May a visit be finished straight from "waiting", when the assistant skips "call in"?
    - At the end of the business day: booked patients who never came become no-shows. Patients still waiting are closed as "left without being seen", and visits still with the doctor are finished and flagged. Is that right?
    - Should a booking be marked no-show before the day ends, when the doctor's session is over?

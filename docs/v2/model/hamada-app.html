@@ -1,0 +1,1103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Hamada App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      :root{
+        --bg:#F5F7F6;
+        --surface:#FFFFFF;
+        --surface-2:#EDF3F0;
+        --ink:#16211E;
+        --muted:#5A6B66;
+        --line:#DCE4E0;
+        --teal:#0E7C6F;
+        --teal-dark:#09594F;
+        --teal-tint:#E0F0EB;
+        --amber:#9A6206;
+        --amber-tint:#FAF0DA;
+        --red:#A93327;
+        --red-tint:#F8E6E2;
+        --shadow:0 1px 2px rgba(18,32,28,.05),0 4px 14px rgba(18,32,28,.05);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#0E1412;
+          --surface:#17201C;
+          --surface-2:#1E2A25;
+          --ink:#E7EFEA;
+          --muted:#9DB0A7;
+          --line:#2A3831;
+          --teal:#3BB79F;
+          --teal-dark:#7FD3BF;
+          --teal-tint:#17352D;
+          --amber:#E2A44A;
+          --amber-tint:#382B12;
+          --red:#E0806F;
+          --red-tint:#3A201B;
+          --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+        }
+      }
+      *{box-sizing:border-box}
+      html{-webkit-text-size-adjust:100%}
+      body{
+        margin:0;background:var(--bg);color:var(--ink);
+        font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+        font-size:15.5px;line-height:1.5;
+      }
+      button{font:inherit;cursor:pointer}
+      input,select{font:inherit;color:var(--ink)}
+      h1,h2,h3{margin:0;line-height:1.25}
+      p{margin:0}
+
+      /* ---------- layout ---------- */
+      .app{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:100vh}
+      .side{
+        border-right:1px solid var(--line);background:var(--surface);
+        padding:20px 14px;display:flex;flex-direction:column;gap:18px;
+        position:sticky;top:0;height:100vh;overflow:auto;
+      }
+      .clinic-name{font-weight:800;font-size:17px}
+      .clinic-sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+      .side-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+      nav.main-nav{display:flex;flex-direction:column;gap:4px}
+      .nav-btn{
+        display:flex;align-items:center;justify-content:space-between;gap:8px;
+        width:100%;text-align:left;padding:10px 12px;border:1px solid transparent;
+        background:transparent;color:var(--ink);border-radius:10px;font-weight:600;
+      }
+      .nav-btn:hover{background:var(--surface-2)}
+      .nav-btn.active{background:var(--teal-tint);color:var(--teal-dark);border-color:var(--line)}
+      .nav-lock{font-size:11.5px;font-weight:700;color:var(--amber);background:var(--amber-tint);padding:1px 7px;border-radius:99px;white-space:nowrap}
+      .side-foot{margin-top:auto;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+      main{padding:22px 26px 60px;min-width:0}
+      .wrap{max-width:1060px;margin:0 auto}
+
+      /* ---------- top bar ---------- */
+      .topbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}
+      .today-date{font-size:14px;color:var(--muted);font-weight:600}
+      .role-box{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .role-box span{font-size:13.5px;color:var(--muted);font-weight:700}
+      .segmented{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:3px}
+      .segmented button{border:0;background:transparent;padding:6px 16px;border-radius:99px;font-weight:700;color:var(--muted)}
+      .segmented button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+
+      /* ---------- generic ---------- */
+      section.page{display:none}
+      section.page.show{display:block}
+      .page-head{margin-bottom:16px}
+      .page-head h1{font-size:25px;font-weight:800}
+      .page-head p{color:var(--muted);margin-top:4px;max-width:62ch}
+      .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+      .card h2{font-size:16.5px;font-weight:800}
+      .card h3{font-size:15px;font-weight:800}
+      .card-sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+      .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+      .stack{display:flex;flex-direction:column;gap:16px}
+      .btn{
+        border:1px solid var(--teal);background:var(--teal);color:#fff;
+        padding:8px 16px;border-radius:10px;font-weight:700;font-size:14.5px;
+      }
+      .btn:hover{background:var(--teal-dark);border-color:var(--teal-dark)}
+      .btn.ghost{background:transparent;color:var(--teal-dark);border-color:var(--line)}
+      .btn.ghost:hover{background:var(--teal-tint)}
+      .btn.small{padding:5px 12px;font-size:13.5px;border-radius:8px}
+      .btn.danger{background:transparent;color:var(--red);border-color:var(--line)}
+      .btn.danger:hover{background:var(--red-tint)}
+      .btn:disabled{opacity:.45;cursor:not-allowed}
+      .pill{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;white-space:nowrap}
+      .pill.teal{background:var(--teal-tint);color:var(--teal-dark)}
+      .pill.amber{background:var(--amber-tint);color:var(--amber)}
+      .pill.red{background:var(--red-tint);color:var(--red)}
+      .pill.grey{background:var(--surface-2);color:var(--muted)}
+      .pill.new{background:var(--teal);color:#fff}
+      label.field{display:flex;flex-direction:column;gap:5px;font-size:13.5px;font-weight:700}
+      label.field input,label.field select{
+        padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:500;
+      }
+      label.field input:focus,label.field select:focus{outline:2px solid var(--teal);outline-offset:1px}
+      .form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+      .form-row label.field{flex:1;min-width:130px}
+      .alert-bar{
+        display:none;border:1px solid var(--amber);background:var(--amber-tint);color:var(--ink);
+        border-radius:12px;padding:12px 16px;margin-bottom:16px;font-weight:600;
+      }
+      .alert-bar.show{display:block}
+      .alert-bar strong{color:var(--amber)}
+      .locked{
+        border:1px dashed var(--line);border-radius:14px;padding:34px 22px;text-align:center;background:var(--surface);
+      }
+      .locked h2{font-size:18px;margin-bottom:6px}
+      .locked p{color:var(--muted);max-width:52ch;margin:0 auto}
+      .toast{
+        position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);
+        background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-weight:700;
+        opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:92vw;text-align:center;
+        box-shadow:0 8px 30px rgba(0,0,0,.25);
+      }
+      .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+      /* ---------- today ---------- */
+      .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+      .stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+      .stat .num{font-size:27px;font-weight:800;line-height:1.1}
+      .stat .lbl{color:var(--muted);font-size:13.5px;font-weight:600}
+      .appt{
+        display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;
+      }
+      .appt:last-child{border-bottom:0;padding-bottom:2px}
+      .appt-time{font-weight:800;min-width:52px}
+      .appt-main{flex:1;min-width:170px}
+      .appt-main .who{font-weight:700}
+      .appt-main .what{color:var(--muted);font-size:13.5px}
+      .appt-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .feed-item{padding:10px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+      .feed-item:last-child{border-bottom:0}
+      .feed-item .when{color:var(--muted);font-size:12.5px;font-weight:700}
+
+      /* ---------- inventory ---------- */
+      .inv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+      .inv-item .top{display:flex;justify-content:space-between;gap:8px;align-items:start}
+      .inv-name{font-weight:800;font-size:15.5px}
+      .inv-stock{font-size:30px;font-weight:800;line-height:1.15;margin-top:8px}
+      .inv-stock small{font-size:14px;color:var(--muted);font-weight:600}
+      .inv-meta{color:var(--muted);font-size:13.5px;margin-top:2px}
+      .inv-bar{height:7px;background:var(--surface-2);border-radius:99px;margin-top:12px;overflow:hidden}
+      .inv-bar i{display:block;height:100%;background:var(--teal);border-radius:99px}
+      .inv-bar i.low{background:var(--red)}
+      table{width:100%;border-collapse:collapse;font-size:14.5px}
+      th{text-align:left;color:var(--muted);font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;padding:8px 8px 8px 0;border-bottom:1px solid var(--line)}
+      td{padding:10px 8px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
+      tr:last-child td{border-bottom:0}
+      td.num,th.num{text-align:right;padding-right:0}
+      .table-scroll{overflow-x:auto}
+
+      /* ---------- finances ---------- */
+      .money-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+      .bar-row{display:grid;grid-template-columns:150px 1fr 92px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+      .bar-row:last-child{border-bottom:0}
+      .bar-track{height:9px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+      .bar-track i{display:block;height:100%;background:var(--teal);border-radius:99px}
+      .bar-amt{text-align:right;font-weight:700;white-space:nowrap}
+      .pay-row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+      .pay-row:last-child{border-bottom:0}
+      .pay-main{flex:1;min-width:180px}
+      .pay-main .who{font-weight:700}
+      .pay-main .how{color:var(--muted);font-size:13.5px}
+      .pay-amt{font-weight:800;font-size:17px;white-space:nowrap}
+
+      /* ---------- prescription ---------- */
+      .med-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+      .med-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--surface)}
+      .med-card .mname{font-weight:800}
+      .med-card .mdose{color:var(--muted);font-size:13.5px;margin:2px 0 10px}
+      .rx-item{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+      .rx-item:last-child{border-bottom:0}
+      .rx-main{flex:1;min-width:170px}
+      .rx-main .rname{font-weight:700}
+      .rx-main .rdose{color:var(--muted);font-size:13.5px}
+      .stepper{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:99px;padding:2px}
+      .stepper button{
+        width:30px;height:30px;border-radius:99px;border:0;background:var(--surface-2);
+        font-size:17px;font-weight:800;line-height:1;color:var(--ink);
+      }
+      .stepper button:hover{background:var(--teal-tint)}
+      .stepper .val{min-width:34px;text-align:center;font-weight:800}
+      .stepper-wrap{display:flex;flex-direction:column;gap:2px}
+      .stepper-wrap .cap{font-size:11.5px;color:var(--muted);font-weight:700;text-align:center}
+      .rx-paper{
+        background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:22px;
+        box-shadow:var(--shadow);
+      }
+      .rx-paper .rx-head{border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:12px}
+      .rx-paper .rx-head .doc{font-weight:800;font-size:17px}
+      .rx-paper .rx-head .sub{color:var(--muted);font-size:13px}
+      .rx-paper ul{margin:0;padding-left:20px}
+      .rx-paper li{margin-bottom:8px}
+      .empty-note{color:var(--muted);padding:14px 0}
+
+      /* ---------- consultations ---------- */
+      .consult{display:flex;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+      .consult:last-child{border-bottom:0}
+      .consult-main{flex:1;min-width:200px}
+      .consult-main .who{font-weight:700}
+      .consult-main .why{color:var(--muted);font-size:14px}
+      .steps-list{margin:0;padding-left:20px;color:var(--muted)}
+      .steps-list li{margin-bottom:6px}
+      .steps-list strong{color:var(--ink)}
+
+      /* ---------- team / settings ---------- */
+      .spec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+      .spec-btn{
+        text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:12px;
+        padding:14px;font-weight:700;color:var(--ink);
+      }
+      .spec-btn small{display:block;color:var(--muted);font-weight:500;margin-top:2px}
+      .spec-btn.on{border-color:var(--teal);background:var(--teal-tint);color:var(--teal-dark)}
+      .spec-btn.on small{color:var(--teal-dark)}
+      .feat-list{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+      .feat-list li{margin-bottom:4px}
+      .perm-row{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+      .perm-row:last-child{border-bottom:0}
+      .perm-name{font-weight:700}
+      .perm-name small{display:block;color:var(--muted);font-weight:500;font-size:13px}
+      .perm-col-head{font-size:12.5px;color:var(--muted);font-weight:700;text-align:center;min-width:86px}
+      .toggle{
+        min-width:86px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);
+        border-radius:99px;padding:6px 14px;font-weight:800;font-size:13.5px;
+      }
+      .toggle.on{background:var(--teal);border-color:var(--teal);color:#fff}
+      .toggle:disabled{opacity:.55;cursor:not-allowed}
+      .person{display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+      .person:last-child{border-bottom:0}
+      .person-main{flex:1;min-width:160px}
+      .person-main .who{font-weight:700}
+      .person-main .role{color:var(--muted);font-size:13.5px}
+
+      @media (max-width:900px){
+        .inv-grid{grid-template-columns:repeat(2,1fr)}
+        .spec-grid{grid-template-columns:repeat(2,1fr)}
+        .stats{grid-template-columns:repeat(2,1fr)}
+      }
+      @media (max-width:820px){
+        .app{grid-template-columns:1fr}
+        .side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:16px}
+        nav.main-nav{flex-direction:row;flex-wrap:wrap}
+        .nav-btn{width:auto}
+        .side-foot{display:none}
+        main{padding:18px 16px 50px}
+        .grid-2{grid-template-columns:1fr}
+        .money-stats{grid-template-columns:1fr}
+        .med-grid{grid-template-columns:1fr}
+        .bar-row{grid-template-columns:110px 1fr 84px}
+        .perm-row{grid-template-columns:1fr auto auto;gap:8px}
+        .perm-col-head{min-width:64px}
+        .toggle{min-width:64px;padding:6px 10px}
+      }
+      @media (max-width:480px){
+        .inv-grid{grid-template-columns:1fr}
+        .spec-grid{grid-template-columns:1fr}
+      }
+      @media (prefers-reduced-motion: reduce){
+        .toast{transition:none}
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="side">
+        <div>
+          <p class="clinic-name" style="font-size:19px">Hamada App</p>
+          <p class="clinic-sub">Clinic management, made simple</p>
+        </div>
+        <div>
+          <p class="side-label">Clinic</p>
+          <p class="clinic-name">Smile Dental Center</p>
+          <p class="clinic-sub"><span id="specNameSide">Dental</span> clinic · Cairo</p>
+        </div>
+        <nav class="main-nav" id="mainNav" aria-label="Main">
+          <button class="nav-btn active" data-go="today">Today</button>
+          <button class="nav-btn" data-go="inventory">Inventory</button>
+          <button class="nav-btn" data-go="finances">Finances <span class="nav-lock" id="lockFin" hidden>Locked</span></button>
+          <button class="nav-btn" data-go="rx">Prescription</button>
+          <button class="nav-btn" data-go="online">Online consultations</button>
+          <button class="nav-btn" data-go="team">Team &amp; settings</button>
+        </nav>
+        <div class="side-foot">
+          One app for many specialties. Each clinic sees the services, medicines and stock list that fit its specialty.
+        </div>
+      </aside>
+
+      <main>
+        <div class="wrap">
+          <div class="topbar">
+            <p class="today-date">Saturday, 24 October 2026</p>
+            <div class="role-box">
+              <span>Viewing as</span>
+              <div class="segmented" role="group" aria-label="Switch role">
+                <button id="roleDoctor" class="on">Doctor</button>
+                <button id="roleAssistant">Assistant</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert-bar" id="stockAlert" role="alert"></div>
+
+          <!-- ============ TODAY ============ -->
+          <section class="page show" id="page-today">
+            <div class="page-head">
+              <h1>Today at the clinic</h1>
+              <p>Every booking, who is waiting, and what is happening right now — for the doctor and the assistant, on the same screen.</p>
+            </div>
+
+            <div class="stats">
+              <div class="stat"><div class="num" id="stTotal">0</div><div class="lbl">Bookings today</div></div>
+              <div class="stat"><div class="num" id="stWaiting">0</div><div class="lbl">Waiting now</div></div>
+              <div class="stat"><div class="num" id="stRoom">0</div><div class="lbl">In the chair</div></div>
+              <div class="stat"><div class="num" id="stDone">0</div><div class="lbl">Finished</div></div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <h2>Today's appointments</h2>
+                <p class="card-sub">New bookings appear here at once, including online ones.</p>
+                <div id="apptList"></div>
+              </div>
+              <div class="stack">
+                <div class="card">
+                  <h2>Add a booking</h2>
+                  <p class="card-sub">Name, service, time — that is all it takes.</p>
+                  <form id="bookForm" style="margin-top:12px">
+                    <div class="form-row">
+                      <label class="field">Patient name
+                        <input id="bkName" required placeholder="e.g. Ahmed Ali" />
+                      </label>
+                      <label class="field">Service
+                        <select id="bkService"></select>
+                      </label>
+                    </div>
+                    <div class="form-row" style="margin-top:10px">
+                      <label class="field">Time
+                        <input id="bkTime" type="time" value="14:00" required />
+                      </label>
+                      <label class="field">Booked by
+                        <select id="bkSource">
+                          <option>At the clinic</option>
+                          <option>By phone</option>
+                          <option>Online</option>
+                        </select>
+                      </label>
+                      <button class="btn" type="submit">Add booking</button>
+                    </div>
+                  </form>
+                </div>
+                <div class="card">
+                  <h2>Latest activity</h2>
+                  <div id="feedList"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ INVENTORY ============ -->
+          <section class="page" id="page-inventory">
+            <div class="page-head">
+              <h1>Inventory</h1>
+              <p>What the clinic bought, what is left, and what each patient used. Stock goes down on its own when use is recorded — nobody recounts shelves.</p>
+            </div>
+            <div class="inv-grid" id="invGrid"></div>
+
+            <div class="grid-2" style="margin-top:16px">
+              <div class="card">
+                <h2>Record a purchase</h2>
+                <p class="card-sub">Adds stock and goes straight into the clinic's expenses.</p>
+                <form id="buyForm" style="margin-top:12px">
+                  <div class="form-row">
+                    <label class="field">Item
+                      <select id="buyItem"></select>
+                    </label>
+                    <label class="field">Quantity
+                      <input id="buyQty" type="number" min="1" value="8" required />
+                    </label>
+                    <label class="field">Price each (EGP)
+                      <input id="buyPrice" type="number" min="0" step="0.5" value="45" required />
+                    </label>
+                    <button class="btn" type="submit">Add stock</button>
+                  </div>
+                </form>
+              </div>
+              <div class="card">
+                <h2>Record use with a patient</h2>
+                <p class="card-sub">The quantity is deducted from stock right away.</p>
+                <form id="useForm" style="margin-top:12px">
+                  <div class="form-row">
+                    <label class="field">Item
+                      <select id="useItem"></select>
+                    </label>
+                    <label class="field">Patient
+                      <input id="usePatient" required placeholder="e.g. Omar Khalil" />
+                    </label>
+                    <label class="field">Used
+                      <input id="useQty" type="number" min="1" value="1" required />
+                    </label>
+                    <button class="btn" type="submit">Record use</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:16px">
+              <h2>Usage report</h2>
+              <p class="card-sub">What was used, for whom, and what it cost. <strong id="usageTotal"></strong></p>
+              <div class="table-scroll">
+                <table>
+                  <thead><tr><th>Item</th><th>Patient</th><th>When</th><th class="num">Qty</th><th class="num">Cost</th></tr></thead>
+                  <tbody id="usageBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ FINANCES ============ -->
+          <section class="page" id="page-finances">
+            <div class="page-head">
+              <h1>Finances</h1>
+              <p>All of the clinic's money in one place: what came in, and where it went — stock, salaries, rent, electricity and the rest.</p>
+            </div>
+            <div id="finLocked" class="locked" hidden>
+              <h2>Finances are private</h2>
+              <p>The assistant account cannot see the clinic's money. The doctor can open it any time from <strong>Team &amp; settings</strong> — try switching back to the Doctor view, turning the permission on, then returning here as the Assistant.</p>
+            </div>
+            <div id="finContent">
+              <div class="money-stats">
+                <div class="stat"><div class="num" id="finIn">EGP 0</div><div class="lbl">Collected from visits — October</div></div>
+                <div class="stat"><div class="num" id="finOut">EGP 0</div><div class="lbl">Total expenses — October</div></div>
+                <div class="stat"><div class="num" id="finNet">EGP 0</div><div class="lbl">Left over</div></div>
+              </div>
+              <div class="grid-2">
+                <div class="card">
+                  <h2>Where the money went</h2>
+                  <div id="finBars" style="margin-top:8px"></div>
+                </div>
+                <div class="card">
+                  <h2>How each person is paid</h2>
+                  <p class="card-sub">Fixed salary or a percentage of their work — both are supported.</p>
+                  <div id="payList"></div>
+                </div>
+              </div>
+              <div class="card" style="margin-top:16px">
+                <h2>Expenses</h2>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Expense</th><th>Type</th><th>Date</th><th class="num">Amount</th></tr></thead>
+                    <tbody id="expBody"></tbody>
+                  </table>
+                </div>
+                <form id="expForm" style="margin-top:14px">
+                  <div class="form-row">
+                    <label class="field">New expense
+                      <input id="expName" required placeholder="e.g. Water bill" />
+                    </label>
+                    <label class="field">Type
+                      <select id="expCat">
+                        <option>Rent</option>
+                        <option>Electricity</option>
+                        <option>Inventory</option>
+                        <option>Salaries</option>
+                        <option>Other</option>
+                      </select>
+                    </label>
+                    <label class="field">Amount (EGP)
+                      <input id="expAmt" type="number" min="1" required placeholder="500" />
+                    </label>
+                    <button class="btn" type="submit">Add expense</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ PRESCRIPTION ============ -->
+          <section class="page" id="page-rx">
+            <div class="page-head">
+              <h1>Prescription</h1>
+              <p>Nothing is written from scratch. Pick from the clinic's ready medicine list, set the amount with the plus and minus buttons, and print.</p>
+            </div>
+            <div id="rxLocked" class="locked" hidden>
+              <h2>Prescriptions are written by doctors</h2>
+              <p>The assistant account cannot write prescriptions. The doctor can open this from <strong>Team &amp; settings</strong> if they want to.</p>
+            </div>
+            <div id="rxContent" class="grid-2">
+              <div class="stack">
+                <div class="card">
+                  <h2>1 · Choose the patient</h2>
+                  <div class="form-row" style="margin-top:10px">
+                    <label class="field">Patient
+                      <select id="rxPatient"></select>
+                    </label>
+                  </div>
+                </div>
+                <div class="card">
+                  <h2>2 · Tap to add a medicine</h2>
+                  <p class="card-sub">The clinic's ready list for <span id="rxSpecName">dental</span> care.</p>
+                  <div class="med-grid" id="medGrid" style="margin-top:12px"></div>
+                </div>
+              </div>
+              <div class="stack">
+                <div class="card">
+                  <h2>3 · Set amounts, then print</h2>
+                  <div id="rxList"></div>
+                  <div class="form-row" style="margin-top:14px">
+                    <button class="btn" id="rxDownload">Download prescription</button>
+                    <button class="btn ghost" id="rxClear">Start over</button>
+                  </div>
+                </div>
+                <div class="rx-paper" id="rxPaper"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ ONLINE ============ -->
+          <section class="page" id="page-online">
+            <div class="page-head">
+              <h1>Online consultations</h1>
+              <p>Patients who cannot come in can still talk to the doctor. Requests land here, next to the rest of the day's work.</p>
+            </div>
+            <div class="grid-2">
+              <div class="card">
+                <h2>Requests</h2>
+                <div id="consultList"></div>
+              </div>
+              <div class="card">
+                <h2>How it works</h2>
+                <ol class="steps-list" style="margin-top:10px">
+                  <li><strong>The patient asks</strong> for an online consultation and picks a time.</li>
+                  <li><strong>The request appears here</strong> and in Today's activity, so nobody misses it.</li>
+                  <li><strong>Accept, then start the call</strong> at the agreed time. Notes and a prescription can follow the same visit.</li>
+                </ol>
+                <p style="color:var(--muted);margin-top:12px">Follow-ups after a procedure — like checking an extraction a day later — are the most common use in dental clinics.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ TEAM & SETTINGS ============ -->
+          <section class="page" id="page-team">
+            <div class="page-head">
+              <h1>Team &amp; settings</h1>
+              <p>The doctor owns the clinic's setup: the specialty, who is on the team, and exactly what each person can see and do. Changes apply at once.</p>
+            </div>
+
+            <div class="card">
+              <h2>Clinic specialty</h2>
+              <p class="card-sub">Chosen when the doctor signs up. Each specialty brings its own services, medicine list and stock items.</p>
+              <div class="spec-grid" id="specGrid" style="margin-top:14px"></div>
+              <div id="specDetail" style="margin-top:14px"></div>
+            </div>
+
+            <div class="card" style="margin-top:16px">
+              <h2>The team</h2>
+              <div id="peopleList"></div>
+            </div>
+
+            <div class="card" style="margin-top:16px">
+              <h2>Who can do what</h2>
+              <p class="card-sub">Tap a switch to open or close a permission. Try it: turn off “See clinic finances” for the assistant, then use the <strong>Viewing as</strong> switch at the top to see the app as the assistant does.</p>
+              <div class="perm-row" style="border-bottom:1px solid var(--line);padding-bottom:6px">
+                <div></div>
+                <div class="perm-col-head">Assistant<br />Sara</div>
+                <div class="perm-col-head">Associate<br />Dr. Ahmed</div>
+              </div>
+              <div id="permList"></div>
+              <p style="color:var(--muted);font-size:13.5px;margin-top:12px">The doctor (owner) always has full access and is the only one who can change this page.</p>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <script>
+      /* ================= state (sample data, in-memory only) ================= */
+      var state = {
+        role: "doctor",
+        specialty: "Dental",
+        collected: 86400,
+        appts: [
+          {id:1, name:"Omar Khalil",   service:"Root canal",        doctor:"Dr. Hamada", time:"10:00", status:"room",    isNew:false},
+          {id:2, name:"Salma Nasser",  service:"Filling",           doctor:"Dr. Ahmed",  time:"10:30", status:"waiting", isNew:false},
+          {id:3, name:"Youssef Adel",  service:"Extraction",        doctor:"Dr. Hamada", time:"11:00", status:"waiting", isNew:false},
+          {id:4, name:"Mariam Fathy",  service:"Cleaning",          doctor:"Dr. Ahmed",  time:"11:30", status:"booked",  isNew:false},
+          {id:5, name:"Karim Adel",    service:"Checkup & X-ray",   doctor:"Dr. Hamada", time:"12:00", status:"booked",  isNew:false},
+          {id:6, name:"Hana Mostafa",  service:"Braces follow-up",  doctor:"Dr. Ahmed",  time:"12:30", status:"booked",  isNew:true},
+          {id:7, name:"Layla Samir",   service:"Whitening",         doctor:"Dr. Hamada", time:"09:00", status:"done",    isNew:false}
+        ],
+        feed: [
+          {when:"11:05", text:"New online booking: Hana Mostafa — Braces follow-up, 12:30"},
+          {when:"10:42", text:"Salma Nasser checked in and is waiting"},
+          {when:"10:15", text:"Inventory: 2 anesthesia injections used for Omar Khalil"},
+          {when:"09:50", text:"Expense added: electricity bill, EGP 2,350"}
+        ],
+        inventory: [
+          {id:"anes", name:"Anesthesia injections", unit:"injections", stock:8,  threshold:2,  price:45,   pack:"Box of 50 carpules"},
+          {id:"comp", name:"Composite filling syringes", unit:"syringes", stock:14, threshold:4, price:320, pack:"4 g syringe"},
+          {id:"glove",name:"Glove boxes", unit:"boxes", stock:9,  threshold:3,  price:180,  pack:"100 gloves per box"},
+          {id:"mirr", name:"Sterile mirror packs", unit:"packs", stock:22, threshold:6,  price:25,   pack:"Single-use pack"},
+          {id:"impl", name:"Implant fixtures", unit:"fixtures", stock:5, threshold:2,  price:1450, pack:"Titanium, assorted sizes"},
+          {id:"cott", name:"Cotton roll packs", unit:"packs", stock:18, threshold:5,  price:60,   pack:"Pack of 200 rolls"}
+        ],
+        usage: [
+          {item:"Anesthesia injections", patient:"Omar Khalil", when:"Today, 10:15", qty:2, cost:90},
+          {item:"Composite filling syringes", patient:"Salma Nasser", when:"Today, 09:40", qty:1, cost:320},
+          {item:"Anesthesia injections", patient:"Youssef Adel", when:"Yesterday, 16:20", qty:1, cost:45}
+        ],
+        expenses: [
+          {name:"Clinic rent — October", cat:"Rent", date:"1 Oct", amount:15000},
+          {name:"Staff salaries — October", cat:"Salaries", date:"1 Oct", amount:31700},
+          {name:"Stock purchases — October", cat:"Inventory", date:"3 Oct", amount:12750},
+          {name:"Electricity bill", cat:"Electricity", date:"Today", amount:2350},
+          {name:"Cleaning & laundry", cat:"Other", date:"5 Oct", amount:1180},
+          {name:"Internet & phone", cat:"Other", date:"5 Oct", amount:640}
+        ],
+        pay: [
+          {name:"Dr. Ahmed Samy", role:"Associate dentist", kind:"percent", pct:30, base:24000},
+          {name:"Dr. Nour El-Din", role:"Implant specialist", kind:"fixed", amount:18000},
+          {name:"Sara Mahmoud", role:"Assistant", kind:"fixed", amount:6500}
+        ],
+        meds: [
+          {id:"amox", name:"Amoxicillin 500 mg", form:"Capsules", dose:"1 capsule, 3 times a day"},
+          {id:"ibu",  name:"Ibuprofen 400 mg", form:"Tablets", dose:"1 tablet when in pain, after food"},
+          {id:"para", name:"Paracetamol 500 mg", form:"Tablets", dose:"1–2 tablets, up to 4 times a day"},
+          {id:"metro",name:"Metronidazole 500 mg", form:"Tablets", dose:"1 tablet, 3 times a day"},
+          {id:"clind",name:"Clindamycin 300 mg", form:"Capsules", dose:"1 capsule, 4 times a day"},
+          {id:"chx",  name:"Chlorhexidine 0.12%", form:"Mouthwash bottle", dose:"Rinse for 1 minute, twice a day"}
+        ],
+        rx: [],
+        consults: [
+          {id:1, name:"Farah Nabil", why:"Tooth pain since yesterday — wants advice before booking", when:"Today, 14:00", status:"new"},
+          {id:2, name:"Mostafa Kamel", why:"Asking about implant steps and total cost", when:"Today, 15:30", status:"accepted"},
+          {id:3, name:"Dina Sherif", why:"Follow-up one day after an extraction", when:"Tomorrow, 11:00", status:"accepted"}
+        ],
+        people: [
+          {name:"Dr. Hamada Aziz", role:"Doctor — owner", note:"Full access. Manages settings, team and permissions."},
+          {name:"Sara Mahmoud", role:"Assistant", note:"Patients, bookings and day-to-day follow-up."},
+          {name:"Dr. Ahmed Samy", role:"Associate dentist", note:"Sees his own patients and writes prescriptions."}
+        ],
+        perms: [
+          {id:"finances", name:"See clinic finances", hint:"Totals, expenses and salaries", asst:false, assoc:true},
+          {id:"inventory", name:"Add & edit inventory", hint:"Purchases and stock counts", asst:true, assoc:true},
+          {id:"booking", name:"Book & change appointments", hint:"The daily schedule", asst:true, assoc:true},
+          {id:"rx", name:"Write prescriptions", hint:"From the ready medicine list", asst:false, assoc:true},
+          {id:"online", name:"Run online consultations", hint:"Accept and start video visits", asst:false, assoc:true},
+          {id:"team", name:"Manage team & permissions", hint:"This settings page", asst:false, assoc:false}
+        ],
+        specialties: [
+          {name:"Dental", tag:"Dentists", services:["Checkup & X-ray","Cleaning","Filling","Root canal","Extraction","Implants","Braces follow-up","Whitening"],
+           features:["A tooth chart on every patient file","Anesthesia and implant stock tracked per patient","Lab orders for crowns and dentures"]},
+          {name:"Dermatology", tag:"Skin clinics", services:["Skin check","Acne follow-up","Laser session","Peeling session"],
+           features:["Session packages that count down on their own","Before-and-after photos on the patient file","Laser and cream stock tracking"]},
+          {name:"Pediatrics", tag:"Children's clinics", services:["Well-child visit","Vaccination","Follow-up","Fever visit"],
+           features:["Growth chart on every child file","Vaccination schedule with due-date reminders","Weight-based medicine doses in prescriptions"]},
+          {name:"Physiotherapy", tag:"Physio centers", services:["Assessment","Exercise session","Electrotherapy","Follow-up"],
+           features:["Treatment plans split into sessions","Progress notes per session","Equipment and consumables stock"]},
+          {name:"Internal medicine", tag:"Internists", services:["General checkup","Diabetes follow-up","Blood pressure check","Lab review"],
+           features:["Long-term patient files with lab history","Repeat prescriptions in two taps","Chronic-care recall lists"]},
+          {name:"Ophthalmology", tag:"Eye clinics", services:["Eye exam","Vision test","Glasses fitting","Follow-up"],
+           features:["Vision measurements saved per visit","Lens and drops stock tracking","Surgery day scheduling"]}
+        ]
+      };
+      var nextApptId = 8;
+
+      /* ================= helpers ================= */
+      function $(id){ return document.getElementById(id); }
+      function egp(n){ return "EGP " + n.toLocaleString("en-US"); }
+      function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+      var toastTimer = null;
+      function toast(msg){
+        var t = $("toast"); t.textContent = msg; t.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 3200);
+      }
+      function pushFeed(text){
+        var now = new Date();
+        var hh = String(now.getHours()).padStart(2,"0"), mm = String(now.getMinutes()).padStart(2,"0");
+        state.feed.unshift({when: hh + ":" + mm, text: text});
+        if (state.feed.length > 6) state.feed.pop();
+        renderFeed();
+      }
+      function clockNow(){
+        var now = new Date();
+        return String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+      }
+
+      /* ================= navigation ================= */
+      function go(page){
+        var pages = document.querySelectorAll("section.page");
+        for (var i=0;i<pages.length;i++) pages[i].classList.toggle("show", pages[i].id === "page-" + page);
+        var btns = document.querySelectorAll("#mainNav .nav-btn");
+        for (var j=0;j<btns.length;j++) btns[j].classList.toggle("active", btns[j].getAttribute("data-go") === page);
+        window.scrollTo({top:0});
+      }
+      $("mainNav").addEventListener("click", function(e){
+        var b = e.target.closest("[data-go]");
+        if (b) go(b.getAttribute("data-go"));
+      });
+
+      /* ================= role & permissions ================= */
+      function permFor(role, id){
+        if (role === "doctor") return true;
+        for (var i=0;i<state.perms.length;i++) if (state.perms[i].id === id) return state.perms[i].asst;
+        return false;
+      }
+      function applyRole(){
+        $("roleDoctor").classList.toggle("on", state.role === "doctor");
+        $("roleAssistant").classList.toggle("on", state.role === "assistant");
+        var finOk = permFor(state.role, "finances");
+        var rxOk = permFor(state.role, "rx");
+        $("finLocked").hidden = finOk;
+        $("finContent").style.display = finOk ? "" : "none";
+        $("lockFin").hidden = finOk;
+        $("rxLocked").hidden = rxOk;
+        $("rxContent").style.display = rxOk ? "" : "none";
+        renderPerms();
+      }
+      $("roleDoctor").addEventListener("click", function(){ state.role = "doctor"; applyRole(); toast("You are viewing as the doctor (owner)"); });
+      $("roleAssistant").addEventListener("click", function(){ state.role = "assistant"; applyRole(); toast("You are viewing as Sara, the assistant"); });
+
+      /* ================= today ================= */
+      var statusMeta = {
+        booked:  {label:"Booked", cls:"grey"},
+        waiting: {label:"Waiting", cls:"amber"},
+        room:    {label:"In the chair", cls:"teal"},
+        done:    {label:"Finished", cls:"grey"},
+        cancelled:{label:"Cancelled", cls:"red"}
+      };
+      function renderAppts(){
+        var list = state.appts.slice().sort(function(a,b){ return a.time < b.time ? -1 : 1; });
+        var html = "";
+        list.forEach(function(a){
+          var m = statusMeta[a.status];
+          var actions = "";
+          if (a.status === "booked") actions = '<button class="btn small" data-act="checkin" data-id="'+a.id+'">Check in</button><button class="btn small danger" data-act="cancel" data-id="'+a.id+'">Cancel</button>';
+          if (a.status === "waiting") actions = '<button class="btn small" data-act="callin" data-id="'+a.id+'">Call in</button>';
+          if (a.status === "room") actions = '<button class="btn small" data-act="finish" data-id="'+a.id+'">Finish visit</button>';
+          html += '<div class="appt"><div class="appt-time">'+a.time+'</div>' +
+            '<div class="appt-main"><div class="who">'+esc(a.name)+(a.isNew?' <span class="pill new">New</span>':"")+'</div>' +
+            '<div class="what">'+esc(a.service)+' · '+esc(a.doctor)+'</div></div>' +
+            '<span class="pill '+m.cls+'">'+m.label+'</span>' +
+            '<div class="appt-actions">'+actions+'</div></div>';
+        });
+        $("apptList").innerHTML = html || '<p class="empty-note">No appointments yet today.</p>';
+        var c = {total:0, waiting:0, room:0, done:0};
+        state.appts.forEach(function(a){
+          if (a.status !== "cancelled"){ c.total++; }
+          if (a.status === "waiting") c.waiting++;
+          if (a.status === "room") c.room++;
+          if (a.status === "done") c.done++;
+        });
+        $("stTotal").textContent = c.total;
+        $("stWaiting").textContent = c.waiting;
+        $("stRoom").textContent = c.room;
+        $("stDone").textContent = c.done;
+        renderRxPatients();
+      }
+      function renderFeed(){
+        $("feedList").innerHTML = state.feed.map(function(f){
+          return '<div class="feed-item"><span class="when">'+f.when+'</span><br />'+esc(f.text)+'</div>';
+        }).join("");
+      }
+      $("apptList").addEventListener("click", function(e){
+        var b = e.target.closest("[data-act]"); if (!b) return;
+        var id = +b.getAttribute("data-id"), act = b.getAttribute("data-act");
+        var a = state.appts.find(function(x){ return x.id === id; }); if (!a) return;
+        if (act === "checkin"){ a.status = "waiting"; a.isNew = false; pushFeed(a.name + " checked in and is waiting"); toast(a.name + " is now waiting"); }
+        if (act === "cancel"){ a.status = "cancelled"; a.isNew = false; pushFeed("Booking cancelled: " + a.name + ", " + a.time); toast("Booking cancelled"); }
+        if (act === "callin"){ a.status = "room"; pushFeed(a.name + " is in the chair with " + a.doctor); toast(a.name + " is in the chair"); }
+        if (act === "finish"){ a.status = "done"; pushFeed(a.name + "'s visit finished — record any materials used in Inventory"); toast("Visit finished. Materials can be recorded in Inventory."); }
+        renderAppts();
+      });
+      $("bookForm").addEventListener("submit", function(e){
+        e.preventDefault();
+        var name = $("bkName").value.trim(); if (!name) return;
+        var t = $("bkTime").value || "14:00";
+        state.appts.push({id: nextApptId++, name: name, service: $("bkService").value, doctor: "Dr. Hamada", time: t, status: "booked", isNew: true});
+        pushFeed("New booking (" + $("bkSource").value.toLowerCase() + "): " + name + " — " + $("bkService").value + ", " + t);
+        $("bkName").value = "";
+        renderAppts();
+        toast("Booking added — it is already on today's list");
+      });
+
+      /* ================= inventory ================= */
+      function invById(id){ return state.inventory.find(function(x){ return x.id === id; }); }
+      function renderInventory(){
+        $("invGrid").innerHTML = state.inventory.map(function(it){
+          var low = it.stock <= it.threshold;
+          var pct = Math.max(4, Math.min(100, Math.round(it.stock / Math.max(it.threshold * 4, it.stock) * 100)));
+          return '<div class="card inv-item"><div class="top"><div><div class="inv-name">'+esc(it.name)+'</div>' +
+            '<div class="inv-meta">'+esc(it.pack)+'</div></div>' +
+            (low ? '<span class="pill red">Low stock</span>' : '<span class="pill teal">In stock</span>') + '</div>' +
+            '<div class="inv-stock">'+it.stock+' <small>'+it.unit+' left</small></div>' +
+            '<div class="inv-meta">'+egp(it.price)+' each · Alert when '+it.threshold+' or fewer remain</div>' +
+            '<div class="inv-bar"><i class="'+(low?"low":"")+'" style="width:'+pct+'%"></i></div></div>';
+        }).join("");
+        var opts = state.inventory.map(function(it){ return '<option value="'+it.id+'">'+esc(it.name)+'</option>'; }).join("");
+        $("buyItem").innerHTML = opts;
+        $("useItem").innerHTML = opts;
+        renderUsage();
+        renderStockAlert();
+      }
+      function renderStockAlert(){
+        var low = state.inventory.filter(function(it){ return it.stock <= it.threshold; });
+        var bar = $("stockAlert");
+        if (low.length){
+          bar.innerHTML = "<strong>Stock alert:</strong> " + low.map(function(it){ return esc(it.name) + " — only " + it.stock + " " + it.unit + " left"; }).join(" · ") + ". Time to reorder.";
+          bar.classList.add("show");
+        } else {
+          bar.classList.remove("show"); bar.innerHTML = "";
+        }
+      }
+      function renderUsage(){
+        $("usageBody").innerHTML = state.usage.map(function(u){
+          return "<tr><td>"+esc(u.item)+"</td><td>"+esc(u.patient)+"</td><td>"+esc(u.when)+"</td><td class='num'>"+u.qty+"</td><td class='num'>"+egp(u.cost)+"</td></tr>";
+        }).join("");
+        var total = state.usage.reduce(function(s,u){ return s + u.cost; }, 0);
+        var qty = state.usage.reduce(function(s,u){ return s + u.qty; }, 0);
+        $("usageTotal").textContent = "Total so far: " + qty + " items used, costing " + egp(total) + ".";
+      }
+      $("buyForm").addEventListener("submit", function(e){
+        e.preventDefault();
+        var it = invById($("buyItem").value);
+        var qty = Math.max(1, +$("buyQty").value || 0);
+        var price = Math.max(0, +$("buyPrice").value || 0);
+        it.stock += qty; it.price = price;
+        var total = qty * price;
+        state.expenses.unshift({name:"Bought " + qty + " × " + it.name, cat:"Inventory", date:"Today", amount: total});
+        pushFeed("Inventory: bought " + qty + " " + it.unit + " of " + it.name + " for " + egp(total));
+        renderInventory(); renderFinances();
+        toast("Stock added: " + qty + " " + it.unit + " — and " + egp(total) + " added to expenses");
+      });
+      $("useForm").addEventListener("submit", function(e){
+        e.preventDefault();
+        var it = invById($("useItem").value);
+        var qty = Math.max(1, +$("useQty").value || 0);
+        var patient = $("usePatient").value.trim(); if (!patient) return;
+        if (qty > it.stock){ toast("Only " + it.stock + " " + it.unit + " in stock — cannot record " + qty); return; }
+        it.stock -= qty;
+        state.usage.unshift({item: it.name, patient: patient, when: "Today, " + clockNow(), qty: qty, cost: qty * it.price});
+        pushFeed("Inventory: " + qty + " " + it.unit + " of " + it.name + " used for " + patient);
+        $("usePatient").value = "";
+        renderInventory();
+        if (it.stock <= it.threshold) toast("Recorded. Stock alert: only " + it.stock + " " + it.unit + " of " + it.name + " left");
+        else toast("Use recorded — stock updated automatically");
+      });
+
+      /* ================= finances ================= */
+      function payAmount(p){
+        return p.kind === "fixed" ? p.amount : Math.round(p.base * p.pct / 100);
+      }
+      function renderFinances(){
+        var totalOut = state.expenses.reduce(function(s,x){ return s + x.amount; }, 0);
+        $("finIn").textContent = egp(state.collected);
+        $("finOut").textContent = egp(totalOut);
+        $("finNet").textContent = egp(state.collected - totalOut);
+        var cats = {};
+        state.expenses.forEach(function(x){ cats[x.cat] = (cats[x.cat] || 0) + x.amount; });
+        var order = ["Salaries","Rent","Inventory","Electricity","Other"];
+        var max = Math.max.apply(null, order.map(function(c){ return cats[c] || 0; }));
+        $("finBars").innerHTML = order.map(function(c){
+          var v = cats[c] || 0;
+          return '<div class="bar-row"><div>'+c+'</div><div class="bar-track"><i style="width:'+Math.round(v/max*100)+'%"></i></div><div class="bar-amt">'+egp(v)+'</div></div>';
+        }).join("");
+        $("expBody").innerHTML = state.expenses.map(function(x){
+          return "<tr><td>"+esc(x.name)+"</td><td>"+esc(x.cat)+"</td><td>"+esc(x.date)+"</td><td class='num'>"+egp(x.amount)+"</td></tr>";
+        }).join("");
+        $("payList").innerHTML = state.pay.map(function(p){
+          var how = p.kind === "fixed" ? "Fixed salary, paid monthly" : p.pct + "% of the " + egp(p.base) + " he collected this month";
+          return '<div class="pay-row"><div class="pay-main"><div class="who">'+esc(p.name)+'</div><div class="how">'+esc(p.role)+' · '+how+'</div></div>' +
+            '<span class="pill '+(p.kind === "fixed" ? "grey" : "teal")+'">'+(p.kind === "fixed" ? "Fixed" : "Percentage")+'</span>' +
+            '<div class="pay-amt">'+egp(payAmount(p))+'</div></div>';
+        }).join("");
+      }
+      $("expForm").addEventListener("submit", function(e){
+        e.preventDefault();
+        var name = $("expName").value.trim(); if (!name) return;
+        var amt = Math.max(1, +$("expAmt").value || 0);
+        state.expenses.unshift({name: name, cat: $("expCat").value, date: "Today", amount: amt});
+        pushFeed("Expense added: " + name + ", " + egp(amt));
+        $("expName").value = ""; $("expAmt").value = "";
+        renderFinances();
+        toast("Expense added");
+      });
+
+      /* ================= prescription ================= */
+      function renderRxPatients(){
+        var names = [];
+        state.appts.forEach(function(a){ if (a.status !== "cancelled" && names.indexOf(a.name) === -1) names.push(a.name); });
+        var cur = $("rxPatient").value;
+        $("rxPatient").innerHTML = names.map(function(n){ return "<option"+(n===cur?" selected":"")+">"+esc(n)+"</option>"; }).join("");
+        renderRxPaper();
+      }
+      function renderMeds(){
+        $("medGrid").innerHTML = state.meds.map(function(m){
+          var inRx = state.rx.some(function(r){ return r.id === m.id; });
+          return '<div class="med-card"><div class="mname">'+esc(m.name)+'</div>' +
+            '<div class="mdose">'+esc(m.form)+' · '+esc(m.dose)+'</div>' +
+            '<button class="btn small '+(inRx ? "ghost" : "")+'" data-med="'+m.id+'">'+(inRx ? "Added ✓" : "Add")+'</button></div>';
+        }).join("");
+      }
+      $("medGrid").addEventListener("click", function(e){
+        var b = e.target.closest("[data-med]"); if (!b) return;
+        var id = b.getAttribute("data-med");
+        if (state.rx.some(function(r){ return r.id === id; })) return;
+        var m = state.meds.find(function(x){ return x.id === id; });
+        state.rx.push({id: m.id, name: m.name, form: m.form, dose: m.dose, qty: 14, days: 5});
+        renderMeds(); renderRxList(); renderRxPaper();
+      });
+      function stepper(kind, idx, val, cap){
+        return '<div class="stepper-wrap"><div class="stepper">' +
+          '<button data-step="'+kind+'|-1|'+idx+'" aria-label="Less">−</button>' +
+          '<span class="val">'+val+'</span>' +
+          '<button data-step="'+kind+'|1|'+idx+'" aria-label="More">+</button></div>' +
+          '<span class="cap">'+cap+'</span></div>';
+      }
+      function renderRxList(){
+        if (!state.rx.length){
+          $("rxList").innerHTML = '<p class="empty-note">No medicines yet. Tap “Add” on any medicine from the ready list.</p>';
+          return;
+        }
+        $("rxList").innerHTML = state.rx.map(function(r, i){
+          return '<div class="rx-item"><div class="rx-main"><div class="rname">'+esc(r.name)+'</div>' +
+            '<div class="rdose">'+esc(r.dose)+'</div></div>' +
+            stepper("qty", i, r.qty, r.form.indexOf("bottle") > -1 ? "bottles" : "pieces") +
+            stepper("days", i, r.days, "days") +
+            '<button class="btn small danger" data-remove="'+i+'">Remove</button></div>';
+        }).join("");
+      }
+      $("rxList").addEventListener("click", function(e){
+        var s = e.target.closest("[data-step]");
+        var rm = e.target.closest("[data-remove]");
+        if (s){
+          var parts = s.getAttribute("data-step").split("|");
+          var kind = parts[0], d = +parts[1], idx = +parts[2];
+          var r = state.rx[idx]; if (!r) return;
+          if (kind === "qty") r.qty = Math.max(1, Math.min(200, r.qty + d));
+          if (kind === "days") r.days = Math.max(1, Math.min(90, r.days + d));
+          renderRxList(); renderRxPaper();
+        }
+        if (rm){
+          state.rx.splice(+rm.getAttribute("data-remove"), 1);
+          renderMeds(); renderRxList(); renderRxPaper();
+        }
+      });
+      function rxText(){
+        var patient = $("rxPatient").value || "Patient";
+        var lines = state.rx.map(function(r){
+          return "• " + r.name + " — " + r.dose + ". Amount: " + r.qty + " " + r.form.toLowerCase() + ", for " + r.days + " days.";
+        });
+        return {patient: patient, lines: lines};
+      }
+      function renderRxPaper(){
+        var t = rxText();
+        var body = t.lines.length
+          ? "<ul>" + t.lines.map(function(l){ return "<li>" + esc(l.replace(/^• /, "")) + "</li>"; }).join("") + "</ul>"
+          : '<p style="color:var(--muted)">The prescription will appear here as you add medicines.</p>';
+        $("rxPaper").innerHTML =
+          '<div class="rx-head"><div class="doc">Dr. Hamada Aziz — Dentist</div>' +
+          '<div class="sub">Smile Dental Center · Saturday, 24 October 2026</div></div>' +
+          '<p style="margin-bottom:10px"><strong>Patient:</strong> ' + esc(t.patient) + '</p>' + body +
+          '<p style="color:var(--muted);font-size:13px;margin-top:14px">Signature: ______________________</p>';
+      }
+      $("rxPatient").addEventListener("change", renderRxPaper);
+      $("rxClear").addEventListener("click", function(){
+        state.rx = []; renderMeds(); renderRxList(); renderRxPaper(); toast("Prescription cleared");
+      });
+      $("rxDownload").addEventListener("click", function(){
+        if (!state.rx.length){ toast("Add at least one medicine first"); return; }
+        var t = rxText();
+        var text = "PRESCRIPTION\nDr. Hamada Aziz — Dentist\nSmile Dental Center\nSaturday, 24 October 2026\n\nPatient: " + t.patient + "\n\n" + t.lines.join("\n") + "\n\nSignature: ______________________\n";
+        var blob = new Blob([text], {type: "text/plain"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "prescription-" + t.patient.replace(/\s+/g, "-").toLowerCase() + ".txt";
+        document.body.appendChild(a); a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 400);
+        toast("Prescription downloaded");
+      });
+
+      /* ================= consultations ================= */
+      var consultMeta = {
+        "new":      {label:"New request", cls:"amber"},
+        "accepted": {label:"Accepted", cls:"teal"},
+        "incall":   {label:"In call now", cls:"teal"},
+        "done":     {label:"Finished", cls:"grey"}
+      };
+      function renderConsults(){
+        $("consultList").innerHTML = state.consults.map(function(c){
+          var m = consultMeta[c.status];
+          var actions = "";
+          if (c.status === "new") actions = '<button class="btn small" data-cact="accept" data-id="'+c.id+'">Accept</button><button class="btn small danger" data-cact="decline" data-id="'+c.id+'">Decline</button>';
+          if (c.status === "accepted") actions = '<button class="btn small" data-cact="start" data-id="'+c.id+'">Start video call</button>';
+          if (c.status === "incall") actions = '<button class="btn small" data-cact="end" data-id="'+c.id+'">End call</button>';
+          return '<div class="consult"><div class="consult-main"><div class="who">'+esc(c.name)+' <span class="pill '+m.cls+'">'+m.label+'</span></div>' +
+            '<div class="why">'+esc(c.why)+'</div><div class="why">'+esc(c.when)+' · Video</div></div>' +
+            '<div class="appt-actions">'+actions+'</div></div>';
+        }).join("") || '<p class="empty-note">No requests right now.</p>';
+      }
+      $("consultList").addEventListener("click", function(e){
+        var b = e.target.closest("[data-cact]"); if (!b) return;
+        var id = +b.getAttribute("data-id"), act = b.getAttribute("data-cact");
+        var c = state.consults.find(function(x){ return x.id === id; }); if (!c) return;
+        if (act === "accept"){ c.status = "accepted"; toast("Request accepted — " + c.name + " has been told"); }
+        if (act === "decline"){ state.consults = state.consults.filter(function(x){ return x.id !== id; }); toast("Request declined"); }
+        if (act === "start"){ c.status = "incall"; pushFeed("Online consultation started with " + c.name); toast("Video call started with " + c.name); }
+        if (act === "end"){ c.status = "done"; pushFeed("Online consultation finished with " + c.name); toast("Call finished"); }
+        renderConsults();
+      });
+
+      /* ================= team & settings ================= */
+      function renderSpecs(){
+        $("specGrid").innerHTML = state.specialties.map(function(s){
+          return '<button class="spec-btn'+(s.name === state.specialty ? " on" : "")+'" data-spec="'+s.name+'">' +
+            s.name + '<small>' + s.tag + '</small></button>';
+        }).join("");
+        var s = state.specialties.find(function(x){ return x.name === state.specialty; });
+        $("specDetail").innerHTML =
+          '<h3>' + s.name + ' setup</h3>' +
+          '<p style="color:var(--muted);margin-top:4px">Services: ' + s.services.join(" · ") + '</p>' +
+          '<ul class="feat-list">' + s.features.map(function(f){ return "<li>" + esc(f) + "</li>"; }).join("") + '</ul>';
+        $("specNameSide").textContent = s.name;
+        $("rxSpecName").textContent = s.name.toLowerCase();
+        $("bkService").innerHTML = s.services.map(function(v){ return "<option>" + esc(v) + "</option>"; }).join("");
+      }
+      $("specGrid").addEventListener("click", function(e){
+        var b = e.target.closest("[data-spec]"); if (!b) return;
+        state.specialty = b.getAttribute("data-spec");
+        renderSpecs();
+        toast("Specialty set to " + state.specialty + " — services updated across the app");
+      });
+      function renderPeople(){
+        $("peopleList").innerHTML = state.people.map(function(p){
+          return '<div class="person"><div class="person-main"><div class="who">'+esc(p.name)+'</div>' +
+            '<div class="role">'+esc(p.role)+' — '+esc(p.note)+'</div></div></div>';
+        }).join("");
+      }
+      function renderPerms(){
+        var dis = state.role !== "doctor" ? " disabled" : "";
+        $("permList").innerHTML = state.perms.map(function(p){
+          return '<div class="perm-row"><div class="perm-name">'+esc(p.name)+'<small>'+esc(p.hint)+'</small></div>' +
+            '<button class="toggle'+(p.asst ? " on" : "")+'" data-perm="'+p.id+'" data-who="asst"'+dis+'>'+(p.asst ? "On" : "Off")+'</button>' +
+            '<button class="toggle'+(p.assoc ? " on" : "")+'" data-perm="'+p.id+'" data-who="assoc"'+dis+'>'+(p.assoc ? "On" : "Off")+'</button></div>';
+        }).join("");
+      }
+      $("permList").addEventListener("click", function(e){
+        var b = e.target.closest("[data-perm]"); if (!b || b.disabled) return;
+        var p = state.perms.find(function(x){ return x.id === b.getAttribute("data-perm"); });
+        var who = b.getAttribute("data-who");
+        p[who] = !p[who];
+        renderPerms();
+        $("lockFin").hidden = permFor(state.role, "finances");
+        toast("Permission updated: “" + p.name + "” is now " + (p[who] ? "on" : "off") + " for the " + (who === "asst" ? "assistant" : "associate doctor"));
+      });
+
+      /* ================= init ================= */
+      renderAppts();
+      renderFeed();
+      renderInventory();
+      renderFinances();
+      renderMeds();
+      renderRxList();
+      renderRxPaper();
+      renderConsults();
+      renderSpecs();
+      renderPeople();
+      applyRole();
+    </script>
+  </body>
+</html>
