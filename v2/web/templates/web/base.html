@@ -1,0 +1,36 @@
+{% load static i18n %}{% get_current_language as LANG %}<!doctype html>
+<html lang="{{ LANG }}" dir="{% if LANG == 'ar' %}rtl{% else %}ltr{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  {# No patient names in titles: they print and stay in a shared PC's history (design 7.5). #}
+  <title>{% block title %}{% translate "Hamada" %}{% endblock %}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="modulepreload" href="{% static 'js/api.js' %}">
+  <meta name="hamada" data-membership="{{ ctx.membership_id|default:'' }}" data-user="{{ request.user.id|default:'' }}"
+        data-csrf-cookie="hamada_csrftoken" data-app-version="{{ app_version|default:'' }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% block shell %}
+  <header class="topbar">
+    <a class="brand" href="/">{% translate "Hamada" %}</a>
+    {% if ctx %}<span class="clinic-name"><bdi dir="auto">{{ ctx.clinic.name }}</bdi></span>{% endif %}
+    <span class="spacer"></span>
+    {% if request.user.is_authenticated %}
+      <span class="who"><bdi dir="auto">{{ request.user.full_name }}</bdi></span>
+      <button type="button" class="btn ghost" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
+      <button type="button" class="btn ghost" data-action="logout">{% translate "Sign out" %}</button>
+    {% endif %}
+  </header>
+  {% endblock %}
+  <main class="page" id="main" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="alert-toast" id="alert" role="alert"></div>
+  <script type="module" src="{% static 'js/shell.js' %}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

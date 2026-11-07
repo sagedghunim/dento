@@ -1,0 +1,13 @@
+{% extends "web/base.html" %}{% load i18n %}
+{% block title %}{% translate "Today" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Today" %}</h1>
+<p class="muted">{% translate "Business day:" %} <bdi dir="ltr">{{ day|date:"Y-m-d" }}</bdi></p>
+<section class="card">
+  <h2><bdi dir="auto">{{ ctx.clinic.name }}</bdi></h2>
+  <p>{% translate "You are signed in as" %} <bdi dir="auto">{{ ctx.membership.display_name }}</bdi>
+     ({% if ctx.membership.role == "owner" %}{% translate "Owner" %}{% elif ctx.membership.role == "doctor" %}{% translate "Doctor" %}{% else %}{% translate "Assistant" %}{% endif %}).</p>
+  <p class="muted">{% translate "The day's queue, booking and payments arrive with the front-desk milestone." %}</p>
+  <p><a href="/clinics">{% translate "Switch clinic" %}</a> · <a href="/account/password">{% translate "Change password" %}</a> · <a href="/account/security">{% translate "Two-step sign-in" %}</a></p>
+</section>
+{% endblock %}

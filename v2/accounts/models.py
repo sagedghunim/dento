@@ -119,6 +119,7 @@ class AccountRequestKey(models.Model):
     key = models.UUIDField()
     endpoint = models.CharField(max_length=80)
     request_hash = models.CharField(max_length=64)
+    status = models.PositiveSmallIntegerField(default=200)
     target_type = models.CharField(max_length=40, blank=True, default="")
     target_id = models.BigIntegerField(null=True)
     created_at = models.DateTimeField(default=timezone.now)

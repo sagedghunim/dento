@@ -1,0 +1,7 @@
+{% extends "web/base.html" %}{% load i18n %}
+{% block title %}{% translate "Not allowed" %}{% endblock %}
+{% block content %}
+<section class="card narrow"><h1>{% translate "Not allowed" %}</h1>
+<p>{% translate "Your account can't open this page. The clinic's owner can change your permissions." %}</p>
+<a class="btn" href="/">{% translate "Back to Today" %}</a></section>
+{% endblock %}

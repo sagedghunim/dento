@@ -75,17 +75,22 @@ port = $Port
             else {
                 Invoke-Psql "ALTER ROLE hamada WITH LOGIN CREATEDB PASSWORD '$appPassword';" | Out-Null
             }
-            if (-not (Invoke-Psql "SELECT 1 FROM pg_database WHERE datname = 'hamada'")) {
-                Invoke-Psql "CREATE DATABASE hamada OWNER hamada;" | Out-Null
+            # The directory and two shards (design 3.3). Timeouts are per-role settings (design 4.0).
+            foreach ($db in @('hamada_dir', 'hamada_s001', 'hamada_s002')) {
+                if (-not (Invoke-Psql "SELECT 1 FROM pg_database WHERE datname = '$db'")) {
+                    Invoke-Psql "CREATE DATABASE $db OWNER hamada;" | Out-Null
+                }
             }
-            # Extensions need a superuser once; the app role only uses them.
-            foreach ($db in @('hamada', 'template1')) {
-                Invoke-Psql "CREATE EXTENSION IF NOT EXISTS btree_gist;" $db | Out-Null
-            }
+            Invoke-Psql "ALTER ROLE hamada SET lock_timeout = '2s';" | Out-Null
+            Invoke-Psql "ALTER ROLE hamada SET statement_timeout = '5s';" | Out-Null
+            Invoke-Psql "ALTER ROLE hamada SET idle_in_transaction_session_timeout = '15s';" | Out-Null
         }
         finally { Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue }
 
         $secretKey = (New-Secret 48)
+        $keyBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($keyBytes)
+        $fieldKey = [Convert]::ToBase64String($keyBytes).Replace('+', '-').Replace('/', '_')
         $lines = @(
             '# Local development only. Never commit this file.',
             'DJANGO_DEBUG=1',
@@ -93,12 +98,14 @@ port = $Port
             'DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost',
             'PGHOST=127.0.0.1',
             "PGPORT=$Port",
-            'PGDATABASE=hamada',
+            'PGDATABASE=hamada_dir',
             'PGUSER=hamada',
-            "PGPASSWORD=$appPassword"
+            "PGPASSWORD=$appPassword",
+            'HAMADA_SHARDS=shard_1=hamada_s001,shard_2=hamada_s002',
+            "HAMADA_FIELD_KEY=$fieldKey"
         )
         Set-Content -Path $EnvFile -Value $lines -Encoding utf8
-        Write-Output "Database 'hamada' is ready. Settings written to $EnvFile."
+        Write-Output "Databases hamada_dir, hamada_s001 and hamada_s002 are ready. Settings written to $EnvFile."
     }
     'start' { Start-Pg }
     'stop' {

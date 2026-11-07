@@ -1,0 +1,287 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Hamada v2\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+msgid "The username or password is wrong."
+msgstr "اسم المستخدم أو كلمة المرور غير صحيحة."
+
+#, python-format
+msgid "Too many attempts. Try again in %(minutes)s minutes."
+msgstr "محاولات كثيرة. حاول مرة أخرى بعد %(minutes)s دقيقة."
+
+msgid "This temporary password has expired. Ask for a new one."
+msgstr "انتهت صلاحية كلمة المرور المؤقتة. اطلب كلمة مرور جديدة."
+
+msgid "Your sign-in expired. Sign in again."
+msgstr "انتهت مهلة تسجيل الدخول. سجّل الدخول مرة أخرى."
+
+msgid "Too many wrong codes. Sign in again."
+msgstr "أكواد خاطئة كثيرة. سجّل الدخول مرة أخرى."
+
+msgid "That code is wrong. Try the newest one."
+msgstr "الكود غير صحيح. جرّب أحدث كود."
+
+msgid "The current password is wrong."
+msgstr "كلمة المرور الحالية غير صحيحة."
+
+msgid "Two-step sign-in is already set up."
+msgstr "الدخول بخطوتين مفعّل بالفعل."
+
+msgid "Start the set-up first."
+msgstr "ابدأ الإعداد أولاً."
+
+msgid "That clinic isn't available."
+msgstr "هذه العيادة غير متاحة."
+
+msgid "Please sign in."
+msgstr "من فضلك سجّل الدخول."
+
+msgid "Pick Arabic or English."
+msgstr "اختر العربية أو الإنجليزية."
+
+msgid "Change your password to continue."
+msgstr "غيّر كلمة المرور للمتابعة."
+
+msgid "Book, reschedule and cancel"
+msgstr "الحجز وتغيير الموعد والإلغاء"
+
+msgid "Arrive, call in and finish"
+msgstr "تسجيل الحضور والدخول للطبيب وإنهاء الزيارة"
+
+msgid "Search and open patient details"
+msgstr "البحث في بيانات المرضى وفتحها"
+
+msgid "Create and edit patient files"
+msgstr "إنشاء ملفات المرضى وتعديلها"
+
+msgid "Read visit notes and prescriptions"
+msgstr "قراءة ملاحظات الزيارات والروشتات"
+
+msgid "Write visit notes and prescriptions"
+msgstr "كتابة ملاحظات الزيارات والروشتات"
+
+msgid "Take payments and add list-price lines"
+msgstr "تحصيل المدفوعات وإضافة بنود بسعر القائمة"
+
+msgid "Give discounts and prices not from the list"
+msgstr "عمل خصومات وأسعار من خارج القائمة"
+
+msgid "Refund payments and void invoices"
+msgstr "رد المدفوعات وإلغاء الفواتير"
+
+msgid "Record stock use"
+msgstr "تسجيل استخدام المخزون"
+
+msgid "Manage items, purchases and stock counts"
+msgstr "إدارة الأصناف والمشتريات وجرد المخزون"
+
+msgid "See the month's money and staff pay"
+msgstr "الاطلاع على حسابات الشهر ورواتب الفريق"
+
+msgid "Edit staff pay"
+msgstr "تعديل رواتب الفريق"
+
+msgid "Add and void expenses"
+msgstr "إضافة المصروفات وإلغاؤها"
+
+msgid "Handle online consultation requests"
+msgstr "متابعة طلبات الاستشارة أونلاين"
+
+msgid "Change the clinic profile, services, prices, schedules and medicines"
+msgstr "تعديل بيانات العيادة والخدمات والأسعار والمواعيد والأدوية"
+
+msgid "Manage members and permissions"
+msgstr "إدارة الفريق والصلاحيات"
+
+msgid "Read the change and access logs"
+msgstr "قراءة سجل التغييرات وسجل الاطلاع"
+
+msgid "Send the changes and the values they replace."
+msgstr "أرسل التغييرات والقيم التي تحل محلها."
+
+msgid "Someone changed these settings meanwhile. Reload and try again."
+msgstr "غيّر شخص آخر هذه الإعدادات للتو. أعد تحميل الصفحة وحاول مرة أخرى."
+
+msgid "The request couldn't be read."
+msgstr "تعذرت قراءة الطلب."
+
+msgid "This request needs an Idempotency-Key."
+msgstr "هذا الطلب يحتاج إلى مفتاح طلب (Idempotency-Key)."
+
+msgid "Pick a clinic first."
+msgstr "اختر العيادة أولاً."
+
+msgid "The clinic is being moved. Try again in a moment."
+msgstr "جارٍ نقل بيانات العيادة. حاول مرة أخرى بعد لحظات."
+
+msgid "This clinic is suspended."
+msgstr "هذه العيادة موقوفة."
+
+msgid "You are no longer a member of this clinic."
+msgstr "لم تعد عضواً في هذه العيادة."
+
+msgid "Set up two-step sign-in to continue."
+msgstr "فعّل الدخول بخطوتين للمتابعة."
+
+msgid "Enter the code from your authenticator app."
+msgstr "أدخل الكود من تطبيق المصادقة."
+
+msgid "This request key was already used for a different request."
+msgstr "مفتاح الطلب هذا استُخدم لطلب مختلف."
+
+msgid "Someone else is changing this. Trying again."
+msgstr "شخص آخر يعدّل هذا الآن. جارٍ المحاولة مرة أخرى."
+
+msgid "This took too long. Try again."
+msgstr "استغرق الأمر وقتاً طويلاً. حاول مرة أخرى."
+
+msgid "This method isn't allowed here."
+msgstr "هذه العملية غير مسموحة هنا."
+
+msgid "Another tab switched clinic. Reloading."
+msgstr "تم تغيير العيادة في نافذة أخرى. جارٍ إعادة التحميل."
+
+msgid "You don't have permission to do this."
+msgstr "ليست لديك صلاحية للقيام بهذا."
+
+msgid "Your session changed. Trying again."
+msgstr "تغيرت جلستك. جارٍ المحاولة مرة أخرى."
+
+msgid "Hamada"
+msgstr "حمادة"
+
+msgid "Sign out"
+msgstr "تسجيل الخروج"
+
+msgid "Pick a clinic"
+msgstr "اختر العيادة"
+
+msgid "Owner"
+msgstr "المالك"
+
+msgid "Doctor"
+msgstr "طبيب"
+
+msgid "Assistant"
+msgstr "مساعد"
+
+msgid ""
+"Your account isn't a member of any clinic yet. Ask the clinic's owner to add"
+" you."
+msgstr "حسابك ليس عضواً في أي عيادة بعد. اطلب من مالك العيادة إضافتك."
+
+msgid "Not allowed"
+msgstr "غير مسموح"
+
+msgid ""
+"Your account can't open this page. The clinic's owner can change your "
+"permissions."
+msgstr "لا يمكن لحسابك فتح هذه الصفحة. يمكن لمالك العيادة تغيير صلاحياتك."
+
+msgid "Back to Today"
+msgstr "العودة إلى اليوم"
+
+msgid "Today"
+msgstr "اليوم"
+
+msgid "Business day:"
+msgstr "يوم العمل:"
+
+msgid "You are signed in as"
+msgstr "أنت مسجّل الدخول باسم"
+
+msgid ""
+"The day's queue, booking and payments arrive with the front-desk milestone."
+msgstr "قائمة انتظار اليوم والحجز والمدفوعات تأتي مع مرحلة الاستقبال."
+
+msgid "Switch clinic"
+msgstr "تغيير العيادة"
+
+msgid "Change password"
+msgstr "تغيير كلمة المرور"
+
+msgid "Two-step sign-in"
+msgstr "الدخول بخطوتين"
+
+msgid "Sign in"
+msgstr "تسجيل الدخول"
+
+msgid "Sign in to your clinic"
+msgstr "سجّل الدخول إلى عيادتك"
+
+msgid "Username or mobile number"
+msgstr "اسم المستخدم أو رقم الموبايل"
+
+msgid "Password"
+msgstr "كلمة المرور"
+
+msgid "Code from your authenticator app, or a recovery code"
+msgstr "الكود من تطبيق المصادقة، أو كود استرداد"
+
+msgid "Continue"
+msgstr "متابعة"
+
+msgid "Your account has a temporary password. Choose your own to continue."
+msgstr "حسابك بكلمة مرور مؤقتة. اختر كلمة مرور خاصة بك للمتابعة."
+
+msgid "Current password"
+msgstr "كلمة المرور الحالية"
+
+msgid "New password (at least 10 characters)"
+msgstr "كلمة المرور الجديدة (10 أحرف على الأقل)"
+
+msgid "Save"
+msgstr "حفظ"
+
+msgid "One moment"
+msgstr "لحظة من فضلك"
+
+msgid "The clinic is being moved. This page will work again in a moment."
+msgstr "جارٍ نقل بيانات العيادة. ستعمل هذه الصفحة مرة أخرى بعد لحظات."
+
+msgid "Try again"
+msgstr "حاول مرة أخرى"
+
+msgid "Two-step sign-in is on for your account."
+msgstr "الدخول بخطوتين مفعّل لحسابك."
+
+msgid ""
+"Clinic owners sign in with a password and a code from an authenticator app, "
+"such as Google Authenticator or Microsoft Authenticator."
+msgstr ""
+"يسجّل مالكو العيادات الدخول بكلمة المرور وكود من تطبيق مصادقة، مثل Google "
+"Authenticator أو Microsoft Authenticator."
+
+msgid "Open the authenticator app on your phone and scan this code."
+msgstr "افتح تطبيق المصادقة على موبايلك وامسح هذا الكود."
+
+msgid "Type the 6-digit code the app shows."
+msgstr "اكتب الكود المكوّن من 6 أرقام الذي يظهر في التطبيق."
+
+msgid "Can't scan? Enter this key in the app:"
+msgstr "لا تستطيع المسح؟ أدخل هذا المفتاح في التطبيق:"
+
+msgid "6-digit code"
+msgstr "كود من 6 أرقام"
+
+msgid "Turn on"
+msgstr "تفعيل"
+
+msgid "Recovery codes"
+msgstr "أكواد الاسترداد"
+
+msgid ""
+"Keep these somewhere safe. Each one signs you in once if you lose your "
+"phone. They won't be shown again."
+msgstr ""
+"احتفظ بها في مكان آمن. كل كود يتيح لك الدخول مرة واحدة إذا فقدت موبايلك. لن "
+"تظهر مرة أخرى."
+
+msgid "I saved them, continue"
+msgstr "حفظتها، متابعة"

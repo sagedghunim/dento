@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "directory",
     "clinics",
     "audit",
+    "web",
 ]
 
 # Background jobs live in each app's jobs.py (design 3.1).
@@ -77,6 +78,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.UserLanguageMiddleware",
+    "core.middleware.AppHeadersMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -161,6 +164,15 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Hashed names in production, including the names inside ES module imports (design 7.1).
+if not DEBUG:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "core.storage.ModuleManifestStaticFilesStorage"},
+    }
+APP_VERSION = env("HAMADA_APP_VERSION", "2.0.0-dev")
+CSRF_FAILURE_VIEW = "core.views.csrf_failure"
+LOGIN_URL = "/login"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 64 * 1024  # design 6.1
 

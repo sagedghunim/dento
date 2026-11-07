@@ -1,0 +1,33 @@
+{% extends "web/base.html" %}{% load i18n static %}
+{% block title %}{% translate "Two-step sign-in" %}{% endblock %}
+{% block content %}
+<section class="card narrow" aria-labelledby="security-title">
+  <h1 id="security-title">{% translate "Two-step sign-in" %}</h1>
+  {% if has_totp %}
+    <p>{% translate "Two-step sign-in is on for your account." %}</p>
+    <a class="btn" href="/">{% translate "Continue" %}</a>
+  {% else %}
+    <p>{% translate "Clinic owners sign in with a password and a code from an authenticator app, such as Google Authenticator or Microsoft Authenticator." %}</p>
+    <ol class="steps">
+      <li>{% translate "Open the authenticator app on your phone and scan this code." %}</li>
+      <li>{% translate "Type the 6-digit code the app shows." %}</li>
+    </ol>
+    <div id="totp-qr" class="qr" aria-live="polite"></div>
+    <p class="muted">{% translate "Can't scan? Enter this key in the app:" %} <code id="totp-secret" dir="ltr"></code></p>
+    <form id="totp-confirm" class="stack">
+      <label class="field">{% translate "6-digit code" %}
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" dir="ltr" required maxlength="6">
+      </label>
+      <button class="btn" type="submit">{% translate "Turn on" %}</button>
+      <p class="form-error" data-error></p>
+    </form>
+    <section id="recovery" hidden>
+      <h2>{% translate "Recovery codes" %}</h2>
+      <p class="notice">{% translate "Keep these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again." %}</p>
+      <ul id="recovery-codes" class="codes" dir="ltr"></ul>
+      <a class="btn" href="/">{% translate "I saved them, continue" %}</a>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/account.js' %}"></script>{% endblock %}

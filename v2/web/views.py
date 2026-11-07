@@ -1,0 +1,57 @@
+"""Server-rendered pages (design 7.1, 7.3). Actions go through /api/v1/ from api.js."""
+
+from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
+
+from accounts.services import PENDING_UNTIL, PENDING_USER
+from core.api import SESSION_ACTIVE, page
+from directory.services import clinics_for_user
+
+
+def _safe_next(request, default="/"):
+    target = request.GET.get("next", "")
+    if target and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return target
+    return default
+
+
+@require_GET
+@ensure_csrf_cookie
+def login_page(request):
+    pending = bool(request.session.get(PENDING_USER))
+    if request.user.is_authenticated and not pending and request.GET.get("step") != "code":
+        return redirect(_safe_next(request))
+    return render(request, "web/login.html", {"step": "code" if pending else "password", "next": _safe_next(request)})
+
+
+@require_GET
+@ensure_csrf_cookie
+@page(member=False)
+def clinics_page(request, ctx):
+    return render(request, "web/clinics.html", {"clinics": clinics_for_user(request.user.id),
+                                                "active": request.session.get(SESSION_ACTIVE)})
+
+
+@require_GET
+@ensure_csrf_cookie
+@page(member=False, allow_password_change=True)
+def password_page(request, ctx):
+    return render(request, "web/password.html", {"forced": request.user.must_change_password})
+
+
+@require_GET
+@ensure_csrf_cookie
+@page(member=False)
+def security_page(request, ctx):
+    return render(request, "web/security.html", {"has_totp": request.user.has_totp})
+
+
+@require_GET
+@ensure_csrf_cookie
+@page()
+def home(request, ctx):
+    from core.days import business_day
+
+    return render(request, "web/home.html", {"ctx": ctx, "day": business_day(ctx.clinic)})

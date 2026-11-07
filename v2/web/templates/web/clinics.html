@@ -1,0 +1,23 @@
+{% extends "web/base.html" %}{% load i18n static %}
+{% block title %}{% translate "Pick a clinic" %}{% endblock %}
+{% block content %}
+<section class="card narrow" aria-labelledby="clinics-title">
+  <h1 id="clinics-title">{% translate "Pick a clinic" %}</h1>
+  {% if clinics %}
+  <ul class="choice-list">
+    {% for clinic in clinics %}
+    <li>
+      <button type="button" class="choice" data-pick="{{ clinic.membership_id }}">
+        <bdi dir="auto" class="choice-title">{{ clinic.name }}</bdi>
+        <span class="muted">{% if clinic.role == "owner" %}{% translate "Owner" %}{% elif clinic.role == "doctor" %}{% translate "Doctor" %}{% else %}{% translate "Assistant" %}{% endif %}</span>
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">{% translate "Your account isn't a member of any clinic yet. Ask the clinic's owner to add you." %}</p>
+  {% endif %}
+  <p class="form-error" data-error></p>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/clinics.js' %}"></script>{% endblock %}

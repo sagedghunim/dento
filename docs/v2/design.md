@@ -99,7 +99,7 @@ Rules:
 
 **No cross-database foreign keys, joins or transactions.** User ids on shard rows are plain integers. Flows that touch both databases are ordered, idempotent steps (5.12). The shard is the authority for memberships. The directory's `user_clinic` is a copy for the clinic picker: a nightly job reconciles it, and the picker re-checks on the shard.
 
-**Ids.** Every identity sequence on shard *s* draws from [s × 2^48, (s + 1) × 2^48), set with MINVALUE and MAXVALUE so that exhaustion fails rather than collides. A post-migrate step sets the ranges, and a test fails if any sequence is out of range. Clinic ids come from the directory, and the shard's `clinics_clinic` row uses the same id.
+**Ids.** Every identity sequence on shard *s* draws from [s × 2^48, (s + 1) × 2^48), set with MINVALUE and MAXVALUE so that exhaustion fails rather than collides. A post-migrate step sets the ranges, and a test fails if any sequence is out of range. Clinic ids come from the directory, and the shard's `clinics_clinic` row uses the same id. Shard numbers stay below 32, so every id stays under 2^53 and survives JavaScript's number type in JSON; a 33rd shard needs ids sent as strings first.
 
 **Migrations.** `manage.py migrate_all` migrates the directory and every shard, and reports each one's state. Every tenant table gets its RLS policy in the migration that creates it (4.0).
 
