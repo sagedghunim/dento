@@ -1,0 +1,5 @@
+Django==6.1.3
+psycopg[binary,pool]==3.3.8
+procrastinate==3.10.0
+polib==1.2.0
+segno==1.6.6

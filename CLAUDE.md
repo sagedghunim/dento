@@ -2,6 +2,16 @@
 
 Django multi-clinic backend with a plain JavaScript front end. Replaces the demo in `C:\work\hamada-app`.
 
+## v2 rebuild (started 2026-11-06)
+
+The platform is being rebuilt from scratch to grow to 250,000 doctors. Requirements: `docs/v2/requirements.md`, design: `docs/v2/design.md`, reviews: `docs/v2/reviews/`. For v2 work, those documents override the rules below. The rest of this file describes the prototype in `clinic/`, which is now a domain reference only.
+
+- v2 code is in `v2/`: Django 6.1 on PostgreSQL 18 (the portable copy in `C:\work\pgsql`, port 5433, shared with the warehouse project; database and role `hamada`). It is served on port 8002.
+- First-time setup: `powershell -ExecutionPolicy Bypass -File v2\scripts\pg.ps1 init` creates the database and writes `v2\.env`. Start and stop PostgreSQL only through `v2\scripts\pg.ps1`; stopping it stops it for the warehouse too.
+- Python is 3.15 (`py -3.15`); `python` on PATH is the Microsoft Store stub. Use `v2\.venv\Scripts\python.exe`.
+- Tests run against PostgreSQL: `cd v2` then `.venv\Scripts\python manage.py test`.
+- Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout. A design or a milestone goes to the three seniors and the judge for review, then the chief judge decides.
+
 ## Commands (Windows)
 
 ```
