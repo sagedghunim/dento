@@ -1,6 +1,6 @@
 # Hamada v2: requirements
 
-Status: draft 1, 2026-11-06, for Saged's review.
+Status: draft 2, 2026-11-07, for Saged's review. Draft 2 adds the business day, a new follow-up assumption and the questions raised by the design review (7.8).
 **Assumption** marks a default to use until someone confirms it. **Open** marks a question that still needs an answer.
 
 ## 1. Purpose
@@ -51,7 +51,8 @@ What a clinic does in Hamada:
 
 - Clinic profile: name, city, address, phone, time zone (default Africa/Cairo) and specialty.
 - Services and prices per clinic, copied from the specialty's template when the clinic is created: name, kind (consultation, follow-up or procedure), price and duration.
-- **Follow-up rule.** **Assumption:** a follow-up within 14 days of a paid consultation uses the follow-up price. The number of days is a clinic setting.
+- **Follow-up rule.** **Assumption** (draft 2, for Saged to confirm): a consultation booked within 14 days of the patient's last consultation with the same doctor that arrived or was paid uses the follow-up price. The days are counted from the new appointment's day. Each consultation service names its follow-up service, and a follow-up doesn't start a new window. The number of days is a clinic setting.
+- **The business day.** Evening sessions often run past midnight, and in Ramadan many clinics work until 1–2 AM. Each clinic's day ends at a set hour. **Assumption:** 04:00. A visit after midnight belongs to the session it started in.
 - Doctor schedules: weekly working hours per doctor, and a booking mode:
   - **queue**: numbered turns for the session, the common case in Egypt;
   - **slots**: fixed-length appointments at set times.
@@ -157,3 +158,9 @@ Patient app and public online booking; real video calls; insurance and claims; l
 5. Hosting location and the data protection licence.
 6. The SMS or WhatsApp provider, for reminders and password reset.
 7. Subscription plans and billing the clinics. Not in v2's scope.
+8. Raised by the design review, all for Saged:
+   - Is the follow-up rule in 4.1 right?
+   - May the desk undo "arrived" and "called in" when tapped by mistake? (4.3 allows no other changes yet.)
+   - May a visit be finished straight from "waiting", when the assistant skips "call in"?
+   - At the end of the business day: booked patients who never came become no-shows. Patients still waiting are closed as "left without being seen", and visits still with the doctor are finished and flagged. Is that right?
+   - Should a booking be marked no-show before the day ends, when the doctor's session is over?
