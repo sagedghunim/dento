@@ -1,0 +1,50 @@
+{% extends "web/base.html" %}{% load i18n static %}
+{% block title %}{% translate "Platform" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Clinics on the platform" %}</h1>
+<p class="muted">{% translate "Clinics and their owners only. The platform never shows patient data." %}</p>
+
+<section class="card" aria-labelledby="new-clinic">
+  <h2 id="new-clinic">{% translate "New clinic" %}</h2>
+  <form id="clinic-create" class="grid-form">
+    <label class="field">{% translate "Clinic name" %}<input name="name" required maxlength="120" dir="auto"></label>
+    <label class="field">{% translate "Specialty" %}
+      <select name="specialty">{% for code, label in specialties %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">{% translate "City" %}<input name="city" maxlength="60" dir="auto"></label>
+    <label class="field">{% translate "Owner's username" %}<input name="owner_username" required maxlength="150" dir="ltr" autocomplete="off"></label>
+    <label class="field">{% translate "Owner's full name" %}<input name="owner_name" required maxlength="120" dir="auto"></label>
+    <label class="field">{% translate "Owner's mobile (optional)" %}<input name="owner_phone" maxlength="20" dir="ltr" inputmode="tel"></label>
+    <div class="form-actions"><button class="btn" type="submit">{% translate "Create clinic" %}</button></div>
+    <p class="form-error" data-error></p>
+  </form>
+  <div id="created" class="notice" hidden role="status">
+    <p>{% translate "Clinic created. Give the owner this temporary password. It is shown once and expires in 72 hours:" %}</p>
+    <p><code id="created-password" dir="ltr"></code></p>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="clinic-list">
+  <h2 id="clinic-list">{% translate "Clinics" %}</h2>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th>#</th><th>{% translate "Clinic" %}</th><th>{% translate "Shard" %}</th><th>{% translate "Members" %}</th><th>{% translate "Status" %}</th><th></th></tr></thead>
+      <tbody>
+        {% for clinic in clinics %}
+        <tr>
+          <td><bdi class="ltr num">{{ clinic.id }}</bdi></td>
+          <td><bdi dir="auto">{{ clinic.name }}</bdi></td>
+          <td><bdi class="ltr">{{ clinic.shard }}</bdi></td>
+          <td class="num">{{ clinic.members }}</td>
+          <td>{% if clinic.status == "active" %}{% translate "Active" %}{% elif clinic.status == "suspended" %}{% translate "Suspended" %}{% else %}{% translate "Moving" %}{% endif %}</td>
+          <td>{% if clinic.status == "active" %}<button type="button" class="btn ghost" data-status="suspend" data-clinic="{{ clinic.id }}">{% translate "Suspend" %}</button>{% elif clinic.status == "suspended" %}<button type="button" class="btn ghost" data-status="reactivate" data-clinic="{{ clinic.id }}">{% translate "Reactivate" %}</button>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="muted">{% translate "No clinics yet." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/platform.js' %}"></script>{% endblock %}

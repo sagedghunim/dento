@@ -49,9 +49,15 @@ def security_page(request, ctx):
 
 
 @require_GET
+def home(request):
+    if request.user.is_authenticated and request.user.is_platform_admin:
+        return redirect("/platform")
+    return clinic_home(request)
+
+
 @ensure_csrf_cookie
 @page()
-def home(request, ctx):
+def clinic_home(request, ctx):
     from core.days import business_day
 
     return render(request, "web/home.html", {"ctx": ctx, "day": business_day(ctx.clinic)})

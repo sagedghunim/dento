@@ -3,7 +3,7 @@ import { errorMessage, send } from "./api.js";
 const passwordForm = document.getElementById("password-form");
 const codeForm = document.getElementById("code-form");
 
-const NEXT = { home: "/", clinics: "/clinics", password: "/account/password", security: "/account/security", platform: "/" };
+const NEXT = { home: "/", clinics: "/clinics", password: "/account/password", security: "/account/security", platform: "/platform" };
 
 function go(next, form) {
   if (next === "code") {

@@ -1,7 +1,7 @@
 import { get } from "./api.js";
 import { bindForm } from "./forms.js";
 
-const NEXT = { home: "/", clinics: "/clinics", password: "/account/password", security: "/account/security", platform: "/" };
+const NEXT = { home: "/", clinics: "/clinics", password: "/account/password", security: "/account/security", platform: "/platform" };
 
 const passwordForm = document.getElementById("password-change");
 if (passwordForm) {

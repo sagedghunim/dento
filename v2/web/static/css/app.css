@@ -149,3 +149,11 @@ a { color: var(--accent); }
 .toast { background: var(--text); color: var(--bg); }
 .alert-toast { background: var(--danger); color: #fff; cursor: pointer; }
 .toast.show, .alert-toast.show { display: block; }
+
+/* Forms in a grid and plain tables (platform admin, later lists). */
+.grid-form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: end; margin-block-start: 12px; }
+.grid-form .form-error, .grid-form .form-actions { grid-column: 1 / -1; }
+.table-scroll { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.table th, .table td { text-align: start; padding-block: 10px; padding-inline: 8px; border-block-end: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 600; }

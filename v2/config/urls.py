@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from accounts import views as accounts
 from clinics import views as clinics
@@ -29,4 +29,7 @@ urlpatterns = [
     # Clinic configuration
     path(api + "clinic", clinics.clinic_view),
     path(api + "settings/clinic", clinics.clinic_settings_view),
+    # Platform admin (directory)
+    path("", include("directory.urls")),
+    # Each M1+ app adds one include line below for its own urls.py.
 ]

@@ -115,6 +115,8 @@ def _database(name):
         "CONN_HEALTH_CHECKS": True,
         # Behind PgBouncer in transaction mode (design 9.4).
         "DISABLE_SERVER_SIDE_CURSORS": env_bool("PG_BEHIND_PGBOUNCER", False),
+        # Two test runs at once (two people, or an agent and a person) need their own databases.
+        "TEST": {"NAME": f"test_{name}{env('HAMADA_TEST_DB_SUFFIX', '')}"},
     }
 
 
