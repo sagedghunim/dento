@@ -169,3 +169,32 @@ Run again from clean test databases: **226 tests, the same 2 errors** (174 s). B
 - Dropped `test_hamada_dir_rj`, `test_hamada_s001_rj` and `test_hamada_s002_rj` after each run.
 - The scratch copy and the probe tests are in the session's temporary folder, outside the repo.
 - No repo file was changed except this one.
+## Check of R1–R9
+
+Date: 2026-11-11. Commit ff9ab54 (`git diff 376f150 ff9ab54`), checked against `m1-chief-judge.md`.
+
+**Run:**
+- **The full suite twice**, from clean `_rj` test databases. Both runs: **243 tests, OK** (183 s and 168 s). No `test_*` databases were left behind.
+- **My earlier failing probes**, rerun in a scratch copy at ff9ab54 made with `git archive`.
+- **The browser tests:** `node v2/web/browser_tests/run.mjs` against my own server on 127.0.0.1:8007, with `seed_demo` data in my own databases (`hamada_rj_dir`, `hamada_rj_s001`, `hamada_rj_s002`), on a Wednesday. **3 passed, 0 failed.**
+- **Cleanup:** I stopped the server and dropped all six databases (the three server databases and the three `test_*_rj`). I did not touch the dev databases or port 8002.
+
+| Item | Result | Evidence |
+|---|---|---|
+| R1. The suite is reliably green | **Pass** | The search now ends with `SET LOCAL statement_timeout = DEFAULT`, and test connections get `statement_timeout=0`. Two green runs, with clean teardown and no leftovers. A successful search resets the timeout directly. After a timeout the transaction rolls back anyway, so this is equivalent to the `finally` the decision asked for. |
+| R2. Finish after finish loses no cash | **Pass** | **Probe:** finish, then finish with a payment, gives **409 `already_finished`** with the appointment, and 0 payment rows. A plain repeat of finish is still 200. The suite has a two-thread test. **Browser e3:** the dialog stays open, says nothing was collected, shows no "collected" toast, and "Collect now" records the payment once. `book.js` decides "collected" from `invoice.paid`. |
+| R3. Removing invoice lines | **Pass** | **Probe:** the assistant deleting the visit's service line gets **403**, and the line says `removable: false`. The suite covers: the desk removes its own line the same day but not another person's, and not after the business day ends at 04:00. The cross-clinic loop now includes refund and line delete. `pay.js` shows "Remove" only when the line says `removable`, and reloads on 403. |
+| R4. Bookings can't be stranded or overlap | **Pass** | `FOR SHARE` on the doctor's membership row before the sessions are read, in booking and in reschedule. `future_bookings` reads in keyset pages, with no limit. `stranded` compares the slot's start and end. Migration 0003 adds `btree_gist` and `appointment_no_overlap`, mapped to `slot_taken`. Tests: paused-thread tests for delete, update and reschedule-against-update, the 501st booking, the 20 → 15 minute cut, and the direct overlapping insert. All green. The paused-thread tests are in `scheduling/test_m1_fixes.py`, not `test_concurrency.py`; that is acceptable. |
+| R5. Partitions and key cleanup are scheduled | **Pass** | `manage.py ensure_partitions` exists, and `migrate_all` printed 6 future months on each database. Daily periodic tasks `core.ensure_partitions` and `core.clean_request_keys` are registered and tested. **Probe:** a file open 150 days ahead now answers **200**. At 240 days ahead it still fails before a run, and answers 200 after a run dated 120 days ahead, so the daily task is what keeps sign-in and file opens alive. The alert fires below 3. |
+| R6. Out-of-range dates answer 400 | **Pass** | **Probe:** each of these answers **400**, with no 500 anywhere: `starts_at` in year 1 and year 9999 on booking and reschedule; reschedule to 9999-12-31; `quote` on 0001-01-02 and 9999-12-31; `today` and `slots` at both ends; out-of-range `?after=` cursors. The `/today?day=` page falls back to today, as before. |
+| R7. No silent replay of an unknown save | **Pass** | `closeDialog` refuses while the outcome is unknown. `open()` reopens the unknown dialog instead of starting a new key. `settlePending` resends only row actions marked `auto` that are under 2 minutes old; everything else goes to the pending bar with its label. **Browser e2:** one booking after try again, a page change and try again from the bar. |
+| R8. Rows stay put, and stale taps are ignored | **Pass** | Scroll anchoring before and after each patch, and a `movedAt` guard of 700 ms with a flash. **Browser e1:** the rested row moved **0 px**; a tap within 700 ms was ignored, and a later tap worked. |
+| R9. Design text | **Pass** | The design now has: <ul><li>5.0: the membership row in the lock order, with `FOR SHARE` and `FOR NO KEY UPDATE`, and a schedule-change row;</li><li>5.2 and 5.3: `already_finished` and who may remove a line;</li><li>4.10 and 5.10: 6 months ahead and the alert below 3;</li><li>design 10: the batched-backfill steps, with no `NO FORCE`, `NOT VALID` then `VALIDATE`, and `CompositeForeignKey(validate=False)`.</li></ul> |
+
+**Left for later, not a failure:**
+- **A second line for the visit's own service.** If the desk adds one by mistake, it can't remove it (probe: `removable: false`, then 403). `is_visit_line` matches on `kind` and `service_id`, not on the line the invoice was created with. This errs on the safe side and needs the owner. If it becomes a nuisance, mark the original line by id.
+- **The deferred items in the decision stand** as the chief judge wrote them.
+
+### Final verdict: APPROVE
+
+R1 to R9 are done as required, and each one checked out by running it. M1 and M1.5 can go on to M2.
