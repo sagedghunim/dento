@@ -32,7 +32,9 @@ urlpatterns = [
     # Platform admin (directory)
     path("", include("directory.urls")),
     # Each M1+ app adds one include line below for its own urls.py.
+    path("", include("clinics.urls")),
     path("", include("patients.urls")),
     path("", include("scheduling.urls")),
     path("", include("billing.urls")),
+    path("", include("web.urls")),  # M1 pages and fragments
 ]

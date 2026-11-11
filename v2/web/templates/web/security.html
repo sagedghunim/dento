@@ -14,7 +14,7 @@
     </ol>
     <div id="totp-qr" class="qr" aria-live="polite"></div>
     <p class="muted">{% translate "Can't scan? Enter this key in the app:" %} <code id="totp-secret" dir="ltr"></code></p>
-    <form id="totp-confirm" class="stack">
+    <form id="totp-confirm" class="stack-form">
       <label class="field">{% translate "6-digit code" %}
         <input name="code" inputmode="numeric" autocomplete="one-time-code" dir="ltr" required maxlength="6">
       </label>

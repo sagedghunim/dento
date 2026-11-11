@@ -38,17 +38,26 @@ def _appointment_id(value):
 # --- Today ---------------------------------------------------------------------------------------------------
 
 
-@api("GET")
+def poll_headers():
+    """Every Today answer carries Poll-After, refusals included, so operations can slow every screen (design 5.11)."""
+    return {"Poll-After": str(settings.POLL_AFTER_SECONDS)}
+
+
+@api("GET", headers=poll_headers)
 def today_view(request, ctx, data):
-    """Today's queues with an ETag. The version is read before the data; every answer carries Poll-After."""
+    """Today's queues with an ETag. The version is read before the data; every answer carries Poll-After.
+
+    ?section= keeps one section of a center; it is part of the ETag.
+    """
     _any_queue_code(ctx)
     day = selectors.today_day(ctx, request.GET.get("day"))
+    section_id = selectors.today_section(request.GET.get("section"))
     state = selectors.today_state(ctx, day)
-    etag = selectors.today_etag(ctx, day, state["version"], getattr(request, "LANGUAGE_CODE", ""))
-    headers = {"ETag": etag, "Poll-After": str(settings.POLL_AFTER_SECONDS)}
+    etag = selectors.today_etag(ctx, day, state["version"], getattr(request, "LANGUAGE_CODE", ""), section_id)
+    headers = {"ETag": etag, **poll_headers()}
     if selectors.etag_matches(request.headers.get("If-None-Match"), etag):
         return Result({}, status=304, headers=headers)
-    return Result(selectors.today_data(ctx, day, state), headers=headers)
+    return Result(selectors.today_data(ctx, day, state, section_id), headers=headers)
 
 
 # --- Booking -------------------------------------------------------------------------------------------------
@@ -106,7 +115,8 @@ def appointment_view(request, ctx, data, appointment_id):
 def slots_view(request, ctx, data, doctor_id):
     doctor_id = validate.path_id(doctor_id, rules.not_found("doctor"))
     day = validate.iso_day(request.GET["day"]) if request.GET.get("day") else business_day(ctx.clinic)
-    return selectors.slots(ctx, doctor_id, day)
+    section = request.GET.get("section")
+    return selectors.slots(ctx, doctor_id, day, validate.ident(section, "section") if section else None)
 
 
 # --- Status changes ------------------------------------------------------------------------------------------
@@ -132,6 +142,24 @@ arrive_view = _status_view("arrive", "appointments.queue")
 call_view = _status_view("call", "appointments.queue")
 finish_view = _status_view("finish", "appointments.queue")
 cancel_view = _status_view("cancel", "appointments.book")
+
+
+def _undo_view(action):
+    """undo-arrive takes {"status": "waiting"}, undo-call {"status": "in_room"} (design D4)."""
+
+    def view(request, ctx, data, appointment_id):
+        appointment_id = _appointment_id(appointment_id)
+        seen = validate.choice(data, "status", ["booked", "waiting", "in_room", "done", "cancelled", "no_show"])
+        version = services.undo(ctx, appointment_id, action, seen)
+        return Result(selectors.answer(ctx, appointment_id, version), target_type="appointment",
+                      target_id=appointment_id)
+
+    view.__name__ = view.__qualname__ = f"{action}_view"
+    return api("POST", perm="appointments.queue", replay=_replay_appointment)(view)
+
+
+undo_arrive_view = _undo_view("undo_arrive")
+undo_call_view = _undo_view("undo_call")
 
 
 @api("POST", perm="appointments.book", replay=_replay_appointment)

@@ -19,6 +19,7 @@ def not_found(what):
         "doctor": _("This doctor wasn't found."),
         "service": _("This service wasn't found."),
         "patient": _("This patient wasn't found."),
+        "section": _("This section wasn't found."),
     }
     return ApiError("not_found", messages[what], 404)
 
@@ -30,23 +31,31 @@ class Session:
     mode: str
     slot_minutes: int | None
     max_bookings: int | None
+    section_id: int | None = None
+    weekday: int | None = None
 
 
 @dataclass
 class DoctorDay:
-    """A doctor's sessions on one business day."""
+    """A doctor's sessions on one business day, in every section."""
 
     doctor_id: int
     name: str
     sessions: list = field(default_factory=list)
 
-    @property
-    def has_queue(self):
-        return any(s.mode == "queue" for s in self.sessions)
+    def sessions_in(self, section_id=None):
+        """The sessions of one section (a doctor may work two sections on one day); all with None."""
+        return [s for s in self.sessions if section_id is None or s.section_id == section_id]
+
+    def has_queue(self, section_id=None):
+        return any(s.mode == "queue" for s in self.sessions_in(section_id))
 
     @property
     def cap(self):
-        """max_bookings for the day: the sum of the sessions' limits, or none if any session has none."""
+        """max_bookings for the doctor-day (every section: the summary row is per doctor and day).
+
+        The sum of the sessions' limits, or none if any session has none.
+        """
         if not self.sessions or any(s.max_bookings is None for s in self.sessions):
             return None
         return sum(s.max_bookings for s in self.sessions)
@@ -59,6 +68,7 @@ class ServiceInfo:
     kind: str
     price: int
     follow_up_price: int | None
+    section_id: int | None = None
 
 
 def check_day(clinic, day):
@@ -69,12 +79,13 @@ def check_day(clinic, day):
 
 
 def _session_rows_sql(with_service):
-    service = ("sv.id, sv.name, sv.kind, sv.price, sv.is_active, fu.price, fu.is_active, " if with_service else "")
+    service = ("sv.id, sv.name, sv.kind, sv.price, sv.is_active, fu.price, fu.is_active, sv.section_id, "
+               if with_service else "")
     joins = ('LEFT JOIN "clinics_service" sv ON sv.clinic_id = x.clinic_id AND sv.id = %s '
              'LEFT JOIN "clinics_service" fu ON fu.clinic_id = sv.clinic_id AND fu.id = sv.follow_up_service_id '
              if with_service else "")
     return (f"SELECT {service}m.id, m.role, m.is_active, m.display_name, s.starts, s.ends, s.mode, s.slot_minutes, "
-            "s.max_bookings FROM (SELECT %s::bigint AS clinic_id) x "
+            "s.max_bookings, s.section_id FROM (SELECT %s::bigint AS clinic_id) x "
             f"{joins}"
             'LEFT JOIN "clinics_membership" m ON m.clinic_id = x.clinic_id AND m.id = %s '
             'LEFT JOIN "clinics_schedule" s ON s.clinic_id = m.clinic_id AND s.doctor_id = m.id AND s.weekday = %s '
@@ -89,7 +100,7 @@ def _doctor_from(rows, offset):
     doctor = DoctorDay(doctor_id, name)
     for r in rows:
         if r[offset + 4] is not None:
-            doctor.sessions.append(Session(*r[offset + 4:offset + 9]))
+            doctor.sessions.append(Session(*r[offset + 4:offset + 10]))
     return doctor
 
 
@@ -103,29 +114,33 @@ def doctor_day_and_service(ctx, doctor_id, service_id, day):
     """One statement for booking and quotes: the service with its follow-up price, the doctor and their sessions."""
     rows = sql.rows(ctx, _session_rows_sql(True),
                     [ctx.clinic_id, service_id, doctor_id, day.weekday(), ctx.clinic_id])
-    sid, name, kind, price, active, follow_price, follow_active = rows[0][:7]
+    sid, name, kind, price, active, follow_price, follow_active, section_id = rows[0][:8]
     if sid is None:
         raise not_found("service")
     if not active:
         raise ApiError("invalid", _("This service isn't offered any more."), fields={"service_id": "inactive"})
-    service = ServiceInfo(sid, name, kind, price, follow_price if follow_active else None)
-    return _doctor_from(rows, 7), service
+    service = ServiceInfo(sid, name, kind, price, follow_price if follow_active else None, section_id)
+    return _doctor_from(rows, 8), service
 
 
-def require_working(doctor):
+def require_working(doctor, section_id=None):
+    """The doctor works that day, and in the service's section (design D1: the section comes from the service)."""
     if not doctor.sessions:
         raise ApiError("doctor_off", _("This doctor doesn't work on that day."), 409, fields={"day": "doctor_off"})
+    if not doctor.sessions_in(section_id):
+        raise ApiError("wrong_section", _("This doctor doesn't work in this section on that day."), 409,
+                       fields={"doctor_id": "wrong_section"})
 
 
-def grid(clinic, day, doctor):
-    """Every slot of the doctor's slot sessions that business day, as (starts, ends) in UTC.
+def grid(clinic, day, doctor, section_id=None):
+    """Every slot of the doctor's slot sessions that business day (in one section, if given), as (starts, ends) in UTC.
 
     A session that starts before the clinic's day end (after midnight) is on the next calendar
     day. Slots step in real minutes, so a clock change inside a session can't make a slot twice.
     """
     tz = zone(clinic)
     slots = []
-    for session in doctor.sessions:
+    for session in doctor.sessions_in(section_id):
         if session.mode != "slots" or not session.slot_minutes:
             continue
         start_date = day if session.starts >= clinic.day_ends_at else day + dt.timedelta(days=1)
@@ -152,14 +167,14 @@ def parse_instant(value, name="starts_at"):
     return instant.astimezone(dt.UTC)
 
 
-def resolve_slot(clinic, day, doctor, starts_at):
-    """(starts, ends) for a slot booking, or (None, None) for a queue booking."""
-    require_working(doctor)
+def resolve_slot(clinic, day, doctor, starts_at, section_id=None):
+    """(starts, ends) for a slot booking, or (None, None) for a queue booking, in the doctor's sessions of that section."""
+    require_working(doctor, section_id)
     if starts_at is None:
-        if not doctor.has_queue:
+        if not doctor.has_queue(section_id):
             raise ApiError("time_required", _("Pick a time for this doctor."), fields={"starts_at": "required"})
         return None, None
-    for start, end in grid(clinic, day, doctor):
+    for start, end in grid(clinic, day, doctor, section_id):
         if start == starts_at:
             return start, end
     raise ApiError("off_grid", _("Pick one of the doctor's times."), fields={"starts_at": "off_grid"})
@@ -197,3 +212,29 @@ def fee_for(service, eligible):
     if service.kind == "consultation" and eligible and service.follow_up_price is not None:
         return service.follow_up_price, True
     return service.price, service.kind == "follow_up"
+
+
+def stranded(clinic, bookings, sessions):
+    """The bookings that `sessions` (one doctor's, after a schedule change) no longer cover (design 5.1).
+
+    A booking is covered by the doctor's sessions on its weekday in its own section: a slot booking
+    needs its time on their grid, a turn without a time needs a queue session. `bookings` are dicts
+    with day, section_id and starts_at; `sessions` are Session objects with a `weekday` attribute.
+    """
+    by_weekday = {}
+    for session in sessions:
+        by_weekday.setdefault(session.weekday, []).append(session)
+    grids, out = {}, []
+    for booking in bookings:
+        doctor = DoctorDay(0, "", by_weekday.get(booking["day"].weekday(), []))
+        section_id = booking["section_id"]
+        if booking["starts_at"] is None:
+            covered = doctor.has_queue(section_id)
+        else:
+            key = (booking["day"], section_id)
+            if key not in grids:
+                grids[key] = {start for start, _end in grid(clinic, booking["day"], doctor, section_id)}
+            covered = booking["starts_at"] in grids[key]
+        if not covered:
+            out.append(booking)
+    return out

@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Patients" %}{% endblock %}
+{% block content %}
+<div class="page-head head-row">
+  <div>
+    <h1>{% translate "Patients" %}</h1>
+    <p>{% translate "Search by the first letters of any part of the name, by mobile number or by file number." %}</p>
+  </div>
+  {% if perms.edit_patients %}<button type="button" class="btn" data-new-patient-file><svg class="icon"><use href="#i-plus"/></svg>{% translate "New patient" %}</button>{% endif %}
+</div>
+<section class="card">
+  <form class="search-box" data-search role="search" action="/patients" method="get">
+    <label class="field">{% translate "Name, mobile or file number" %}
+      <input type="search" name="q" value="{{ q }}" autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search" autofocus>
+    </label>
+    <button class="btn" type="submit"><svg class="icon"><use href="#i-search"/></svg>{% translate "Search" %}</button>
+  </form>
+  <p class="muted" data-search-status role="status"></p>
+  <div data-results>{% if results is not None %}{% include "web/_patient_results.html" %}{% else %}<p class="empty-note">{% translate "Type at least two letters or digits. Lists never load every patient at once." %}</p>{% endif %}</div>
+</section>
+{% if perms.edit_patients %}{% include "web/_dialog_patient.html" %}{% endif %}
+{{ config|json_script:"clinic-config" }}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/patients.js' %}"></script>{% endblock %}

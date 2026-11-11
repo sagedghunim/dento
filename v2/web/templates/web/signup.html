@@ -1,0 +1,84 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% if mode == "place" %}{% translate "Add a place" %}{% else %}{% translate "Sign up" %}{% endif %}{% endblock %}
+{% block plainbar %}
+<header class="plainbar">
+  <a class="brand" href="/">{% translate "Hamada" %}</a>
+  <span class="spacer"></span>
+  {% if mode == "place" %}<a class="btn ghost" href="/clinics">{% translate "Back to your places" %}</a>{% else %}<a class="btn ghost" href="/login">{% translate "Sign in" %}</a>{% endif %}
+</header>
+{% endblock %}
+{% block content %}
+<form class="signup" id="signup-form" data-mode="{{ mode }}" novalidate>
+  <div class="page-head">
+    <h1>{% if mode == "place" %}{% translate "Add a clinic or a medical center" %}{% else %}{% translate "Start Hamada in your clinic" %}{% endif %}</h1>
+    <p>{% if mode == "place" %}{% translate "You become the owner of the new place. Your account and password stay the same." %}{% else %}{% translate "Four short steps. Your place works as soon as you finish, and you can add the team later." %}{% endif %}</p>
+  </div>
+  {% if mode == "signup" and not signup_ready or mode == "place" and not places_ready %}
+  <p class="notice">{% translate "Sign-up isn't open yet on this server." %}</p>
+  {% endif %}
+
+  <section class="card" aria-labelledby="step-kind">
+    <h2 id="step-kind" class="step-title"><span class="step-no">{{ 1|digits }}</span> {% translate "A clinic or a medical center?" %}</h2>
+    <div class="kind-grid" role="radiogroup" aria-labelledby="step-kind">
+      <label class="spec-btn"><input type="radio" name="kind" value="clinic" checked><svg class="icon tick"><use href="#i-check"/></svg>{% translate "Clinic" %}<small>{% translate "One specialty, for example a dental or a children's clinic." %}</small></label>
+      <label class="spec-btn"><input type="radio" name="kind" value="center"><svg class="icon tick"><use href="#i-check"/></svg>{% translate "Medical center" %}<small>{% translate "Several sections under one roof, each with its own specialty, one front desk and one patient file." %}</small></label>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="step-spec">
+    <h2 id="step-spec" class="step-title"><span class="step-no">{{ 2|digits }}</span> <span data-when-kind="clinic">{% translate "The specialty" %}</span><span data-when-kind="center" hidden>{% translate "The center's sections" %}</span></h2>
+    <p class="card-sub" data-when-kind="clinic">{% translate "Each specialty brings its own services, prices and medicine list. You can change them later." %}</p>
+    <p class="card-sub" data-when-kind="center" hidden>{% translate "Pick two or more. Each one becomes a section; you can rename it." %}</p>
+    <div class="spec-grid" data-specs>
+      {% for spec in specialties %}
+      <label class="spec-btn"><input type="checkbox" name="specialty" value="{{ spec.code }}" data-name="{{ spec.name }}"><svg class="icon tick"><use href="#i-check"/></svg>{{ spec.name }}<small><bdi dir="auto">{{ spec.services|join:" · " }}</bdi></small></label>
+      {% endfor %}
+    </div>
+    <div class="sections-list" data-section-names hidden></div>
+    <p class="form-error" data-field-error="sections"></p>
+    <template id="section-row"><label class="field"><span data-label></span><input name="section_name" maxlength="120" dir="auto" autocomplete="off"></label></template>
+  </section>
+
+  <section class="card" aria-labelledby="step-place">
+    <h2 id="step-place" class="step-title"><span class="step-no">{{ 3|digits }}</span> {% translate "The place" %}</h2>
+    <div class="grid-form">
+      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="organization" required><span class="form-error" data-field-error="name"></span></label>
+      <label class="field">{% translate "City" %}<input name="city" maxlength="60" dir="auto" autocomplete="address-level2" required><span class="form-error" data-field-error="city"></span></label>
+      <label class="field">{% translate "The place's phone (optional)" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="tel"><span class="form-error" data-field-error="phone"></span></label>
+    </div>
+  </section>
+
+  {% if mode == "signup" %}
+  <section class="card" aria-labelledby="step-owner">
+    <h2 id="step-owner" class="step-title"><span class="step-no">{{ 4|digits }}</span> {% translate "Your account" %}</h2>
+    <p class="card-sub">{% translate "You are the owner. After this you set up two-step sign-in with an authenticator app on your phone." %}</p>
+    <div class="grid-form">
+      <label class="field">{% translate "Full name" %}<input name="owner_full_name" maxlength="120" dir="auto" autocomplete="name" required><span class="form-error" data-field-error="owner.full_name"></span></label>
+      <label class="field">{% translate "Mobile" %}<input name="owner_mobile" maxlength="20" dir="ltr" inputmode="tel" autocomplete="tel" required><span class="form-error" data-field-error="owner.mobile"></span></label>
+      <label class="field">{% translate "Username" %}<span class="hint">{% translate "English letters and digits, for signing in" %}</span><input name="owner_username" maxlength="30" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" required><span class="form-error" data-field-error="owner.username"></span></label>
+      <label class="field">{% translate "Password" %}<span class="hint">{% translate "At least 10 characters" %}</span><input name="owner_password" type="password" maxlength="200" autocomplete="new-password" required><span class="form-error" data-field-error="owner.password"></span></label>
+    </div>
+    <div class="honey" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+  </section>
+  {% endif %}
+
+  <div class="card">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="submit" class="btn wide" data-submit>{% if mode == "place" %}{% translate "Add the place" %}{% else %}{% translate "Create my place" %}{% endif %}</button>
+  </div>
+</form>
+{% endblock %}
+{% block strings %}
+<div id="strings" hidden>
+  <span data-k="saving">{% translate "Saving…" %}</span>
+  <span data-k="checking">{% translate "Not confirmed yet, checking…" %}</span>
+  <span data-k="unknown">{% translate "Not confirmed. Try again: it won't be done twice." %}</span>
+  <span data-k="failed">{% translate "Something went wrong. Try again." %}</span>
+  <span data-k="pick_one">{% translate "Pick the specialty." %}</span>
+  <span data-k="pick_two">{% translate "A center has two sections or more." %}</span>
+  <span data-k="section_name">{% translate "Section name: {name}" %}</span>
+  <span data-k="fix_fields">{% translate "Check the marked fields." %}</span>
+  <span data-k="taken">{% translate "Taken" %}</span>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/signup.js' %}"></script>{% endblock %}

@@ -16,7 +16,7 @@ from .models import DirectoryClinic
 
 
 def _clinic_body(entry):
-    return {"id": entry.id, "name": entry.name, "shard": entry.shard, "status": entry.status}
+    return {"id": entry.id, "name": entry.name, "kind": entry.kind, "shard": entry.shard, "status": entry.status}
 
 
 def _replay_clinic(user, stored):
@@ -35,11 +35,15 @@ def clinics_list(request, data):
 @api("POST", member=False, replay=_replay_clinic)
 def clinics_create(request, data):
     platform.require_platform_admin(request)
+    # A clinic sends `specialty`; a center sends kind "center" and `sections` [{specialty, name?}] (design D1).
+    has_sections = data.get("sections") is not None
     entry, owner, temporary = platform.create(
-        name=text(data, "name", 120), specialty=choice(data, "specialty", list(SPECIALTIES)),
+        name=text(data, "name", 120), specialty=None if has_sections else choice(data, "specialty", list(SPECIALTIES)),
         city=text(data, "city", 60, required=False), owner_username=text(data, "owner_username", 150),
         owner_name=text(data, "owner_name", 120), owner_phone=text(data, "owner_phone", 20, required=False),
         language=choice(data, "language", ["ar", "en"]) if "language" in data else "ar",
+        kind=choice(data, "kind", ["clinic", "center"]) if "kind" in data else "clinic",
+        sections=data.get("sections") if has_sections else None,
     )
     return Result({"clinic": _clinic_body(entry), "owner": owner.username, "temporary_password": temporary},
                   status=201, target_type="clinic", target_id=entry.id)
@@ -63,6 +67,30 @@ def _status_view(status):
 
 clinics_suspend = _status_view(DirectoryClinic.Status.SUSPENDED)
 clinics_reactivate = _status_view(DirectoryClinic.Status.ACTIVE)
+
+
+# --- Self-service sign-up and adding a place (design D2) ------------------------------------------------------
+
+
+@api("POST", member=False, key=False)
+def signup_view(request, data):
+    """Public. The request key is required and handled inside, after the honeypot and the throttles."""
+    from . import signup
+
+    return signup.sign_up(request, data)
+
+
+def _replay_place(user, stored):
+    from . import signup
+
+    return signup.replay_place(user, stored)
+
+
+@api("POST", member=False, replay=_replay_place)
+def places_view(request, data):
+    from . import signup
+
+    return signup.add_place(request, request.user, data)
 
 
 @require_GET

@@ -190,16 +190,6 @@ msgstr "العودة إلى اليوم"
 msgid "Today"
 msgstr "اليوم"
 
-msgid "Business day:"
-msgstr "يوم العمل:"
-
-msgid "You are signed in as"
-msgstr "أنت مسجّل الدخول باسم"
-
-msgid ""
-"The day's queue, booking and payments arrive with the front-desk milestone."
-msgstr "قائمة انتظار اليوم والحجز والمدفوعات تأتي مع مرحلة الاستقبال."
-
 msgid "Switch clinic"
 msgstr "تغيير العيادة"
 
@@ -483,3 +473,898 @@ msgstr "رقم الموبايل هذا مسجّل لحساب آخر بالفعل
 
 msgid "The clinic is being moved. Try again later."
 msgstr "جارٍ نقل بيانات العيادة. حاول مرة أخرى لاحقاً."
+
+msgid "This section wasn't found."
+msgstr "لم يُعثر على هذا القسم."
+
+msgid "This session wasn't found."
+msgstr "لم يُعثر على فترة العمل هذه."
+
+msgid "A session must end before the business day ends."
+msgstr "يجب أن تنتهي فترة العمل قبل نهاية يوم العمل."
+
+msgid "This session overlaps another session of the same doctor."
+msgstr "تتداخل فترة العمل هذه مع فترة أخرى للطبيب نفسه."
+
+msgid "This change would leave booked visits outside the doctor's sessions."
+msgstr "هذا التغيير يترك حجوزات خارج فترات عمل الطبيب."
+
+msgid "Someone changed this session meanwhile. Reload and try again."
+msgstr "غيّر شخص آخر فترة العمل هذه للتو. أعد التحميل وحاول مرة أخرى."
+
+msgid "The time zone and day end can't change once the place has bookings."
+msgstr "لا يمكن تغيير المنطقة الزمنية ونهاية اليوم بعد وجود حجوزات."
+
+msgid "Pick a time zone from the list."
+msgstr "اختر منطقة زمنية من القائمة."
+
+msgid "The day can end between 00:00 and 06:00."
+msgstr "يمكن أن ينتهي اليوم بين 00:00 و06:00."
+
+msgid "A session must end after it starts."
+msgstr "يجب أن تنتهي فترة العمل بعد بدايتها."
+
+msgid "That username is taken."
+msgstr "اسم المستخدم هذا مستخدم بالفعل."
+
+msgid "Choose a clinic or a medical center."
+msgstr "اختر عيادة أو مركزًا طبيًا."
+
+msgid "Pick the specialty of each section."
+msgstr "اختر تخصص كل قسم."
+
+msgid "A clinic has one specialty; a medical center has 2 to 20 sections."
+msgstr "للعيادة تخصص واحد، وللمركز الطبي من 2 إلى 20 قسمًا."
+
+msgid "Give each section its own name."
+msgstr "أعطِ كل قسم اسمًا مختلفًا."
+
+msgid "Enter a valid phone number."
+msgstr "أدخل رقم هاتف صحيحًا."
+
+#, python-format
+msgid "Too many new places from this connection. Try again in %(minutes)s minutes."
+msgstr "أماكن جديدة كثيرة من هذا الاتصال. حاول مرة أخرى بعد %(minutes)s دقيقة."
+
+msgid "This doctor doesn't work in this section on that day."
+msgstr "هذا الطبيب لا يعمل في هذا القسم في ذلك اليوم."
+
+#, python-format
+msgid "EGP %(amount)s"
+msgstr "%(amount)s ج.م"
+
+msgid "AM"
+msgstr "ص"
+
+msgid "PM"
+msgstr "م"
+
+msgid "Patients"
+msgstr "المرضى"
+
+msgid "Inventory"
+msgstr "المخزون"
+
+msgid "Finances"
+msgstr "الحسابات"
+
+msgid "Prescription"
+msgstr "الروشتة"
+
+msgid "Online consultations"
+msgstr "الاستشارات أونلاين"
+
+msgid "Team & settings"
+msgstr "الفريق والإعدادات"
+
+msgid "Cash"
+msgstr "نقدًا"
+
+msgid "Card"
+msgstr "بطاقة"
+
+msgid "Mobile wallet"
+msgstr "محفظة إلكترونية"
+
+msgid "InstaPay"
+msgstr "إنستاباي"
+
+msgid "Other"
+msgstr "أخرى"
+
+msgid "At the clinic"
+msgstr "في العيادة"
+
+msgid "By phone"
+msgstr "بالهاتف"
+
+msgid "Online"
+msgstr "أونلاين"
+
+msgid "WhatsApp"
+msgstr "واتساب"
+
+msgid "Tomorrow"
+msgstr "غدًا"
+
+msgid "Medical center"
+msgstr "مركز طبي"
+
+#, python-format
+msgid "%(specialty)s clinic"
+msgstr "عيادة %(specialty)s"
+
+msgid "Arrived and waiting:"
+msgstr "وصل وينتظر:"
+
+msgid "Called in:"
+msgstr "دخل للطبيب:"
+
+msgid "Visit finished:"
+msgstr "انتهت الزيارة:"
+
+msgid "Booking cancelled:"
+msgstr "أُلغي الحجز:"
+
+msgid "Nothing has happened yet on this day."
+msgstr "لا توجد أي حركة في هذا اليوم بعد."
+
+msgid "New booking"
+msgstr "حجز جديد"
+
+msgid "Close"
+msgstr "إغلاق"
+
+msgid "Patient"
+msgstr "المريض"
+
+msgid "Change"
+msgstr "تغيير"
+
+msgid "Search by name, mobile or file number"
+msgstr "ابحث بالاسم أو الموبايل أو رقم الملف"
+
+msgid "New patient"
+msgstr "مريض جديد"
+
+msgid "Full name"
+msgstr "الاسم الكامل"
+
+msgid "Mobile"
+msgstr "الموبايل"
+
+msgid "Sex"
+msgstr "النوع"
+
+msgid "Male"
+msgstr "ذكر"
+
+msgid "Female"
+msgstr "أنثى"
+
+msgid "Age in years"
+msgstr "السن بالسنوات"
+
+msgid "This mobile number already has a file. Is it one of these?"
+msgstr "رقم الموبايل هذا له ملف بالفعل. هل المريض أحد هؤلاء؟"
+
+msgid "Search instead"
+msgstr "ابحث بدلًا من ذلك"
+
+msgid "Section"
+msgstr "القسم"
+
+msgid "Service"
+msgstr "الخدمة"
+
+msgid "Booked by"
+msgstr "طريقة الحجز"
+
+msgid "The patient is here now"
+msgstr "المريض موجود الآن"
+
+msgid "Collect now"
+msgstr "تحصيل الآن"
+
+msgid "Amount (EGP)"
+msgstr "المبلغ (ج.م)"
+
+msgid "Payment method"
+msgstr "طريقة الدفع"
+
+msgid "Print the receipt"
+msgstr "طباعة الإيصال بعد الحفظ"
+
+msgid "Discard"
+msgstr "تجاهل"
+
+msgid "Book"
+msgstr "احجز"
+
+msgid "Edit the patient's file"
+msgstr "تعديل ملف المريض"
+
+msgid "Date of birth"
+msgstr "تاريخ الميلاد"
+
+msgid "Or the age in years"
+msgstr "أو السن بالسنوات"
+
+msgid "Address"
+msgstr "العنوان"
+
+msgid "Allergies"
+msgstr "الحساسية"
+
+msgid "Chronic conditions"
+msgstr "الأمراض المزمنة"
+
+msgid "Notes"
+msgstr "ملاحظات"
+
+msgid "Bill and payments"
+msgstr "الفاتورة والمدفوعات"
+
+msgid "Total"
+msgstr "الإجمالي"
+
+msgid "Discount"
+msgstr "الخصم"
+
+msgid "Paid"
+msgstr "مدفوع"
+
+msgid "Owed"
+msgstr "المتبقي"
+
+msgid "Take a payment"
+msgstr "تحصيل مبلغ"
+
+msgid "Collect"
+msgstr "تحصيل"
+
+msgid "Items"
+msgstr "البنود"
+
+msgid "Add a service"
+msgstr "إضافة خدمة"
+
+msgid "Quantity"
+msgstr "الكمية"
+
+msgid "Add"
+msgstr "إضافة"
+
+msgid "Discount (EGP)"
+msgstr "الخصم (ج.م)"
+
+msgid "Save the discount"
+msgstr "حفظ الخصم"
+
+msgid "Payments"
+msgstr "المدفوعات"
+
+msgid "Refund"
+msgstr "ردّ مبلغ"
+
+msgid "From the payment"
+msgstr "من الدفعة"
+
+msgid "Void the bill"
+msgstr "إلغاء الفاتورة"
+
+msgid "Receipt A5"
+msgstr "إيصال A5"
+
+msgid "Receipt 80 mm"
+msgstr "إيصال 80 مم"
+
+msgid "Finish the visit"
+msgstr "إنهاء الزيارة"
+
+msgid "Finish, leave it owed"
+msgstr "إنهاء، والمبلغ مؤجَّل"
+
+msgid "Finish and collect"
+msgstr "إنهاء وتحصيل"
+
+msgid "Cancel the booking?"
+msgstr "إلغاء الحجز؟"
+
+msgid "Reason (optional)"
+msgstr "السبب (اختياري)"
+
+msgid "Keep the booking"
+msgstr "إبقاء الحجز"
+
+msgid "Cancel booking"
+msgstr "إلغاء الحجز"
+
+msgid "Change the time"
+msgstr "تغيير الموعد"
+
+msgid "Move the booking"
+msgstr "نقل الحجز"
+
+msgid "Doctors"
+msgstr "الأطباء"
+
+msgid "All doctors"
+msgstr "كل الأطباء"
+
+msgid "Money on this day"
+msgstr "حسابات اليوم"
+
+msgid "Collected"
+msgstr "المحصَّل"
+
+msgid "Refunded"
+msgstr "المردود"
+
+msgid "Net"
+msgstr "الصافي"
+
+msgid "Booked today"
+msgstr "محجوز اليوم"
+
+msgid "Turn"
+msgstr "الدور"
+
+msgid "File"
+msgstr "ملف"
+
+msgid "Age:"
+msgstr "السن:"
+
+msgid "Last visit:"
+msgstr "آخر زيارة:"
+
+msgid "No patient matches this search."
+msgstr "لا يوجد مريض يطابق هذا البحث."
+
+msgid "refunded"
+msgstr "مردود"
+
+msgid "This day has more bookings than one screen shows. Use the doctor filters."
+msgstr "حجوزات هذا اليوم أكثر مما تعرضه شاشة واحدة. استخدم تصفية الأطباء."
+
+msgid "appointments"
+msgstr "مواعيد"
+
+msgid "queue"
+msgstr "بالدور"
+
+msgid "Not working this day"
+msgstr "لا يعمل في هذا اليوم"
+
+msgid "Waiting:"
+msgstr "في الانتظار:"
+
+msgid "With the doctor:"
+msgstr "مع الطبيب:"
+
+msgid "Done:"
+msgstr "انتهى:"
+
+msgid "No bookings yet."
+msgstr "لا توجد حجوزات بعد."
+
+msgid "No doctor works on this day, and nothing is booked."
+msgstr "لا يعمل أي طبيب في هذا اليوم، ولا توجد حجوزات."
+
+msgid "New"
+msgstr "جديد"
+
+msgid "Follow-up"
+msgstr "إعادة"
+
+msgid "Extra"
+msgstr "إضافي"
+
+msgid "Booked"
+msgstr "محجوز"
+
+msgid "Waiting"
+msgstr "في الانتظار"
+
+msgid "With the doctor"
+msgstr "مع الطبيب"
+
+msgid "Done"
+msgstr "انتهى"
+
+msgid "Cancelled"
+msgstr "ملغي"
+
+msgid "Didn't come"
+msgstr "لم يحضر"
+
+msgid "Owes"
+msgstr "عليه"
+
+msgid "Arrived"
+msgstr "وصل"
+
+msgid "Call in"
+msgstr "استدعاء"
+
+msgid "Finish visit"
+msgstr "إنهاء الزيارة"
+
+msgid "More actions"
+msgstr "إجراءات أخرى"
+
+msgid "Patient file"
+msgstr "ملف المريض"
+
+msgid "Print receipt"
+msgstr "طباعة الإيصال"
+
+msgid "Undo arrival"
+msgstr "التراجع عن الوصول"
+
+msgid "Undo call in"
+msgstr "التراجع عن الاستدعاء"
+
+msgid "Clinic management, made simple"
+msgstr "إدارة العيادة ببساطة"
+
+msgid "Center"
+msgstr "مركز"
+
+msgid "Main"
+msgstr "القائمة الرئيسية"
+
+msgid "Soon"
+msgstr "قريباً"
+
+msgid "One app for many specialties. Each clinic sees the services, medicines and stock list that fit its specialty."
+msgstr "تطبيق واحد لتخصصات كثيرة. كل عيادة ترى الخدمات والأدوية وأصناف المخزون التي تناسب تخصصها."
+
+msgid "Saving…"
+msgstr "جارٍ الحفظ…"
+
+msgid "Still saving…"
+msgstr "ما زال الحفظ جاريًا…"
+
+msgid "Not confirmed yet, checking…"
+msgstr "لم يتأكد الحفظ بعد، جارٍ التحقق…"
+
+msgid "Not confirmed. Try again: it won't be done twice."
+msgstr "لم نتأكد من الحفظ. حاول مرة أخرى، ولن يتكرر."
+
+msgid "You were signed out. Sign in again and this will be finished."
+msgstr "انتهت جلستك. سجّل الدخول مرة أخرى وسيكتمل هذا."
+
+msgid "Something went wrong. Try again."
+msgstr "حدث خطأ. حاول مرة أخرى."
+
+msgid "Dropped. Check the record before you try again."
+msgstr "تم التجاهل. راجع السجل قبل أن تحاول مرة أخرى."
+
+msgid "Dropped. Check the visit before you try again."
+msgstr "تم التجاهل. راجع الزيارة قبل أن تحاول مرة أخرى."
+
+msgid "Not confirmed yet: {what}"
+msgstr "لم يتأكد بعد: {what}"
+
+msgid "Undo"
+msgstr "تراجع"
+
+msgid "Updated {time}"
+msgstr "آخر تحديث {time}"
+
+msgid "Not updated since {time}. Checking…"
+msgstr "لم يتحدث منذ {time}. جارٍ التحقق…"
+
+msgid "Loading…"
+msgstr "جارٍ التحميل…"
+
+msgid "Arrived: {name}"
+msgstr "وصل: {name}"
+
+msgid "Called in: {name}"
+msgstr "دخل للطبيب: {name}"
+
+msgid "Visit finished: {name}"
+msgstr "انتهت الزيارة: {name}"
+
+msgid "Visit finished: {name}, {amount} collected"
+msgstr "انتهت الزيارة: {name}، وتم تحصيل {amount}"
+
+msgid "Back to booked: {name}"
+msgstr "عاد إلى محجوز: {name}"
+
+msgid "Back to waiting: {name}"
+msgstr "عاد إلى الانتظار: {name}"
+
+msgid "Booking cancelled: {name}"
+msgstr "أُلغي الحجز: {name}"
+
+msgid "Booking moved: {name}"
+msgstr "نُقل الحجز: {name}"
+
+msgid "Booked: {name}, turn {n}"
+msgstr "تم الحجز: {name}، الدور {n}"
+
+msgid "Collected {amount} from {name}"
+msgstr "تم تحصيل {amount} من {name}"
+
+msgid "Refunded {amount}"
+msgstr "تم ردّ {amount}"
+
+msgid "Discount saved"
+msgstr "تم حفظ الخصم"
+
+msgid "The bill was voided"
+msgstr "أُلغيت الفاتورة"
+
+msgid "Owes {amount}"
+msgstr "عليه {amount}"
+
+msgid "Payment"
+msgstr "دفعة"
+
+msgid "Bill number {n}"
+msgstr "فاتورة رقم {n}"
+
+msgid "This bill was voided."
+msgstr "هذه الفاتورة ملغاة."
+
+msgid "Remove"
+msgstr "حذف"
+
+msgid "Searching…"
+msgstr "جارٍ البحث…"
+
+msgid "The search didn't work. Try again."
+msgstr "لم ينجح البحث. حاول مرة أخرى."
+
+msgid "Found: {n}"
+msgstr "النتائج: {n}"
+
+msgid "File {n}"
+msgstr "ملف {n}"
+
+msgid "Fee: {amount}"
+msgstr "المبلغ: {amount}"
+
+msgid "Fee: {amount} (follow-up price)"
+msgstr "المبلغ: {amount} (سعر الإعادة)"
+
+msgid "Book and mark arrived"
+msgstr "احجز وسجّل الوصول"
+
+msgid "Book and collect"
+msgstr "احجز وحصِّل"
+
+msgid "Pick the doctor and the day."
+msgstr "اختر الطبيب واليوم."
+
+msgid "Loading the doctor's times…"
+msgstr "جارٍ تحميل مواعيد الطبيب…"
+
+msgid "Next turn"
+msgstr "الدور التالي"
+
+msgid "Free times: {n}"
+msgstr "مواعيد متاحة: {n}"
+
+msgid "A queue day: the patient gets the next turn."
+msgstr "يوم بالدور: يأخذ المريض الدور التالي."
+
+msgid "taken"
+msgstr "محجوز"
+
+msgid "Pick a patient or add a new one."
+msgstr "اختر مريضًا أو أضف مريضًا جديدًا."
+
+msgid "Write the age as a number of years."
+msgstr "اكتب السن رقمًا بالسنوات."
+
+msgid "Pick the service."
+msgstr "اختر الخدمة."
+
+msgid "Pick the doctor."
+msgstr "اختر الطبيب."
+
+msgid "Pick the day."
+msgstr "اختر اليوم."
+
+msgid "Pick a time."
+msgstr "اختر موعدًا."
+
+msgid "Write the amount in pounds, for example 150 or 150.50."
+msgstr "اكتب المبلغ بالجنيه، مثل 150 أو 150.50."
+
+msgid "Write the quantity as a whole number."
+msgstr "اكتب الكمية رقمًا صحيحًا."
+
+msgid "Saved"
+msgstr "تم الحفظ"
+
+msgid "Patient file saved: {name}"
+msgstr "تم حفظ ملف المريض: {name}"
+
+msgid "Showing {n}"
+msgstr "المعروض: {n}"
+
+msgid "Bill"
+msgstr "الفاتورة"
+
+msgid "Day"
+msgstr "اليوم"
+
+msgid "Another day"
+msgstr "يوم آخر"
+
+msgid "Date"
+msgstr "التاريخ"
+
+msgid "Time"
+msgstr "الموعد"
+
+msgid "Add as an extra booking on a taken time"
+msgstr "إضافة حجز إضافي على موعد محجوز"
+
+msgid "Skip to content"
+msgstr "انتقل إلى المحتوى"
+
+msgid "Tap to close"
+msgstr "اضغط للإغلاق"
+
+msgid "Add a place"
+msgstr "إضافة عيادة أو مركز"
+
+msgid "New clinic or center?"
+msgstr "عيادة أو مركز جديد؟"
+
+msgid "Sign up now"
+msgstr "سجّل الآن"
+
+msgid "Not found"
+msgstr "غير موجود"
+
+msgid "This record doesn't exist in this clinic."
+msgstr "هذا السجل غير موجود في هذه العيادة."
+
+msgid "Edit"
+msgstr "تعديل"
+
+msgid "Visits"
+msgstr "الزيارات"
+
+msgid "Newest first. Visit notes and prescriptions come with the doctor's screens."
+msgstr "الأحدث أولًا. ملاحظات الزيارات والروشتات تأتي مع شاشات الطبيب."
+
+msgid "Fee"
+msgstr "المبلغ"
+
+msgid "Actions"
+msgstr "الإجراءات"
+
+msgid "No visits yet."
+msgstr "لا توجد زيارات بعد."
+
+msgid "Showing"
+msgstr "المعروض:"
+
+msgid "Load more"
+msgstr "عرض المزيد"
+
+msgid "Details"
+msgstr "البيانات"
+
+msgid "When"
+msgstr "الوقت"
+
+msgid "Method"
+msgstr "الطريقة"
+
+msgid "Amount"
+msgstr "المبلغ"
+
+msgid "No payments yet."
+msgstr "لا توجد مدفوعات بعد."
+
+msgid "Search by the first letters of any part of the name, by mobile number or by file number."
+msgstr "ابحث بأول حروف أي جزء من الاسم، أو برقم الموبايل، أو برقم الملف."
+
+msgid "Name, mobile or file number"
+msgstr "الاسم أو الموبايل أو رقم الملف"
+
+msgid "Search"
+msgstr "بحث"
+
+msgid "Type at least two letters or digits. Lists never load every patient at once."
+msgstr "اكتب حرفين أو رقمين على الأقل. القوائم لا تعرض كل المرضى مرة واحدة."
+
+msgid "Receipt"
+msgstr "إيصال"
+
+msgid "Printing"
+msgstr "الطباعة"
+
+msgid "Print"
+msgstr "طباعة"
+
+msgid "Receipt printer, 80 mm"
+msgstr "طابعة إيصالات 80 مم"
+
+msgid "A5 paper"
+msgstr "ورق A5"
+
+msgid "Void"
+msgstr "ملغاة"
+
+msgid "Bill number"
+msgstr "رقم الفاتورة"
+
+msgid "Item"
+msgstr "البند"
+
+msgid "Qty"
+msgstr "الكمية"
+
+msgid "Subtotal"
+msgstr "المجموع"
+
+msgid "Thank you. Keep this receipt."
+msgstr "شكرًا لكم. احتفظوا بهذا الإيصال."
+
+msgid "Printed"
+msgstr "طُبع في"
+
+msgid "Sign up"
+msgstr "التسجيل"
+
+msgid "Back to your places"
+msgstr "العودة إلى أماكنك"
+
+msgid "Add a clinic or a medical center"
+msgstr "إضافة عيادة أو مركز طبي"
+
+msgid "Start Hamada in your clinic"
+msgstr "ابدأ حمادة في عيادتك"
+
+msgid "You become the owner of the new place. Your account and password stay the same."
+msgstr "ستصبح مالك المكان الجديد. حسابك وكلمة مرورك كما هما."
+
+msgid "Four short steps. Your place works as soon as you finish, and you can add the team later."
+msgstr "أربع خطوات قصيرة. يعمل مكانك فور الانتهاء، ويمكنك إضافة الفريق لاحقًا."
+
+msgid "Sign-up isn't open yet on this server."
+msgstr "التسجيل غير متاح بعد على هذا الخادم."
+
+msgid "A clinic or a medical center?"
+msgstr "عيادة أم مركز طبي؟"
+
+msgid "One specialty, for example a dental or a children's clinic."
+msgstr "تخصص واحد، مثل عيادة أسنان أو عيادة أطفال."
+
+msgid "Several sections under one roof, each with its own specialty, one front desk and one patient file."
+msgstr "عدة أقسام في مكان واحد، لكل قسم تخصصه، مع استقبال واحد وملف واحد لكل مريض."
+
+msgid "The specialty"
+msgstr "التخصص"
+
+msgid "The center's sections"
+msgstr "أقسام المركز"
+
+msgid "Each specialty brings its own services, prices and medicine list. You can change them later."
+msgstr "لكل تخصص خدماته وأسعاره وقائمة أدويته. يمكنك تعديلها لاحقًا."
+
+msgid "Pick two or more. Each one becomes a section; you can rename it."
+msgstr "اختر تخصصين أو أكثر. يصبح كل تخصص قسمًا، ويمكنك تغيير اسمه."
+
+msgid "The place"
+msgstr "بيانات المكان"
+
+msgid "Name"
+msgstr "الاسم"
+
+msgid "The place's phone (optional)"
+msgstr "هاتف المكان (اختياري)"
+
+msgid "Your account"
+msgstr "حسابك"
+
+msgid "You are the owner. After this you set up two-step sign-in with an authenticator app on your phone."
+msgstr "أنت المالك. بعد ذلك تفعّل الدخول بخطوتين بتطبيق مصادقة على موبايلك."
+
+msgid "Username"
+msgstr "اسم المستخدم"
+
+msgid "English letters and digits, for signing in"
+msgstr "حروف إنجليزية وأرقام، لتسجيل الدخول"
+
+msgid "At least 10 characters"
+msgstr "10 أحرف على الأقل"
+
+msgid "Add the place"
+msgstr "إضافة المكان"
+
+msgid "Create my place"
+msgstr "ابدأ الآن"
+
+msgid "Pick the specialty."
+msgstr "اختر التخصص."
+
+msgid "A center has two sections or more."
+msgstr "للمركز قسمان أو أكثر."
+
+msgid "Section name: {name}"
+msgstr "اسم القسم: {name}"
+
+msgid "Check the marked fields."
+msgstr "راجع الحقول المحددة."
+
+msgid "Taken"
+msgstr "مستخدم بالفعل"
+
+msgid "Today at the clinic"
+msgstr "اليوم في العيادة"
+
+msgid "Every booking, who is waiting, and what is happening right now, for the doctor and the desk on the same screen."
+msgstr "كل الحجوزات، ومن ينتظر، وما يحدث الآن، للطبيب والاستقبال على شاشة واحدة."
+
+msgid "Days"
+msgstr "الأيام"
+
+msgid "Previous day"
+msgstr "اليوم السابق"
+
+msgid "Back to today"
+msgstr "العودة إلى اليوم"
+
+msgid "Next day"
+msgstr "اليوم التالي"
+
+msgid "Updated"
+msgstr "آخر تحديث"
+
+msgid "Try now"
+msgstr "حاول الآن"
+
+msgid "Bookings"
+msgstr "الحجوزات"
+
+msgid "Waiting now"
+msgstr "في الانتظار الآن"
+
+msgid "Finished"
+msgstr "انتهت زياراتهم"
+
+msgid "Sections"
+msgstr "الأقسام"
+
+msgid "All sections"
+msgstr "كل الأقسام"
+
+msgid "Today's appointments"
+msgstr "مواعيد اليوم"
+
+msgid "Appointments"
+msgstr "المواعيد"
+
+msgid "New bookings appear here by themselves, from every screen in the clinic."
+msgstr "الحجوزات الجديدة تظهر هنا تلقائيًا، من كل شاشات العيادة."
+
+msgid "Add a booking"
+msgstr "إضافة حجز"
+
+msgid "Find the patient or add a new one, then the service and the time. A walk-in is booked, marked arrived and paid in one step."
+msgstr "ابحث عن المريض أو أضف مريضًا جديدًا، ثم اختر الخدمة والموعد. المريض الحاضر يُحجز له ويُسجَّل وصوله ويدفع في خطوة واحدة."
+
+msgid "Patient name or mobile"
+msgstr "اسم المريض أو الموبايل"
+
+msgid "Latest activity"
+msgstr "آخر الأحداث"
+
+msgid "A username has 3 to 30 English letters, digits, dots, dashes or underscores, and starts with a letter."
+msgstr "اسم المستخدم من 3 إلى 30 حرفًا إنجليزيًا أو رقمًا أو نقطة أو شرطة أو شرطة سفلية، ويبدأ بحرف."
+
+#, python-format
+msgid "Sections: %(count)s"
+msgstr "الأقسام: %(count)s"

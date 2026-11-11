@@ -1,35 +1,54 @@
-{% load static i18n %}{% get_current_language as LANG %}<!doctype html>
+{% load static i18n hamada %}{% get_current_language as LANG %}<!doctype html>
 <html lang="{{ LANG }}" dir="{% if LANG == 'ar' %}rtl{% else %}ltr{% endif %}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   {# No patient names in titles: they print and stay in a shared PC's history (design 7.5). #}
-  <title>{% block title %}{% translate "Hamada" %}{% endblock %}</title>
+  <title>{% block title %}{% translate "Hamada" %}{% endblock %} · {% translate "Hamada" %}</title>
   <link rel="icon" href="data:,">
+  <link rel="preload" href="{% static 'fonts/rubik-arabic.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="modulepreload" href="{% static 'js/api.js' %}">
+  <link rel="modulepreload" href="{% static 'js/shell.js' %}">
+  {% block head %}{% endblock %}
   <meta name="hamada" data-membership="{{ ctx.membership_id|default:'' }}" data-user="{{ request.user.id|default:'' }}"
-        data-csrf-cookie="hamada_csrftoken" data-app-version="{{ app_version|default:'' }}">
+        data-csrf-cookie="hamada_csrftoken" data-app-version="{% app_version %}" data-digits="{% digit_setting %}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
-  {% block shell %}
-  <header class="topbar">
-    <a class="brand" href="/">{% translate "Hamada" %}</a>
-    {% if ctx %}<span class="clinic-name"><bdi dir="auto">{{ ctx.clinic.name }}</bdi></span>{% endif %}
-    <span class="spacer"></span>
-    {% if request.user.is_authenticated %}
-      <span class="who"><bdi dir="auto">{{ request.user.full_name }}</bdi></span>
-      <button type="button" class="btn ghost" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
-      <button type="button" class="btn ghost" data-action="logout">{% translate "Sign out" %}</button>
-    {% endif %}
-  </header>
-  {% endblock %}
-  <main class="page" id="main" tabindex="-1">
-    {% block content %}{% endblock %}
-  </main>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="alert-toast" id="alert" role="alert"></div>
+  {% include "web/_icons.html" %}
+  <a class="skip btn" href="#main">{% translate "Skip to content" %}</a>
+  {% if ctx %}
+  <div class="app">
+    {% include "web/_side.html" %}
+    <main class="main" id="main" tabindex="-1">
+      <div class="wrap">
+        {% include "web/_topbar.html" %}
+  {% else %}
+    {% block plainbar %}
+    <header class="plainbar">
+      <a class="brand" href="/">{% translate "Hamada" %}</a>
+      <span class="spacer"></span>
+      {% if request.user.is_authenticated %}
+        <span class="muted"><bdi dir="auto">{{ request.user.full_name }}</bdi></span>
+        <button type="button" class="btn ghost" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
+        <button type="button" class="btn ghost" data-action="logout">{% translate "Sign out" %}</button>
+      {% endif %}
+    </header>
+    {% endblock %}
+    <main class="page" id="main" tabindex="-1">
+  {% endif %}
+        {% block content %}{% endblock %}
+  {% if ctx %}
+      </div>
+    </main>
+  </div>
+  {% else %}
+    </main>
+  {% endif %}
+  {% block strings %}{% if ctx %}{% include "web/_strings.html" %}{% endif %}{% endblock %}
+  <div class="toast" id="toast" role="status" aria-live="polite"><span data-text></span><button type="button" class="toast-action" data-toast-action hidden></button></div>
+  <div class="alert-toast" id="alert" role="alert" title="{% translate "Tap to close" %}"></div>
   <script type="module" src="{% static 'js/shell.js' %}"></script>
   {% block scripts %}{% endblock %}
 </body>

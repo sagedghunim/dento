@@ -1,0 +1,12 @@
+{% load i18n hamada %}{% for v in items %}
+<tr data-visit data-id="{{ v.id }}" data-status="{{ v.status }}" data-due="{{ v.due }}" data-fee="{{ v.fee }}" data-invoice="{{ v.invoice.id|default_if_none:'' }}" data-service="{{ v.service.name }}">
+  <td><span class="nowrap">{{ v.day|shortday }}</span>{% if v.starts_at %} · {{ v.starts_at|clock }}{% endif %}</td>
+  <td><bdi dir="auto">{{ v.service.name }}</bdi><div class="muted"><bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi> · {% translate "Turn" %} {{ v.queue_no|num }}</div></td>
+  <td>{% include "web/_status_pill.html" with status=v.status %}</td>
+  <td class="num">{{ v.fee|money }}{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}<div class="muted">{% translate "Owes" %} {{ v.due|money }}</div>{% endif %}</td>
+  <td><div class="appt-actions">
+    {% if perms.collect and v.status != "cancelled" and v.status != "no_show" %}<button type="button" class="btn{% if not v.due %} ghost{% endif %}" data-act="pay">{% if v.due > 0 %}{% translate "Collect" %}{% else %}{% translate "Bill" %}{% endif %}</button>{% endif %}
+    {% if v.invoice and v.invoice.paid > 0 %}<button type="button" class="icon-btn" data-act="receipt" aria-label="{% translate "Print receipt" %}" title="{% translate "Print receipt" %}"><svg class="icon"><use href="#i-print"/></svg></button>{% endif %}
+  </div></td>
+</tr>
+{% endfor %}

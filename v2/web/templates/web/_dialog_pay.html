@@ -1,0 +1,83 @@
+{% load i18n hamada %}
+<dialog class="sheet" id="pay-dialog" aria-labelledby="pay-title">
+<form id="pay-form" novalidate>
+  <header class="dialog-head">
+    <h2 id="pay-title">{% translate "Bill and payments" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <div>
+      <p class="who" data-name></p>
+      <p class="muted" data-meta></p>
+    </div>
+    <dl class="money-sum">
+      <div><dt>{% translate "Total" %}</dt><dd data-sum="total"></dd></div>
+      <div><dt>{% translate "Discount" %}</dt><dd data-sum="discount"></dd></div>
+      <div><dt>{% translate "Paid" %}</dt><dd data-sum="paid"></dd></div>
+      <div><dt>{% translate "Owed" %}</dt><dd data-sum="due"></dd></div>
+    </dl>
+    <p class="muted" data-status role="status"></p>
+
+    <section class="subsection" data-collect aria-labelledby="pay-collect-title">
+      <h3 id="pay-collect-title">{% translate "Take a payment" %}</h3>
+      <div class="form-row">
+        <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+        <button type="button" class="btn" data-run="pay"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Collect" %}</button>
+      </div>
+      <fieldset class="group"><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
+    </section>
+
+    <section class="subsection" aria-labelledby="pay-lines-title">
+      <h3 id="pay-lines-title">{% translate "Items" %}</h3>
+      <ul class="lines" data-lines></ul>
+      <div class="form-row">
+        <label class="field">{% translate "Add a service" %}
+          <select name="line_service">{% for s in config.services %}{% if s.kind != "follow_up" %}<option value="{{ s.id }}" data-section="{{ s.section_id|default_if_none:'' }}">{{ s.name }}</option>{% endif %}{% endfor %}</select>
+        </label>
+        <label class="field">{% translate "Quantity" %}<input name="qty" value="1" dir="ltr" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <button type="button" class="btn ghost" data-run="add-line"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add" %}</button>
+      </div>
+    </section>
+
+    {% if config.perms.discount %}
+    <section class="subsection" aria-labelledby="pay-discount-title">
+      <h3 id="pay-discount-title">{% translate "Discount" %}</h3>
+      <div class="form-row">
+        <label class="field">{% translate "Discount (EGP)" %}<input name="discount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+        <button type="button" class="btn ghost" data-run="discount">{% translate "Save the discount" %}</button>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="subsection" data-payments-section hidden aria-labelledby="pay-payments-title">
+      <h3 id="pay-payments-title">{% translate "Payments" %}</h3>
+      <ul class="lines" data-payments></ul>
+    </section>
+
+    {% if config.perms.refund %}
+    <section class="subsection" data-refund hidden aria-labelledby="pay-refund-title">
+      <h3 id="pay-refund-title">{% translate "Refund" %}</h3>
+      <div class="form-row">
+        <label class="field">{% translate "From the payment" %}<select name="refund_of"></select></label>
+        <label class="field">{% translate "Amount (EGP)" %}<input name="refund_amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+        <button type="button" class="btn danger" data-run="refund">{% translate "Refund" %}</button>
+      </div>
+    </section>
+    <section class="subsection" data-void hidden>
+      <button type="button" class="btn danger" data-run="void">{% translate "Void the bill" %}</button>
+    </section>
+    {% endif %}
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-retry hidden>{% translate "Try again" %}</button>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    {% if config.perms.view_patients %}
+    <button type="button" class="btn ghost" data-print="a5" hidden><svg class="icon"><use href="#i-print"/></svg>{% translate "Receipt A5" %}</button>
+    <button type="button" class="btn ghost" data-print="80mm" hidden><svg class="icon"><use href="#i-print"/></svg>{% translate "Receipt 80 mm" %}</button>
+    {% endif %}
+    <span class="grow"></span>
+    <button type="button" class="btn" data-close>{% translate "Close" %}</button>
+  </footer>
+</form>
+</dialog>

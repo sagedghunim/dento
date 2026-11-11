@@ -1,0 +1,5 @@
+{% load i18n hamada %}{% for e in recent %}
+<div class="feed-item"><span class="when">{{ e.at|clock }}</span>{% if e.action == "arrived" %}{% translate "Arrived and waiting:" %}{% elif e.action == "called" %}{% translate "Called in:" %}{% elif e.action == "finished" %}{% translate "Visit finished:" %}{% else %}{% translate "Booking cancelled:" %}{% endif %} <bdi dir="auto">{{ e.patient_name }}</bdi>{% if show_doctor and e.doctor %} · <bdi dir="auto">{{ e.doctor }}</bdi>{% endif %}</div>
+{% empty %}
+<p class="empty-note">{% translate "Nothing has happened yet on this day." %}</p>
+{% endfor %}

@@ -4,18 +4,27 @@ import contextlib
 import datetime as dt
 from unittest import mock
 
-from clinics.models import Membership, Schedule
+from clinics.models import Membership, Schedule, Section
 from core.days import business_day
 from core.routing import clinic_transaction
 from core.testing import ShardTestCase, call
 
 
+def sections_of(fixture):
+    """The place's sections in order (a clinic has one)."""
+    with clinic_transaction(fixture.id, fixture.shard):
+        return list(Section.objects.filter(clinic_id=fixture.id).order_by("sort", "id"))
+
+
 def add_schedule(fixture, role, *, starts="09:00", ends="23:00", mode="queue", slot_minutes=None, max_bookings=None,
-                 weekdays=range(7)):
+                 weekdays=range(7), section=None):
+    """Sessions for a member on these weekdays, in `section` (an id; default: the place's first section)."""
     with clinic_transaction(fixture.id, fixture.shard):
         doctor = Membership.objects.get(clinic_id=fixture.id, id=fixture.membership(role).id)
+        if section is None:
+            section = Section.objects.filter(clinic_id=fixture.id).order_by("sort", "id").values_list("id", flat=True)[0]
         for weekday in weekdays:
-            Schedule.objects.create(clinic_id=fixture.id, doctor=doctor, weekday=weekday,
+            Schedule.objects.create(clinic_id=fixture.id, doctor=doctor, section_id=section, weekday=weekday,
                                     starts=dt.time.fromisoformat(starts), ends=dt.time.fromisoformat(ends), mode=mode,
                                     slot_minutes=slot_minutes, max_bookings=max_bookings)
 

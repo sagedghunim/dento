@@ -1,0 +1,24 @@
+{% load i18n hamada %}{% place ctx as where %}{% nav_sections ctx as sections %}
+<aside class="side">
+  <div class="side-top">
+    <div>
+      <a class="brand" href="/">{% translate "Hamada" %}</a>
+      <p class="tagline">{% translate "Clinic management, made simple" %}</p>
+    </div>
+  </div>
+  <div class="place">
+    <p class="side-label">{{ where.kind }}</p>
+    <p class="clinic-name"><bdi dir="auto">{{ ctx.clinic.name }}</bdi>{% if where.center %} <span class="badge">{% translate "Center" %}</span>{% endif %}</p>
+    <p class="clinic-sub"><bdi dir="auto">{{ where.line }}</bdi></p>
+  </div>
+  <nav class="main-nav" aria-label="{% translate "Main" %}">
+    {% for section in sections %}
+      {% if section.ready %}
+      <a class="nav-btn" href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}</a>
+      {% else %}
+      <span class="nav-btn soon" aria-disabled="true">{{ section.label }} <span class="nav-soon">{% translate "Soon" %}</span></span>
+      {% endif %}
+    {% endfor %}
+  </nav>
+  <p class="side-foot">{% translate "One app for many specialties. Each clinic sees the services, medicines and stock list that fit its specialty." %}</p>
+</aside>

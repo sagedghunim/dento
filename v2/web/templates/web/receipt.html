@@ -1,0 +1,66 @@
+{% load static i18n hamada %}<!doctype html>
+<html lang="{{ lang }}" dir="{% if lang == 'ar' %}rtl{% else %}ltr{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# No patient name in the title: it prints, and stays in a shared PC's history (design 7.5). #}
+  <title>{% translate "Receipt" %} {{ r.number|digits }}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{% static 'css/print.css' %}">
+  <link rel="stylesheet" href="{% if paper == '80mm' %}{% static 'css/print-80mm.css' %}{% else %}{% static 'css/print-a5.css' %}{% endif %}">
+  <script type="module" src="{% static 'js/print.js' %}"></script>
+</head>
+<body class="paper-{{ paper }}" data-paper="{{ paper }}" data-auto-print="{% if auto_print %}1{% endif %}"
+      data-top-mm="{% if r.print.letterhead %}{{ r.print.letterhead_top_mm }}{% else %}0{% endif %}" data-bottom-mm="{% if r.print.letterhead %}{{ r.print.letterhead_bottom_mm }}{% else %}0{% endif %}">
+  <nav class="toolbar" aria-label="{% translate "Printing" %}">
+    <button type="button" class="tool primary" data-print>{% translate "Print" %}</button>
+    <a class="tool" href="?lang={{ lang }}&amp;format={{ other_paper }}">{% if other_paper == "80mm" %}{% translate "Receipt printer, 80 mm" %}{% else %}{% translate "A5 paper" %}{% endif %}</a>
+    <a class="tool" href="?lang={{ other_lang }}&amp;format={{ paper }}" lang="{{ other_lang }}">{% if other_lang == "en" %}English{% else %}العربية{% endif %}</a>
+  </nav>
+  <main class="receipt">
+    {% if not r.print.letterhead %}
+    <header class="head">
+      <p class="place"><bdi dir="auto">{{ r.clinic.name }}</bdi></p>
+      {% if r.clinic.address or r.clinic.city %}<p><bdi dir="auto">{{ r.clinic.address }}{% if r.clinic.address and r.clinic.city %} · {% endif %}{{ r.clinic.city }}</bdi></p>{% endif %}
+      {% if r.clinic.phone %}<p>{{ r.clinic.phone|phone }}</p>{% endif %}
+    </header>
+    {% endif %}
+    <h1>{% translate "Receipt" %}{% if r.status == "void" %} · {% translate "Void" %}{% endif %}</h1>
+    <dl class="facts">
+      <div><dt>{% translate "Bill number" %}</dt><dd>{{ r.number|num }}</dd></div>
+      <div><dt>{% translate "Date" %}</dt><dd>{{ r.created_at|shortday }} · {{ r.created_at|clock }}</dd></div>
+      <div><dt>{% translate "Patient" %}</dt><dd><bdi dir="auto">{{ r.patient.name }}</bdi></dd></div>
+      <div><dt>{% translate "File" %}</dt><dd>{{ r.patient.file_no|num }}</dd></div>
+      {% if r.appointment %}
+      <div><dt>{% translate "Doctor" %}</dt><dd><bdi dir="auto">{{ r.appointment.doctor.name }}</bdi></dd></div>
+      <div><dt>{% translate "Turn" %}</dt><dd>{{ r.appointment.queue_no|num }} · {{ r.appointment.day|shortday }}</dd></div>
+      {% endif %}
+    </dl>
+    <table class="lines">
+      <thead><tr><th>{% translate "Item" %}</th><th class="n">{% translate "Qty" %}</th><th class="n">{% translate "Amount" %}</th></tr></thead>
+      <tbody>
+        {% for line in r.lines %}<tr><td><bdi dir="auto">{{ line.label }}</bdi></td><td class="n">{{ line.qty|num }}</td><td class="n">{{ line.amount|money }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <dl class="totals">
+      {% if r.discount %}<div><dt>{% translate "Subtotal" %}</dt><dd>{{ r.subtotal|money }}</dd></div>
+      <div><dt>{% translate "Discount" %}</dt><dd>{{ r.discount|money }}</dd></div>{% endif %}
+      <div class="total"><dt>{% translate "Total" %}</dt><dd>{{ r.total|money }}</dd></div>
+      <div><dt>{% translate "Paid" %}</dt><dd>{{ r.paid|money }}</dd></div>
+      {% if r.due %}<div class="due"><dt>{% translate "Owed" %}</dt><dd>{{ r.due|money }}</dd></div>{% endif %}
+    </dl>
+    {% if r.payments %}
+    <table class="lines payments">
+      <thead><tr><th>{% translate "Payments" %}</th><th class="n">{% translate "Amount" %}</th></tr></thead>
+      <tbody>
+        {% for p in r.payments %}<tr><td>{% if p.kind == "refund" %}{% translate "Refund" %}{% else %}{{ methods|get_item:p.method }}{% endif %} · {{ p.received_at|shortday }} {{ p.received_at|clock }}</td><td class="n">{% if p.kind == "refund" %}−{% endif %}{{ p.amount|money }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <footer class="foot">
+      <p>{% translate "Thank you. Keep this receipt." %}</p>
+      <p class="small">{% translate "Printed" %} {{ printed_at|shortday }} · {{ printed_at|clock }}</p>
+    </footer>
+  </main>
+</body>
+</html>

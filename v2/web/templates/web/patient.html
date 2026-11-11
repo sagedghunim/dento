@@ -1,0 +1,66 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Patient file" %}{% endblock %}
+{% block content %}
+<div class="page-head head-row">
+  <div>
+    <p class="muted"><a href="/patients">{% translate "Patients" %}</a></p>
+    <h1><bdi dir="auto">{{ patient.full_name }}</bdi></h1>
+    <p>{% translate "File" %} {{ patient.file_no|num }}{% if patient.phone %} · {{ patient.phone|phone }}{% endif %}{% if patient.age is not None %} · {% translate "Age:" %} {{ patient.age|digits }}{% endif %}{% if patient.sex == "m" %} · {% translate "Male" %}{% elif patient.sex == "f" %} · {% translate "Female" %}{% endif %}</p>
+  </div>
+  <div class="appt-actions">
+    {% if perms.book %}<button type="button" class="btn" data-book-patient data-id="{{ patient.id }}" data-name="{{ patient.full_name }}" data-file="{{ patient.file_no }}" data-phone="{{ patient.phone }}"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button>{% endif %}
+    {% if perms.edit_patients %}<button type="button" class="btn ghost" data-edit-patient>{% translate "Edit" %}</button>{% endif %}
+  </div>
+</div>
+
+<div class="grid-2">
+  <section class="card" aria-labelledby="visits-title" data-patient-visits data-name="{{ patient.full_name }}">
+    <h2 id="visits-title">{% translate "Visits" %}</h2>
+    <p class="card-sub">{% translate "Newest first. Visit notes and prescriptions come with the doctor's screens." %}</p>
+    <div class="table-scroll">
+      <table class="table">
+        <thead><tr><th>{% translate "Day" %}</th><th>{% translate "Service" %}</th><th>{% translate "Status" %}</th><th class="num">{% translate "Fee" %}</th><th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
+        <tbody data-rows="visits">{% include "web/_visit_rows.html" with items=visits.items %}</tbody>
+      </table>
+    </div>
+    {% if not visits.items %}<p class="empty-note">{% translate "No visits yet." %}</p>{% endif %}
+    <div class="list-foot">
+      <span class="muted" data-count="visits" data-n="{{ visits.items|length }}">{% translate "Showing" %} {{ visits.items|length|digits }}</span>
+      {% if visits.next %}<button type="button" class="btn ghost" data-more="visits" data-next="{{ visits.next }}">{% translate "Load more" %}</button>{% endif %}
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="card" aria-labelledby="details-title">
+      <h2 id="details-title">{% translate "Details" %}</h2>
+      <dl class="facts">
+        <div><dt>{% translate "Mobile" %}</dt><dd>{{ patient.phone|phone|default:"—" }}</dd></div>
+        <div><dt>{% translate "Date of birth" %}</dt><dd>{% if patient.birth_date %}{% if patient.birth_date_estimated %}{% translate "Age:" %} {{ patient.age|digits }}{% else %}{{ patient.birth_date|shortday }}{% endif %}{% else %}—{% endif %}</dd></div>
+        <div><dt>{% translate "Address" %}</dt><dd><bdi dir="auto">{{ patient.address|default:"—" }}</bdi></dd></div>
+        <div><dt>{% translate "Allergies" %}</dt><dd><bdi dir="auto">{{ patient.allergies|default:"—" }}</bdi></dd></div>
+        <div><dt>{% translate "Chronic conditions" %}</dt><dd><bdi dir="auto">{{ patient.chronic_conditions|default:"—" }}</bdi></dd></div>
+        <div><dt>{% translate "Notes" %}</dt><dd><bdi dir="auto">{{ patient.notes|default:"—" }}</bdi></dd></div>
+      </dl>
+    </section>
+    <section class="card" aria-labelledby="payments-title">
+      <h2 id="payments-title">{% translate "Payments" %}</h2>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>{% translate "When" %}</th><th>{% translate "Method" %}</th><th class="num">{% translate "Amount" %}</th></tr></thead>
+          <tbody data-rows="payments">{% include "web/_payment_rows.html" with items=payments.items %}</tbody>
+        </table>
+      </div>
+      {% if not payments.items %}<p class="empty-note">{% translate "No payments yet." %}</p>{% endif %}
+      <div class="list-foot">
+        <span class="muted" data-count="payments" data-n="{{ payments.items|length }}">{% translate "Showing" %} {{ payments.items|length|digits }}</span>
+        {% if payments.next %}<button type="button" class="btn ghost" data-more="payments" data-next="{{ payments.next }}">{% translate "Load more" %}</button>{% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{{ patient|json_script:"patient-data" }}
+{% include "web/_dialogs.html" %}
+{% if perms.edit_patients %}{% include "web/_dialog_patient.html" %}{% endif %}
+{{ config|json_script:"clinic-config" }}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/patients.js' %}"></script>{% endblock %}

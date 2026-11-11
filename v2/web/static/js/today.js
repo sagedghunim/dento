@@ -1,0 +1,517 @@
+// Today (design 5.11, 7.4): the queue fragment polled with its ETag, one poller per browser and clinic,
+// rows patched in place and never moved under the finger, a stale indicator, and one-tap row actions.
+import { discardPending, errorMessage, fetchText, isOk, membership, pendingList, retryPending, save } from "./api.js";
+import { initBook } from "./book.js";
+import { el, parseFragment, receiptUrl } from "./dialogs.js";
+import { clockParts, localDigits } from "./numbers.js";
+import { initPay } from "./pay.js";
+import { alertMessage, toast } from "./shell.js";
+import { t } from "./strings.js";
+import { initVisitDialogs } from "./visit.js";
+
+const card = document.querySelector("[data-queue-card]");
+const list = document.querySelector('[data-slot="groups"]');
+const config = JSON.parse(document.getElementById("clinic-config").textContent);
+const meta = document.querySelector('meta[name="hamada"]');
+const freshness = document.querySelector("[data-freshness]");
+const freshText = document.querySelector("[data-fresh-text]");
+const tryNow = document.querySelector("[data-try-now]");
+const pendingBar = document.querySelector("[data-pending-bar]");
+
+const dayParam = new URLSearchParams(window.location.search).get("day") || "";
+const url = "/today/queue" + (dayParam ? `?day=${encodeURIComponent(dayParam)}` : "");
+const channelName = `hamada-today-${membership()}-${dayParam || "current"}`;
+
+let etag = card.dataset.etag || null;
+let pollAfter = Number(card.dataset.pollAfter) || 5;
+let serverTime = card.dataset.serverTime || "";
+let lastGood = Date.now();
+let failures = 0;
+let retryAfter = 0;
+let timer = null;
+let expectedAt = 0;
+let wokeUp = false;
+let inFlight = false;
+let leader = false;
+let stopped = false;
+let lastPeerVisible = 0;
+let lastPollAt = 0;
+let reloadWanted = false;
+const rowHtml = new Map();       // id -> the server's HTML of the row now shown
+const heldRows = new Map();      // id -> newer server HTML waiting until the row is let go
+const acting = new Map();        // "id:action" -> true while a row action is in flight
+
+// --- the channel between tabs: one tab polls, the others listen (design 7.4) ---
+
+let channel = null;
+try { channel = new BroadcastChannel(channelName); } catch (e) { channel = null; }
+const post = (message) => { if (channel) try { channel.postMessage(message); } catch (e) { /* closed */ } };
+
+if (channel) {
+  channel.addEventListener("message", (event) => {
+    const m = event.data || {};
+    if (m.type === "fragment" && m.etag !== etag) { etag = m.etag; good(m.serverTime); apply(m.html); }
+    if (m.type === "fresh" || (m.type === "fragment" && m.etag === etag)) good(m.serverTime);
+    if (m.type === "poll-now" && leader) refreshNow();
+    if (m.type === "visible") {
+      // Another tab is on screen while this one polls: keep the visible pace, without polling twice.
+      lastPeerVisible = Date.now();
+      if (leader && Date.now() - lastPollAt > pollAfter * 1000) refreshNow();
+      else if (leader && expectedAt - Date.now() > pollAfter * 1200) schedule();
+    }
+  });
+}
+
+function becomeLeader() {
+  leader = true;
+  schedule(0);
+}
+
+if (navigator.locks && channel) {
+  // Held for the life of the tab; the next tab in line takes over when this one closes.
+  navigator.locks.request(`hamada-today-${membership()}-${dayParam || "current"}`, () => new Promise(() => becomeLeader()));
+} else {
+  becomeLeader();  // plain http on a LAN has no locks: each tab polls on its own
+}
+
+// --- polling ---
+
+const visibleNow = () => document.visibilityState === "visible";
+function intervalMs() {
+  const someoneLooks = visibleNow() || Date.now() - lastPeerVisible < 3 * pollAfter * 1000;
+  return (someoneLooks ? pollAfter : Math.max(60, pollAfter)) * 1000;
+}
+
+function schedule(ms) {
+  clearTimeout(timer);
+  if (stopped || !leader) return;
+  let delay = ms;
+  if (delay == null) {
+    if (failures) delay = retryAfter ? retryAfter * 1000 : Math.random() * Math.min(60000, 2000 * 2 ** failures);
+    else delay = intervalMs() * (0.8 + Math.random() * 0.4);
+  }
+  expectedAt = Date.now() + delay;
+  timer = setTimeout(() => {
+    if (Date.now() - expectedAt > 15000) wokeUp = true;  // the laptop slept: the first failure doesn't count
+    poll();
+  }, delay);
+}
+
+function refreshNow() {
+  if (leader) { retryAfter = 0; schedule(0); } else post({ type: "poll-now" });
+}
+
+async function poll() {
+  if (inFlight || stopped) return;
+  inFlight = true;
+  lastPollAt = Date.now();
+  const result = await fetchText(url, { etag });
+  inFlight = false;
+  const headers = result.headers;
+  retryAfter = Number(headers.get("Retry-After")) || 0;
+  if (result.status === 200 || result.status === 304) {
+    failures = 0;
+    wokeUp = false;
+    pollAfter = Number(headers.get("Poll-After")) || pollAfter;
+    checkVersion(headers.get("X-App-Version"));
+    good(headers.get("X-Server-Time"));
+    if (result.status === 200) {
+      etag = headers.get("ETag");
+      apply(result.text);
+      post({ type: "fragment", html: result.text, etag, serverTime });
+    } else {
+      post({ type: "fresh", etag, serverTime });
+    }
+  } else if (result.status === 401) {
+    stopped = true;  // signed out: not "connection lost"
+    window.dispatchEvent(new CustomEvent("hamada:signed-out"));
+    return;
+  } else if (result.status === 409 && result.data.error && result.data.error.code === "clinic_changed") {
+    window.location.reload();
+    return;
+  } else if (result.status === 403) {
+    stopped = true;
+    alertMessage(errorMessage(result, t("failed")));
+    return;
+  } else if (wokeUp) {
+    wokeUp = false;
+  } else {
+    failures += 1;
+  }
+  showFreshness();
+  schedule();
+}
+
+function good(time) {
+  lastGood = Date.now();
+  if (time) serverTime = time;
+  showFreshness();
+}
+
+function showFreshness() {
+  const stale = Date.now() - lastGood > 2 * intervalMs() + 2000;
+  card.classList.toggle("stale", stale);
+  freshness.classList.toggle("stale", stale);
+  tryNow.hidden = !stale;
+  const parts = clockParts(serverTime);
+  const time = parts ? `${parts.time} ${parts.pm ? t("pm") : t("am")}` : "";
+  freshText.textContent = stale ? t("stale", { time }) : t("updated", { time });
+}
+setInterval(showFreshness, 5000);
+tryNow.addEventListener("click", () => { failures = 0; retryAfter = 0; refreshNow(); });
+
+for (const name of ["online", "focus", "pageshow"]) window.addEventListener(name, () => refreshNow());
+document.addEventListener("visibilitychange", () => {
+  if (visibleNow()) { post({ type: "visible" }); refreshNow(); }
+});
+// A visible tab that doesn't poll tells the polling tab it is being looked at, once per interval.
+(function lookingPing() {
+  if (visibleNow() && !leader) post({ type: "visible" });
+  setTimeout(lookingPing, pollAfter * 1000);
+}());
+
+// A new release: reload at a quiet moment, never with a dialog open or a save pending (design 7.1).
+function checkVersion(version) {
+  if (version && meta.dataset.appVersion && version !== meta.dataset.appVersion) reloadWanted = true;
+  if (reloadWanted && quiet()) window.location.reload();
+}
+const quiet = () => !document.querySelector("dialog[open]") && !acting.size && !pendingList().length && !hot();
+
+// --- applying a fragment without moving rows under the finger (design 7.4) ---
+
+let lastActivity = 0;
+let lastPointer = "mouse";
+let deferred = null;
+let deferredSince = 0;
+for (const name of ["pointermove", "pointerdown", "wheel", "keydown", "touchstart"]) {
+  card.addEventListener(name, (event) => {
+    lastActivity = Date.now();
+    if (event.pointerType) lastPointer = event.pointerType;
+    if (name === "touchstart") lastPointer = "touch";
+  }, { passive: true });
+}
+window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
+card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
+card.addEventListener("focusout", () => setTimeout(flushHeld, 0));
+card.addEventListener("toggle", (event) => { if (!event.target.open) setTimeout(flushHeld, 0); }, true);
+
+function hot() {
+  const window_ = lastPointer === "mouse" ? 1500 : 2500;
+  return Date.now() - lastActivity < window_;
+}
+
+function held(row) {
+  if (acting.has(`${row.dataset.id}:busy`)) return true;
+  if (row.querySelector("details[open]")) return true;
+  if (row.querySelector(":focus-visible")) return true;
+  return lastPointer === "mouse" && row.matches(":hover");
+}
+
+function flushDeferred() {
+  if (deferred && !hot()) { const html = deferred; deferred = null; apply(html); }
+}
+setInterval(flushDeferred, 700);
+
+function flushHeld() {
+  for (const [id, html] of heldRows) {
+    const row = list.querySelector(`.appt[data-id="${id}"]`);
+    if (!row) { heldRows.delete(id); continue; }
+    if (held(row)) continue;
+    heldRows.delete(id);
+    replaceRow(row, html);
+  }
+  stats();
+}
+
+function replaceRow(row, html) {
+  const fresh = parseFragment(html).firstElementChild;
+  const focusedAct = row.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.act : null;
+  row.replaceWith(fresh);
+  rowHtml.set(fresh.dataset.id, html);
+  markActing(fresh);
+  applyFilters(fresh);
+  if (focusedAct) {
+    const again = fresh.querySelector(`[data-act="${focusedAct}"]`) || fresh.querySelector("a, button");
+    if (again) again.focus({ preventScroll: true });
+  }
+  return fresh;
+}
+
+function apply(html) {
+  if (hot() && !(deferredSince && Date.now() - deferredSince > 10000)) {
+    if (!deferred) deferredSince = Date.now();
+    deferred = html;
+    return;
+  }
+  deferred = null;
+  deferredSince = 0;
+  const root = parseFragment(html).querySelector("[data-queue]");
+  if (!root) return;
+  for (const name of ["doctors", "activity", "money", "truncated"]) {
+    const fresh = root.querySelector(`[data-slot="${name}"]`);
+    const live = document.querySelector(`[data-slot="${name}"]`);
+    if (!fresh || !live || live.dataset.html === fresh.innerHTML) continue;
+    if (live.contains(document.activeElement) && name === "doctors") continue;  // keep the chip under focus
+    live.dataset.html = fresh.innerHTML;
+    live.replaceChildren(...fresh.childNodes);
+  }
+  patchGroups(root.querySelector('[data-slot="groups"]'));
+  card.dataset.version = root.dataset.version;
+  applyFilters();
+  stats();
+}
+
+function patchGroups(fresh) {
+  const freshGroups = [...fresh.querySelectorAll(":scope > .queue-group")];
+  const liveGroups = [...list.querySelectorAll(":scope > .queue-group")];
+  if (!freshGroups.length || !liveGroups.length) {  // an empty day, or the first doctor's sessions
+    if ([...list.querySelectorAll(".appt")].some(held)) return;
+    list.replaceChildren(...fresh.childNodes);
+    rememberRows();
+    return;
+  }
+  const keep = new Set(freshGroups.map((g) => g.dataset.doctor));
+  for (const group of liveGroups) {
+    if (!keep.has(group.dataset.doctor) && ![...group.querySelectorAll(".appt")].some(held)) group.remove();
+  }
+  list.querySelectorAll(":scope > .empty-note").forEach((note) => note.remove());
+  let prev = null;
+  for (const freshGroup of freshGroups) {
+    let group = list.querySelector(`:scope > .queue-group[data-doctor="${freshGroup.dataset.doctor}"]`);
+    if (!group) {
+      group = freshGroup;
+      if (prev) prev.after(group); else list.prepend(group);
+      group.querySelectorAll(".appt").forEach((row) => rowHtml.set(row.dataset.id, row.outerHTML));
+    } else {
+      const head = group.querySelector("[data-head]");
+      const freshHead = freshGroup.querySelector("[data-head]");
+      if (head.outerHTML !== freshHead.outerHTML) head.replaceWith(freshHead);
+      patchRows(group.querySelector(".rows"), freshGroup.querySelector(".rows"));
+      group.querySelector("[data-empty]").hidden = freshGroup.querySelector("[data-empty]").hidden;
+      if ((prev ? prev.nextElementSibling : list.firstElementChild) !== group) {
+        if (prev) prev.after(group); else list.prepend(group);
+      }
+    }
+    prev = group;
+  }
+}
+
+function patchRows(rows, freshRows) {
+  const fresh = [...freshRows.children];
+  const ids = new Set(fresh.map((row) => row.dataset.id));
+  for (const row of [...rows.children]) {
+    if (ids.has(row.dataset.id)) continue;
+    if (held(row)) row.classList.add("gone");
+    else { row.remove(); rowHtml.delete(row.dataset.id); heldRows.delete(row.dataset.id); }
+  }
+  let prev = null;
+  for (const freshRow of fresh) {
+    const id = freshRow.dataset.id;
+    const html = freshRow.outerHTML;
+    let row = rows.querySelector(`:scope > .appt[data-id="${id}"]`);
+    if (!row) {
+      const elsewhere = list.querySelector(`.appt[data-id="${id}"]`);  // moved to another doctor
+      if (elsewhere && !held(elsewhere)) elsewhere.remove();
+      row = freshRow;
+      if (prev) prev.after(row); else rows.prepend(row);
+      rowHtml.set(id, html);
+      markActing(row);
+    } else if (rowHtml.get(id) !== html) {
+      if (held(row)) heldRows.set(id, html);
+      else row = replaceRow(row, html);
+    }
+    if (!held(row) && (prev ? prev.nextElementSibling : rows.firstElementChild) !== row) {
+      if (prev) prev.after(row); else rows.prepend(row);
+    }
+    prev = row;
+  }
+}
+
+function rememberRows() {
+  list.querySelectorAll(".appt").forEach((row) => { rowHtml.set(row.dataset.id, row.outerHTML); markActing(row); });
+}
+
+// --- filters by doctor and by section (design D3), and the counts ---
+
+const filterKey = `hamada.today.filter.${membership()}`;
+let filter = { doctor: "", section: "" };
+try { filter = { ...filter, ...JSON.parse(localStorage.getItem(filterKey) || "{}") }; } catch (e) { /* none */ }
+if (!localStorage.getItem(filterKey) && config.me.role === "doctor" && list.querySelector(`.queue-group[data-doctor="${config.me.membership_id}"]`)) {
+  filter.doctor = String(config.me.membership_id);  // a doctor opens on their own queue
+}
+
+function applyFilters(only) {
+  const groups = only ? [] : list.querySelectorAll(":scope > .queue-group");
+  if (filter.doctor && !list.querySelector(`.queue-group[data-doctor="${filter.doctor}"]`)) filter.doctor = "";
+  (only ? [only] : list.querySelectorAll(".appt")).forEach((row) => {
+    row.hidden = Boolean(filter.section) && Boolean(row.dataset.section) && row.dataset.section !== filter.section;
+  });
+  // A doctor's group shows when it matches the doctor filter and, in a center, works in the chosen section.
+  groups.forEach((group) => {
+    const inSection = !filter.section || (group.dataset.sections || "").split(",").includes(filter.section)
+      || Boolean(group.querySelector(".appt:not([hidden])"));
+    group.hidden = (Boolean(filter.doctor) && group.dataset.doctor !== filter.doctor) || !inSection;
+  });
+  document.querySelectorAll("[data-filter-doctor]").forEach((chip) => {
+    const group = chip.dataset.filterDoctor && list.querySelector(`.queue-group[data-doctor="${chip.dataset.filterDoctor}"]`);
+    chip.hidden = Boolean(filter.section && group && !(group.dataset.sections || "").split(",").includes(filter.section));
+  });
+  document.querySelectorAll("[data-filter-doctor]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filterDoctor === filter.doctor)));
+  document.querySelectorAll("[data-filter-section]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filterSection === filter.section)));
+}
+
+document.addEventListener("click", (event) => {
+  const doctor = event.target.closest("[data-filter-doctor]");
+  const section = event.target.closest("[data-filter-section]");
+  if (!doctor && !section) return;
+  if (doctor) filter.doctor = doctor.dataset.filterDoctor;
+  if (section) filter.section = section.dataset.filterSection;
+  try { localStorage.setItem(filterKey, JSON.stringify(filter)); } catch (e) { /* none */ }
+  applyFilters();
+  stats();
+});
+
+function stats() {
+  const counts = { total: 0, waiting: 0, in_room: 0, done: 0 };
+  list.querySelectorAll(".queue-group:not([hidden]) .appt:not([hidden]):not(.gone)").forEach((row) => {
+    const status = row.dataset.status;
+    if (status !== "cancelled") counts.total += 1;
+    if (status in counts) counts[status] += 1;
+  });
+  for (const [key, value] of Object.entries(counts)) document.querySelector(`[data-stat="${key}"]`).textContent = localDigits(value);
+}
+
+// --- row actions: one tap, one request, one key; a double tap does nothing ---
+
+const visitDialogs = initVisitDialogs({ onChanged: changed });
+const pay = initPay({ onChanged: changed });
+const book = initBook({
+  onBooked: changed,
+  defaults: () => ({ doctorId: filter.doctor || "", sectionId: filter.section || "" }),
+});
+
+function changed() { refreshNow(); post({ type: "poll-now" }); }
+
+function visitOf(row) {
+  const name = row.dataset.name;
+  const service = row.querySelector(".what bdi");
+  return {
+    id: Number(row.dataset.id), status: row.dataset.status, name, due: Number(row.dataset.due), fee: Number(row.dataset.fee),
+    invoiceId: row.dataset.invoice ? Number(row.dataset.invoice) : null, doctorId: Number(row.dataset.doctor),
+    day: row.dataset.day, service: service ? service.textContent : "",
+  };
+}
+
+function markActing(row) {
+  const busy = [...acting.keys()].some((key) => key.startsWith(`${row.dataset.id}:`));
+  row.classList.toggle("saving", busy);
+  row.querySelectorAll("[data-act]").forEach((b) => { if (busy) b.disabled = true; });
+}
+
+const MESSAGES = {
+  arrive: "arrived", call: "called", finish: "finished", "undo-arrive": "undone_arrive", "undo-call": "undone_call",
+};
+const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"] };
+
+async function quick(id, action, status, name) {
+  const key = `${id}:${action}`;
+  if (acting.has(key)) return;
+  acting.set(key, true);
+  acting.set(`${id}:busy`, true);
+  const row = list.querySelector(`.appt[data-id="${id}"]`);
+  if (row) markActing(row);
+  const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status }, { label: `${t(MESSAGES[action], { name })}` });
+  acting.delete(key);
+  acting.delete(`${id}:busy`);
+  const now = list.querySelector(`.appt[data-id="${id}"]`);
+  if (now) { now.classList.remove("saving"); now.querySelectorAll("[data-act]").forEach((b) => { b.disabled = false; }); }
+  if (!result.settled) { renderPending(); return; }
+  if (isOk(result)) {
+    const undo = UNDO[action];
+    const canUndo = undo && card.dataset[undo[0] === "undo-arrive" ? "undoArrive" : "undoCall"] === "1";
+    toast(t(MESSAGES[action], { name }), canUndo ? { label: t("undo"), onClick: () => quick(id, undo[0], undo[1], name) } : null);
+  } else {
+    alertMessage(errorMessage(result, t("failed")));
+  }
+  changed();
+}
+
+card.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-act]");
+  if (!button || button.disabled) return;
+  const row = button.closest(".appt");
+  const menu = button.closest("details");
+  if (menu) menu.open = false;
+  const v = visitOf(row);
+  switch (button.dataset.act) {
+    case "arrive": case "call": case "undo-arrive": case "undo-call":
+      quick(v.id, button.dataset.act, v.status, v.name);
+      break;
+    case "finish":
+      if (config.perms.collect && v.due > 0) visitDialogs.finish(v, button);
+      else quick(v.id, "finish", v.status, v.name);
+      break;
+    case "pay": case "invoice":
+      if (pay) pay.open(v);
+      break;
+    case "receipt":
+      if (v.invoiceId) window.open(receiptUrl(v.invoiceId), "_blank");
+      break;
+    case "reschedule": visitDialogs.move(v, button); break;
+    case "cancel": visitDialogs.cancel(v, button); break;
+    default: break;
+  }
+});
+
+// --- requests whose outcome is unknown: "try again" or "discard" only (design 7.4) ---
+
+function renderPending() {
+  const items = pendingList();
+  pendingBar.hidden = !items.length;
+  pendingBar.replaceChildren(...items.map((p) => {
+    const box = el("div", "notice pending-item");
+    box.append(el("span", null, t("not_confirmed", { what: p.label || "" })));
+    const actions = el("span", "appt-actions");
+    const again = el("button", "btn", t("try_again"));
+    again.type = "button";
+    again.addEventListener("click", async () => {
+      again.disabled = true;
+      const result = await retryPending(p.key);
+      if (result && result.settled && !isOk(result)) alertMessage(errorMessage(result, t("failed")));
+      renderPending();
+      changed();
+    });
+    const drop = el("button", "btn ghost", t("discard"));
+    drop.type = "button";
+    drop.addEventListener("click", () => { discardPending(p.key); renderPending(); alertMessage(t("check_record")); });
+    actions.append(again, drop);
+    box.append(actions);
+    return box;
+  }));
+}
+
+// --- quick booking from the card, and "/" for search (design 7.6) ---
+
+const quickForm = document.querySelector("[data-quick-book]");
+if (quickForm && book) {
+  quickForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    book.open({ query: quickForm.elements.namedItem("q").value.trim() });
+    quickForm.reset();
+  });
+}
+
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest("[data-open-book]");
+  if (opener && book) book.open({ opener });
+});
+
+// --- start ---
+
+document.querySelectorAll("[data-slot]").forEach((slot) => { if (slot.dataset.slot !== "groups") slot.dataset.html = slot.innerHTML; });
+rememberRows();
+applyFilters();
+stats();
+renderPending();
+showFreshness();
+window.addEventListener("hamada:pending-settled", () => { renderPending(); changed(); });

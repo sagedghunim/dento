@@ -33,6 +33,9 @@ class Appointment(models.Model):
                                related_name="+")
     service = models.ForeignKey("clinics.Service", on_delete=models.PROTECT, db_constraint=False, db_index=False,
                                 related_name="+")
+    # Copied from the service at booking (design D1). Today filters by it in memory: no index needed.
+    section = models.ForeignKey("clinics.Section", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                related_name="+")
     day = models.DateField()  # the business day (core.days.business_day)
     queue_no = models.IntegerField()
     starts_at = models.DateTimeField(null=True, blank=True)  # slot bookings only
@@ -94,6 +97,8 @@ class Appointment(models.Model):
                                 name="appointment_doctor_fk"),
             CompositeForeignKey(fields=["clinic", "service"], to="clinics.Service", to_fields=["clinic", "id"],
                                 name="appointment_service_fk"),
+            CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
+                                name="appointment_section_fk"),
         ]
         indexes = [
             models.Index("clinic", "patient", F("day").desc(), F("id").desc(), name="appointment_patient_hist"),

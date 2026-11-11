@@ -21,6 +21,7 @@ from urllib.parse import quote
 from django.conf import settings
 from django.db import OperationalError, connections, transaction
 from django.http import HttpResponseNotModified, JsonResponse
+from django.http.response import HttpResponseBase
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext as _
 from psycopg import errors as pg_errors
@@ -80,6 +81,8 @@ def _request_key(request):
 
 
 def _respond(request, result, key=None):
+    if isinstance(result, HttpResponseBase):
+        return result  # already answered, e.g. by keyed_public_call
     if not isinstance(result, Result):
         result = Result(result or {})
     if result.status == 304:
@@ -207,12 +210,15 @@ def _db_error(error):
     return None
 
 
-def api(method="GET", perm=None, access=None, member=True, key=True, allow_password_change=False, replay=None):
+def api(method="GET", perm=None, access=None, member=True, key=True, allow_password_change=False, replay=None,
+        headers=None):
     """Declare a JSON endpoint: its method, permission codes and whether it returns clinical data.
 
     member=True views are called as view(request, ctx, data, ...); member=False views
     (accounts, the clinic picker) as view(request, data, ...). `access` names the
     access-log action the view records (a test checks every clinical view declares it).
+    `headers` is a callable returning headers for every answer, refusals included (Today's
+    Poll-After, design 5.11); a successful answer's own headers take precedence.
     """
     codes = (perm,) if isinstance(perm, str) else tuple(perm or ())
     needs_key = key and method in MUTATING
@@ -228,15 +234,22 @@ def api(method="GET", perm=None, access=None, member=True, key=True, allow_passw
                     raise ApiError("method_not_allowed", _("This method isn't allowed here."), 405)
                 data = _json_body(request) if method in MUTATING else {}
                 if not member:
-                    return _account_call(request, view, data, args, kwargs, endpoint, needs_key, allow_password_change, replay)
-                user = _require_user(request, allow_password_change)
-                clinic_id, membership_id, alias = _active_scope(request)
-                if request.headers.get("X-Membership") != str(membership_id):
-                    raise ApiError("clinic_changed", _("Another tab switched clinic. Reloading."), 409)
-                return _clinic_call(request, user, alias, clinic_id, membership_id, view, data, args, kwargs,
-                                    codes, endpoint, needs_key, replay)
+                    response = _account_call(request, view, data, args, kwargs, endpoint, needs_key,
+                                             allow_password_change, replay)
+                else:
+                    user = _require_user(request, allow_password_change)
+                    clinic_id, membership_id, alias = _active_scope(request)
+                    if request.headers.get("X-Membership") != str(membership_id):
+                        raise ApiError("clinic_changed", _("Another tab switched clinic. Reloading."), 409)
+                    response = _clinic_call(request, user, alias, clinic_id, membership_id, view, data, args, kwargs,
+                                            codes, endpoint, needs_key, replay)
             except ApiError as error:
-                return _error_response(request, error)
+                response = _error_response(request, error)
+            if headers is not None:
+                for name, value in headers().items():
+                    if name not in response:
+                        response[name] = value
+            return response
 
         inner.api_meta = {"method": method, "perm": codes, "access": access, "member": member, "key": needs_key}
         return inner
@@ -290,6 +303,29 @@ def _account_call(request, view, data, args, kwargs, endpoint, needs_key, allow_
             _record("default", "accounts_request_key", "user_id", user.id, key, result)
         return _respond(request, result, key)
     return _respond(request, view(request, data, *args, **kwargs))
+
+
+# Request keys of public endpoints (sign-up) belong to no account yet; random UUIDs keep them apart.
+PUBLIC_KEY_SCOPE = 0
+
+
+def keyed_public_call(request, endpoint, data, work, replay, hash_data=None):
+    """A public mutating action with a request key (design D2): claim, work and record in one directory transaction.
+
+    `work()` returns a Result naming its target; `replay(request, stored)` rebuilds the first answer.
+    `hash_data` replaces `data` in the request hash (sign-up keys a password's HMAC, never the password).
+    Any refusal rolls back the claim with the work, so the same key may run again.
+    """
+    key = _request_key(request)
+    digest = request_hash(request, data if hash_data is None else hash_data)
+    with transaction.atomic(using="default"):
+        stored = _claim("default", "accounts_request_key", "user_id", PUBLIC_KEY_SCOPE, "", None, key, endpoint, digest)
+        if stored is not None:
+            result = _replayed(request, stored, replay)
+        else:
+            result = work()
+            _record("default", "accounts_request_key", "user_id", PUBLIC_KEY_SCOPE, key, result)
+    return _respond(request, result, key)
 
 
 def page(perm=None, member=True, allow_password_change=False, template_403="web/forbidden.html"):

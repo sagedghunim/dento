@@ -10,15 +10,25 @@ from core.constraints import CompositeForeignKey
 
 
 class Clinic(models.Model):
-    """One row per clinic on the shard that holds it. The id comes from the directory."""
+    """One row per place on the shard that holds it. The id comes from the directory.
+
+    A place is a clinic (one section) or a medical center (several sections, design D1). Patients,
+    the front desk, money and the team are shared across the place; each section has its own
+    specialty, services, prices and doctors' sessions.
+    """
 
     class Status(models.TextChoices):
         ACTIVE = "active"
         SUSPENDED = "suspended"
 
+    class Kind(models.TextChoices):
+        CLINIC = "clinic"
+        CENTER = "center"
+
     id = models.BigIntegerField(primary_key=True)
     # False on a shard the clinic has moved away from: requests are refused and routed again (design 3.3).
     owned = models.BooleanField(default=True)
+    kind = models.CharField(max_length=6, choices=Kind.choices, default=Kind.CLINIC)
     name = models.CharField(max_length=120)
     city = models.CharField(max_length=60, blank=True, default="")
     address = models.CharField(max_length=200, blank=True, default="")
@@ -26,17 +36,43 @@ class Clinic(models.Model):
     timezone = models.CharField(max_length=60, default="Africa/Cairo")
     # A time before this belongs to the previous business day (design 4.0).
     day_ends_at = models.TimeField(default=dt.time(4, 0))
-    specialty_code = models.CharField(max_length=30)
+    specialty_code = models.CharField(max_length=30)  # the main specialty: the first section's
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
     settings = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "clinics_clinic"
-        constraints = [models.CheckConstraint(condition=Q(status__in=["active", "suspended"]), name="clinic_status_valid")]
+        constraints = [
+            models.CheckConstraint(condition=Q(status__in=["active", "suspended"]), name="clinic_status_valid"),
+            models.CheckConstraint(condition=Q(kind__in=["clinic", "center"]), name="clinic_kind_valid"),
+        ]
 
     def __str__(self):
         return self.name
+
+
+class Section(models.Model):
+    """A section of a place, with its own specialty (design D1). Every place has at least one.
+
+    A clinic has exactly one, named after its specialty; screens hide sections when there is only
+    one. A doctor's sections are the sections of their sessions: there is no doctor-section table.
+    Sections are deactivated, never deleted.
+    """
+
+    clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, db_index=False, related_name="+")
+    name = models.CharField(max_length=120)
+    specialty_code = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=True)
+    sort = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "clinics_section"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="section_clinic_id_uniq"),
+            models.UniqueConstraint(fields=["clinic", "name"], condition=Q(is_active=True), name="section_active_name_uniq"),
+        ]
 
 
 class Membership(models.Model):
@@ -78,6 +114,7 @@ class Service(models.Model):
         PROCEDURE = "procedure"
 
     clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, db_index=False, related_name="+")
+    section = models.ForeignKey(Section, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
     name = models.CharField(max_length=120)
     kind = models.CharField(max_length=12, choices=Kind.choices)
     price = models.BigIntegerField(default=0)
@@ -92,11 +129,14 @@ class Service(models.Model):
         db_table = "clinics_service"
         constraints = [
             models.UniqueConstraint(fields=["clinic", "id"], name="service_clinic_id_uniq"),
-            models.UniqueConstraint(fields=["clinic", "name"], name="service_name_uniq"),
+            # Each section of a center has its own "Consultation".
+            models.UniqueConstraint(fields=["clinic", "section", "name"], name="service_section_name_uniq"),
             models.CheckConstraint(condition=Q(kind__in=["consultation", "follow_up", "procedure"]), name="service_kind_valid"),
             models.CheckConstraint(condition=Q(price__gte=0), name="service_price_not_negative"),
             CompositeForeignKey(fields=["clinic", "follow_up_service"], to="clinics.Service",
                                 to_fields=["clinic", "id"], name="service_follow_up_fk"),
+            CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
+                                name="service_section_fk"),
         ]
 
 
@@ -107,6 +147,8 @@ class Schedule(models.Model):
 
     clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, db_index=False, db_constraint=False, related_name="+")
     doctor = models.ForeignKey(Membership, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
+    # A session belongs to one section; a doctor's sections are the sections of their sessions (design D1).
+    section = models.ForeignKey(Section, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
     weekday = models.PositiveSmallIntegerField()  # Monday is 0, as in Python
     starts = models.TimeField()
     ends = models.TimeField()
@@ -128,6 +170,8 @@ class Schedule(models.Model):
             ),
             CompositeForeignKey(fields=["clinic", "doctor"], to="clinics.Membership", to_fields=["clinic", "id"],
                                 name="schedule_doctor_fk"),
+            CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
+                                name="schedule_section_fk"),
         ]
 
 

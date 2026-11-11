@@ -8,6 +8,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
+from audit.services import record_change
 from billing import services as billing
 from clinics.services import take_numbers
 from core import sql
@@ -26,6 +27,11 @@ TRANSITIONS = {
     "call": ("waiting", "in_room", "called_at"),
     "finish": ("in_room", "done", "finished_at"),
     "cancel": ("booked", "cancelled", "cancelled_at"),
+}
+# Undo on the desk (design D4, requirements 7.8): only from the status right after the step, clearing its time.
+UNDO = {
+    "undo_arrive": ("waiting", "booked", "arrived_at"),
+    "undo_call": ("in_room", "waiting", "called_at"),
 }
 
 
@@ -61,7 +67,8 @@ def book(ctx, request):
             raise _not_today()
 
     doctor, service = rules.doctor_day_and_service(ctx, request["doctor_id"], request["service_id"], day)
-    starts_at, ends_at = rules.resolve_slot(clinic, day, doctor, request["starts_at"])
+    # The section comes from the service; the doctor must have a session in it that day (design D1).
+    starts_at, ends_at = rules.resolve_slot(clinic, day, doctor, request["starts_at"], service.section_id)
     is_extra = bool(request["extra"] and starts_at is not None)
 
     if request["patient_id"] is not None:
@@ -96,7 +103,8 @@ def book(ctx, request):
     try:
         appointment = Appointment.objects.create(
             clinic_id=ctx.clinic_id, patient_id=patient["id"], doctor_id=doctor.doctor_id, service_id=service.id,
-            day=day, queue_no=queue_no, starts_at=starts_at, ends_at=ends_at, is_extra=is_extra,
+            section_id=service.section_id, day=day, queue_no=queue_no, starts_at=starts_at, ends_at=ends_at,
+            is_extra=is_extra,
             status="waiting" if request["arrive"] else "booked", source=request["source"], fee=fee,
             is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"],
             arrived_at=now if request["arrive"] else None, created_at=now, created_by_id=ctx.membership_id,
@@ -124,6 +132,7 @@ def book(ctx, request):
         "called_at": None, "finished_at": None, "cancelled_at": None, "cancel_reason": "", "doctor_id": doctor.doctor_id,
         "patient_id": patient["id"], "patient_name": patient["full_name"], "patient_phone": patient["phone"],
         "patient_file_no": patient["file_no"], "service_id": service.id, "service_name": service.name,
+        "section_id": service.section_id,
         "invoice_id": invoice["id"] if invoice else None, "invoice_number": invoice["number"] if invoice else None,
         "invoice_total": invoice["total"] if invoice else None, "invoice_paid": invoice["paid"] if invoice else None,
     })
@@ -182,6 +191,30 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None)
     return deltas.write_clinics(ctx)[day]
 
 
+def undo(ctx, appointment_id, action, seen):
+    """undo_arrive (waiting -> booked) and undo_call (in_room -> waiting), design D4.
+
+    One conditional UPDATE decides, so an undo racing a call or a finish takes effect only if it
+    gets there first; the loser sees 409 status_changed. The turn number stays. Only Today's version
+    changes (design 5.3: arrive, undo and call change no counter). Each undo goes to the change log.
+    Returns the version of the appointment's day, or None for a harmless repeat.
+    """
+    source, target, column = UNDO[action]
+    if seen != source:
+        raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
+                       fields={"status": "invalid"})
+    changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = %s, {column} = NULL, updated_at = %s, '
+                           "updated_by_id = %s WHERE clinic_id = %s AND id = %s AND status = %s "
+                           f"RETURNING day, OLD.{column}",
+                      [target, timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, source])
+    if changed is None:
+        return _unchanged(ctx, appointment_id, action, target, None)
+    day, undone_at = changed
+    record_change(ctx, f"appointment.{action}", "appointment", appointment_id,
+                  before={"status": source, column: undone_at.isoformat()}, after={"status": target, column: None})
+    return Deltas().clinic_day(day).write_clinics(ctx)[day]
+
+
 def _unchanged(ctx, appointment_id, action, target, today):
     current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list("status", "day").first()
     if current is None:
@@ -227,16 +260,17 @@ def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
     clinic = ctx.clinic
-    current = sql.row(ctx, 'SELECT status, day, doctor_id, starts_at, is_extra, queue_no FROM "scheduling_appointment" '
-                           "WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE", [ctx.clinic_id, appointment_id])
+    current = sql.row(ctx, 'SELECT status, day, doctor_id, starts_at, is_extra, queue_no, section_id '
+                           'FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+                      [ctx.clinic_id, appointment_id])
     if current is None:
         raise rules.not_found("appointment")
-    status, old_day, old_doctor, old_starts, old_extra, queue_no = current
+    status, old_day, old_doctor, old_starts, old_extra, queue_no, section_id = current
     if status != "booked":
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
     rules.check_day(clinic, day)
     doctor = rules.doctor_day(ctx, doctor_id, day)
-    new_starts, new_ends = rules.resolve_slot(clinic, day, doctor, starts_at)
+    new_starts, new_ends = rules.resolve_slot(clinic, day, doctor, starts_at, section_id)  # the visit keeps its section
     is_extra = bool(extra and new_starts is not None)
     if (doctor_id, day, new_starts, is_extra) == (old_doctor, old_day, old_starts, old_extra):
         return None

@@ -11,7 +11,7 @@ from core.errors import ApiError
 from core.routing import clinic_transaction
 from core.text import is_valid_phone, normalize_phone
 
-from .flows import create_account, create_clinic
+from .flows import clean_sections, create_account, create_clinic
 from .models import DirectoryClinic, UserClinic
 
 
@@ -41,14 +41,19 @@ def clinic_rows(limit=100, after=None):
     for clinic_id, is_active in UserClinic.objects.filter(clinic_id__in=[r.id for r in rows[:limit]]).values_list("clinic_id", "is_active"):
         if is_active:
             members[clinic_id] = members.get(clinic_id, 0) + 1
-    items = [{"id": r.id, "name": r.name, "shard": r.shard, "status": r.status, "members": members.get(r.id, 0),
+    items = [{"id": r.id, "name": r.name, "kind": r.kind, "shard": r.shard, "status": r.status,
+              "members": members.get(r.id, 0),
               "created_at": r.created_at.isoformat(timespec="seconds")} for r in rows[:limit]]
     return {"items": items, "next": str(rows[limit - 1].id) if len(rows) > limit else None}
 
 
-def create(name, specialty, city, owner_username, owner_name, owner_phone, language):
-    if specialty not in SPECIALTIES:
-        raise ApiError("invalid", _("Pick a specialty from the list."), fields={"specialty": "choice"})
+def create(name, specialty, city, owner_username, owner_name, owner_phone, language, kind="clinic", sections=None):
+    """A place with its owner: a clinic with one specialty, or a center with `sections` (design D1, D2)."""
+    if sections is None:
+        if specialty not in SPECIALTIES:
+            raise ApiError("invalid", _("Pick a specialty from the list."), fields={"specialty": "choice"})
+        sections = [{"specialty": specialty}]
+    sections = clean_sections(kind, sections, language)
     phone = normalize_phone(owner_phone) if owner_phone else None
     if phone and not is_valid_phone(phone):
         raise ApiError("invalid", _("Enter a valid mobile number."), fields={"owner_phone": "phone"})
@@ -57,7 +62,8 @@ def create(name, specialty, city, owner_username, owner_name, owner_phone, langu
     with transaction.atomic(using="default"):
         owner = create_account(owner_username, owner_name, phone=phone, language=language)
         temporary = _temporary_password(owner)
-    entry = create_clinic(name=name, specialty_code=specialty, owner=owner, city=city, language=language)
+    entry = create_clinic(name=name, owner=owner, kind=kind, sections=sections, city=city, language=language,
+                          default_session=True)
     return entry, owner, temporary
 
 

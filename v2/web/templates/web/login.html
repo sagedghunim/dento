@@ -1,13 +1,13 @@
 {% extends "web/base.html" %}{% load i18n static %}
 {% block title %}{% translate "Sign in" %}{% endblock %}
 {% block body_class %}centered{% endblock %}
-{% block shell %}{% endblock %}
+{% block plainbar %}{% endblock %}
 {% block content %}
 <section class="card narrow" aria-labelledby="signin-title">
   <h1 id="signin-title">{% translate "Hamada" %}</h1>
   <p class="muted">{% translate "Sign in to your clinic" %}</p>
 
-  <form id="password-form" class="stack" data-next="{{ next }}" {% if step == "code" %}hidden{% endif %}>
+  <form id="password-form" class="stack-form" data-next="{{ next }}" {% if step == "code" %}hidden{% endif %}>
     <label class="field">{% translate "Username or mobile number" %}
       <input name="username" autocomplete="username" required dir="auto" autofocus>
     </label>
@@ -18,13 +18,14 @@
     <p class="form-error" data-error></p>
   </form>
 
-  <form id="code-form" class="stack" data-next="{{ next }}" {% if step != "code" %}hidden{% endif %}>
+  <form id="code-form" class="stack-form" data-next="{{ next }}" {% if step != "code" %}hidden{% endif %}>
     <label class="field">{% translate "Code from your authenticator app, or a recovery code" %}
       <input name="code" inputmode="numeric" autocomplete="one-time-code" dir="ltr" required maxlength="11">
     </label>
     <button class="btn" type="submit">{% translate "Continue" %}</button>
     <p class="form-error" data-error></p>
   </form>
+  <p class="signup-link">{% translate "New clinic or center?" %} <a href="/signup">{% translate "Sign up now" %}</a></p>
 </section>
 {% endblock %}
 {% block scripts %}<script type="module" src="{% static 'js/login.js' %}"></script>{% endblock %}

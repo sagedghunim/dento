@@ -72,10 +72,14 @@ class ShardTestCase(TestCase):
             enable_totp(user)
         return user
 
-    def clinic(self, prefix, shard="shard_1", specialty="dental"):
-        """A clinic with an owner (two-step sign-in on), a doctor and an assistant."""
+    def clinic(self, prefix, shard="shard_1", specialty="dental", sections=None):
+        """A clinic with an owner (two-step sign-in on), a doctor and an assistant.
+
+        With `sections` ([{"specialty": ..., "name": ...}, ...]) it is a center with those sections.
+        """
         owner = self.user(f"{prefix}_owner", with_totp=True)
-        entry = create_clinic(name=f"{prefix} clinic", specialty_code=specialty, owner=owner, shard=shard)
+        entry = create_clinic(name=f"{prefix} clinic", specialty_code=specialty, owner=owner, shard=shard,
+                              kind="center" if sections else "clinic", sections=sections)
         doctor = self.user(f"{prefix}_doctor")
         assistant = self.user(f"{prefix}_assistant")
         from clinics.models import Membership

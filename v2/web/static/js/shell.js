@@ -1,16 +1,30 @@
-// Shared page behaviour: sign-out, the language switch, toasts, and a lost save from before a reload.
+// Shared page behaviour: sign-out, the language switch, toasts, menus, "/" for search, and saves whose
+// answers were lost before a reload.
 import { clearPending, newKey, save, send, settlePending } from "./api.js";
 
 const toastEl = document.getElementById("toast");
 const alertEl = document.getElementById("alert");
+const ar = () => document.documentElement.lang === "ar";
 let toastTimer;
 
-export function toast(text) {
+// toast("Called in: Mona", {label: "Undo", onClick}) or {label, href}. Results go to a polite live region.
+export function toast(text, action) {
   if (!toastEl) return;
-  toastEl.textContent = text;
+  toastEl.querySelector("[data-text]").textContent = text;
+  const button = toastEl.querySelector("[data-toast-action]");
+  button.hidden = !action;
+  button.onclick = null;
+  if (action) {
+    button.textContent = action.label;
+    button.onclick = () => {
+      toastEl.classList.remove("show");
+      if (action.href) window.open(action.href, "_blank");
+      if (action.onClick) action.onClick();
+    };
+  }
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4000);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), action ? 8000 : 4000);
 }
 
 // Errors stay until dismissed (design 7.6).
@@ -22,6 +36,8 @@ export function alertMessage(text) {
 if (alertEl) alertEl.addEventListener("click", () => alertMessage(""));
 
 document.addEventListener("click", async (event) => {
+  // A menu closes when the person taps elsewhere.
+  document.querySelectorAll("details.menu[open]").forEach((menu) => { if (!menu.contains(event.target)) menu.open = false; });
   const button = event.target.closest("[data-action]");
   if (!button) return;
   if (button.dataset.action === "logout") {
@@ -38,6 +54,17 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") document.querySelectorAll("details.menu[open]").forEach((menu) => { menu.open = false; });
+  // "/" focuses search. Checked by key position: on the Arabic layout that key types ظ (design 7.6).
+  if (event.code === "Slash" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const target = event.target;
+    if (target.closest("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]")) return;
+    const search = document.querySelector("[data-quick-book] input, [data-search] input");
+    if (search) { event.preventDefault(); search.focus(); }
+  }
+});
+
 // Sign-in and sign-out in another tab (design 7.4).
 try {
   new BroadcastChannel("hamada").addEventListener("message", (event) => {
@@ -48,14 +75,17 @@ try {
 } catch (e) { /* BroadcastChannel missing */ }
 
 window.addEventListener("hamada:signed-out", () => {
+  if (document.body.classList.contains("centered")) return;  // already on the sign-in page
   const next = encodeURIComponent(window.location.pathname + window.location.search);
   window.location.href = "/login?next=" + next;
 });
 
-settlePending().then((result) => {
-  if (!result) return;
-  if (result.expired) alertMessage(document.documentElement.lang === "ar"
-    ? "لم نتأكد من حفظ آخر عملية. راجع السجل."
-    : "We couldn't confirm the last save. Check the record.");
-  else if (result.settled && result.status >= 200 && result.status < 300) toast(document.documentElement.lang === "ar" ? "تم حفظ آخر عملية." : "The last save went through.");
+settlePending().then((results) => {
+  if (!results.length) return;
+  if (results.some((r) => r.expired)) {
+    alertMessage(ar() ? "لم نتأكد من حفظ عملية سابقة. راجع السجل." : "We couldn't confirm an earlier save. Check the record.");
+  } else if (results.some((r) => r.settled && r.status >= 200 && r.status < 300)) {
+    toast(ar() ? "تم حفظ العمليات السابقة." : "The earlier saves went through.");
+  }
+  window.dispatchEvent(new CustomEvent("hamada:pending-settled"));
 });

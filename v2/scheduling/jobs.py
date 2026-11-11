@@ -1,13 +1,20 @@
-"""The end-of-day sweep and the summary recompute (design 5.10). Plain functions; commands call them.
+"""The end-of-day sweep and the summary recompute (design 5.10), as functions, commands and Procrastinate tasks.
 
 Both run with a system Ctx (actor "system", no membership), one transaction per clinic (sweep)
 or per clinic-day (recompute), on the clinic's shard with row-level security set.
+
+Which places to visit comes from the directory's copy of each place's time zone and day end
+(draft 2 check, I6): only places whose business day ended at least 30 minutes ago and that the job
+hasn't finished yet. The sweep repairs that copy whenever it differs from the shard. The periodic
+tasks below run one job per shard every 10 minutes; the worker is `manage.py procrastinate worker`.
 """
 
 import datetime as dt
 import logging
 
+from django.conf import settings
 from django.utils import timezone
+from procrastinate.contrib.django import app
 
 from billing import selectors as billing_read
 from billing import services as billing
@@ -26,6 +33,9 @@ log = logging.getLogger(__name__)
 SWEEP_DELAY = dt.timedelta(minutes=30)
 SWEEP_CATCH_UP_DAYS = 7  # a sweep also closes the previous week, in case a run was missed
 RECOMPUTE_BATCH = 100
+CLINIC_BATCH = 500  # places read from the directory at a time (design 5.10)
+SWEEP_CRON = "*/10 * * * *"
+RECOMPUTE_CRON = "5-59/10 * * * *"  # five minutes after each sweep, which it waits for
 
 
 def system_ctx(clinic, alias):
@@ -51,11 +61,15 @@ def sweep_clinic(clinic_id, alias, now=None):
     being seen", pending Saged); in_room → done with auto_closed, its invoice ensured. The
     auto_closed flag is what the owner sees as "flagged".
     """
-    now = now or timezone.now()
+    return _sweep(clinic_id, alias, now or timezone.now())[0]
+
+
+def _sweep(clinic_id, alias, now):
+    """sweep_clinic's work. Returns (counts, the last business day closed, the shard's clinic row or None)."""
     with clinic_transaction(clinic_id, alias):
         clinic = _clinic(clinic_id)
         if clinic is None:
-            return {}
+            return {}, None, None
         ctx = system_ctx(clinic, alias)
         last = last_closed_day(clinic, now)
         first = last - dt.timedelta(days=SWEEP_CATCH_UP_DAYS - 1)
@@ -66,7 +80,7 @@ def sweep_clinic(clinic_id, alias, now=None):
              WHERE a.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status IN ('booked', 'waiting', 'in_room')
              ORDER BY a.id FOR NO KEY UPDATE OF a""", [ctx.clinic_id, first, last])
         if not rows:
-            return {}
+            return {}, last, clinic
         sql.run(ctx, """
             UPDATE "scheduling_appointment"
                SET status = CASE status WHEN 'in_room' THEN 'done' ELSE 'no_show' END,
@@ -95,23 +109,64 @@ def sweep_clinic(clinic_id, alias, now=None):
         counts = {"no_show": sum(r["status"] == "booked" for r in rows),
                   "left": sum(r["status"] == "waiting" for r in rows), "auto_done": len(in_room)}
         log.info("sweep clinic=%s days=%s..%s %s", clinic_id, first, last, counts)
-        return counts
+        return counts, last, clinic
 
 
-def directory_clinics():
-    """(clinic id, shard) of every active clinic, in batches, from the directory."""
+def targets(job, now, shard=None, clinic_ids=None):
+    """The places `job` should visit now, from the directory, in batches by id.
+
+    Without clinic_ids: active places whose business day has ended and that the job hasn't done
+    (directory.services.due_clinics). With clinic_ids: those active places, whatever their marks
+    (a catch-up run). Each place comes once per call, even if visiting it fails.
+    """
     from directory.models import DirectoryClinic
+    from directory.services import due_clinics
 
-    return DirectoryClinic.objects.filter(status=DirectoryClinic.Status.ACTIVE).order_by("id").values_list(
-        "id", "shard").iterator(chunk_size=500)
+    if clinic_ids:
+        rows = DirectoryClinic.objects.filter(id__in=clinic_ids, status=DirectoryClinic.Status.ACTIVE)
+        if shard:
+            rows = rows.filter(shard=shard)
+        yield from rows.order_by("id").values("id", "shard", "kind", "timezone", "day_ends_at", "name")
+        return
+    after = 0
+    while True:
+        batch = due_clinics(job, now, shard=shard, after=after, limit=CLINIC_BATCH)
+        yield from batch
+        if len(batch) < CLINIC_BATCH:
+            return
+        after = batch[-1]["id"]
 
 
-def run_sweep(now=None, clinic_ids=None):
+def _reconcile(row, clinic):
+    """Repair the directory's copy of the place from the shard, the authority (I6)."""
+    from directory.services import record_facts
+
+    facts = {"kind": clinic.kind, "timezone": clinic.timezone, "day_ends_at": clinic.day_ends_at, "name": clinic.name}
+    if any(row.get(name) != value for name, value in facts.items()):
+        if record_facts(clinic.id, **facts):
+            log.warning("directory copy repaired: clinic=%s %s", clinic.id, facts)
+
+
+def run_sweep(now=None, clinic_ids=None, shard=None):
+    """Sweep the places whose business day has just ended, then mark them done in the directory.
+
+    One place failing is logged and doesn't stop the others; it stays due for the next run.
+    """
+    from directory.services import mark_done
+
+    now = now or timezone.now()
     totals = {}
-    for clinic_id, alias in directory_clinics():
-        if clinic_ids and clinic_id not in clinic_ids:
+    for row in targets("sweep", now, shard, clinic_ids):
+        try:
+            counts, closed, clinic = _sweep(row["id"], row["shard"], now)
+        except Exception:
+            log.exception("sweep failed: clinic=%s", row["id"])
+            totals["failed"] = totals.get("failed", 0) + 1
             continue
-        for key, value in sweep_clinic(clinic_id, alias, now).items():
+        if clinic is not None:
+            _reconcile(row, clinic)
+            mark_done("sweep", row["id"], closed)
+        for key, value in counts.items():
             totals[key] = totals.get(key, 0) + value
     return totals
 
@@ -219,10 +274,50 @@ def recompute_clinic(clinic_id, alias, today=None):
     return found
 
 
-def run_recompute(today=None, clinic_ids=None):
+def run_recompute(today=None, clinic_ids=None, shard=None, now=None):
+    """Recompute the places the sweep has closed and the recompute hasn't, then mark them done.
+
+    `today` (a business day) only for tests and catch-up runs; by default each place's own.
+    """
+    from directory.services import mark_done
+
+    now = now or timezone.now()
     found = []
-    for clinic_id, alias in directory_clinics():
-        if clinic_ids and clinic_id not in clinic_ids:
+    for row in targets("recompute", now, shard, clinic_ids):
+        try:
+            found += recompute_clinic(row["id"], row["shard"], today)
+        except Exception:
+            log.exception("recompute failed: clinic=%s", row["id"])
             continue
-        found += recompute_clinic(clinic_id, alias, today)
+        if row.get("closed"):
+            mark_done("recompute", row["id"], row["closed"])
     return found
+
+
+# --- Procrastinate (design 3.1, 5.10): one periodic job per shard ---------------------------------------------
+
+
+@app.task(name="scheduling.sweep_shard", pass_context=False)
+def sweep_shard(timestamp, alias):
+    """Every 10 minutes: close the business days that ended on this shard's places."""
+    totals = run_sweep(shard=alias)
+    if totals:
+        log.info("sweep shard=%s %s", alias, totals)
+    return totals
+
+
+@app.task(name="scheduling.recompute_shard", pass_context=False)
+def recompute_shard(timestamp, alias):
+    """Every 10 minutes, after the sweep: check the summaries of the days the sweep closed on this shard."""
+    found = run_recompute(shard=alias)
+    return {"differences": len(found)}
+
+
+for _alias in settings.SHARDS:
+    # `queueing_lock` keeps at most one job per shard waiting, so a slow night never piles up. No `lock`: a worker
+    # stopped mid-job (Windows has no graceful stop) would leave it held and block that shard's later runs. Two
+    # runs at once are safe anyway: each place's sweep and recompute lock their rows and change only what is open.
+    app.periodic(cron=SWEEP_CRON, periodic_id=_alias, queueing_lock=f"sweep:{_alias}",
+                 task_kwargs={"alias": _alias})(sweep_shard)
+    app.periodic(cron=RECOMPUTE_CRON, periodic_id=_alias, queueing_lock=f"recompute:{_alias}",
+                 task_kwargs={"alias": _alias})(recompute_shard)

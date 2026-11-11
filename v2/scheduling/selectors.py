@@ -23,7 +23,7 @@ OPEN_STATUSES = ("booked", "waiting", "in_room", "done")
 ROW_SQL = """
     SELECT a.id, a.day, a.queue_no, a.status, a.starts_at, a.ends_at, a.is_extra, a.source, a.fee, a.is_follow_up,
            a.is_new, a.auto_closed, a.note, a.arrived_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
-           a.doctor_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
+           a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name,
            i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid
       FROM "scheduling_appointment" a
@@ -53,7 +53,7 @@ def payload(clinic, r):
         "auto_closed": r["auto_closed"], "note": r["note"], "arrived_at": _iso(clinic, r["arrived_at"]),
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
         "cancelled_at": _iso(clinic, r["cancelled_at"]), "cancel_reason": r["cancel_reason"],
-        "doctor_id": r["doctor_id"],
+        "doctor_id": r["doctor_id"], "section_id": r["section_id"],
         "patient": {"id": r["patient_id"], "name": r["patient_name"], "phone": r["patient_phone"],
                     "file_no": r["patient_file_no"]},
         "service": {"id": r["service_id"], "name": r["service_name"]},
@@ -92,9 +92,19 @@ def today_state(ctx, day):
     return summaries.clinic_day(ctx, day)
 
 
-def today_etag(ctx, day, version, language):
-    """"<clinic>.<day>.<version>.<hash of the person's codes and language>"."""
-    digest = hashlib.sha256((",".join(sorted(ctx.codes)) + "|" + (language or "")).encode()).hexdigest()[:12]
+def today_section(raw):
+    """The optional ?section= filter: a section id, or None for every section. Checked against the place in today_data."""
+    if raw in (None, ""):
+        return None
+    from core.validate import ident
+
+    return ident(raw, "section")
+
+
+def today_etag(ctx, day, version, language, section_id=None):
+    """"<clinic>.<day>.<version>.<hash of the person's codes, language and section filter>"."""
+    key = ",".join(sorted(ctx.codes)) + "|" + (language or "") + "|" + str(section_id or "")
+    digest = hashlib.sha256(key.encode()).hexdigest()[:12]
     return f'"{ctx.clinic_id}.{day.isoformat()}.{version}.{digest}"'
 
 
@@ -105,23 +115,45 @@ def etag_matches(header, etag):
     return etag in candidates or f"W/{etag}" in candidates or "*" in candidates
 
 
-def today_data(ctx, day, state):
-    """Everything Today shows, in four statements whatever the clinic's size."""
+def today_data(ctx, day, state, section_id=None):
+    """Everything Today shows, in four statements whatever the clinic's size.
+
+    The place's sections come with the doctors, in one statement. `section_id` filters the rows in
+    memory (design D1: a large center has a few hundred rows a day); an unknown section is 404.
+    Money totals and the doctor-day counts stay the whole place's.
+    """
     clinic = ctx.clinic
     now = timezone.now()
-    doctors = {}
-    for doctor_id, name, starts, ends, mode, minutes, cap in sql.rows(ctx, """
-            SELECT m.id, m.display_name, s.starts, s.ends, s.mode, s.slot_minutes, s.max_bookings
+    doctors, sections = {}, []
+    for kind, row_id, name, starts, ends, mode, minutes, cap, session_section, sort, specialty in sql.rows(ctx, """
+            SELECT 'doctor' AS row_kind, m.id, m.display_name, s.starts, s.ends, s.mode, s.slot_minutes, s.max_bookings,
+                   s.section_id, 0 AS sort, NULL::varchar AS specialty_code
               FROM "clinics_membership" m
               LEFT JOIN "clinics_schedule" s ON s.clinic_id = m.clinic_id AND s.doctor_id = m.id AND s.weekday = %s
              WHERE m.clinic_id = %s AND m.is_active AND m.role IN ('owner', 'doctor')
-             ORDER BY m.id, s.starts""", [day.weekday(), ctx.clinic_id]):
-        doctor = doctors.setdefault(doctor_id, {"id": doctor_id, "name": name, "sessions": []})
+            UNION ALL
+            SELECT 'section', c.id, c.name, NULL, NULL, NULL, NULL, NULL, NULL, c.sort, c.specialty_code
+              FROM "clinics_section" c
+             WHERE c.clinic_id = %s AND c.is_active
+             ORDER BY 1, 10, 2, 4""", [day.weekday(), ctx.clinic_id, ctx.clinic_id]):
+        if kind == "section":
+            sections.append({"id": row_id, "name": name, "specialty": specialty})
+            continue
+        doctor = doctors.setdefault(row_id, {"id": row_id, "name": name, "sessions": []})
         if starts is not None:
             doctor["sessions"].append({"starts": starts.strftime("%H:%M"), "ends": ends.strftime("%H:%M"),
-                                       "mode": mode, "slot_minutes": minutes, "max_bookings": cap})
+                                       "mode": mode, "slot_minutes": minutes, "max_bookings": cap,
+                                       "section_id": session_section})
+    if section_id is not None:
+        if section_id not in {s["id"] for s in sections}:
+            raise rules.not_found("section")
+        for doctor in doctors.values():
+            doctor["sessions"] = [s for s in doctor["sessions"] if s["section_id"] == section_id]
     rows = sql.dicts(ctx, ROW_SQL + " WHERE a.clinic_id = %s AND a.day = %s ORDER BY a.doctor_id, a.queue_no LIMIT %s",
                      [ctx.clinic_id, day, TODAY_LIMIT])
+    truncated = len(rows) >= TODAY_LIMIT
+    if section_id is not None:
+        rows = [r for r in rows if r["section_id"] == section_id]
     # By slot time, then turn; never by status (design 7.4).
     rows.sort(key=lambda r: (r["doctor_id"], r["starts_at"] is None, r["starts_at"] or now, r["queue_no"]))
     appointments = [payload(clinic, r) for r in rows]
@@ -147,8 +179,9 @@ def today_data(ctx, day, state):
     body = {
         "day": day.isoformat(), "version": state["version"], "server_time": local_iso(clinic, now),
         "business_day": business_day(clinic, now).isoformat(), "next_rollover": local_iso(clinic, next_rollover(clinic, now)),
+        "kind": clinic.kind, "sections": sections, "section_id": section_id,
         "queues": queues, "recent": _recent(appointments), "low_stock": [],  # items arrive in M3
-        "truncated": len(rows) >= TODAY_LIMIT,
+        "truncated": truncated,
     }
     if show_money:
         body["totals"] = {"done": state["done"], "collected": state["collected"], "refunded": state["refunded"],
@@ -166,7 +199,8 @@ def _recent(appointments, size=10):
                 events.append((a[field], action, a))
     events.sort(key=lambda e: e[0], reverse=True)
     return [{"at": at, "action": action, "appointment_id": a["id"], "queue_no": a["queue_no"],
-             "doctor_id": a["doctor_id"], "patient_name": a["patient"]["name"]} for at, action, a in events[:size]]
+             "doctor_id": a["doctor_id"], "section_id": a["section_id"], "patient_name": a["patient"]["name"]}
+            for at, action, a in events[:size]]
 
 
 # --- Other reads -------------------------------------------------------------------------------------------
@@ -184,17 +218,21 @@ def patient_visits(ctx, patient_id, size, after):
     return paging.page(items, size, lambda a: paging.encode_day(dt.date.fromisoformat(a["day"]), a["id"]))
 
 
-def slots(ctx, doctor_id, day):
-    """The doctor's slot grid that day with what is taken, and the day's bookings against its limit."""
+def slots(ctx, doctor_id, day, section_id=None):
+    """The doctor's slot grid that day (in one section, if given) with what is taken, and the day's limit."""
+    if section_id is not None and not sql.row(ctx, 'SELECT 1 FROM "clinics_section" WHERE clinic_id = %s AND id = %s',
+                                              [ctx.clinic_id, section_id]):
+        raise rules.not_found("section")
     doctor = rules.doctor_day(ctx, doctor_id, day)
     taken = {r[0] for r in sql.rows(ctx, 'SELECT starts_at FROM "scheduling_appointment" '
                                          "WHERE clinic_id = %s AND day = %s AND doctor_id = %s AND holds_slot",
                                     [ctx.clinic_id, day, doctor_id])}
     clinic = ctx.clinic
     return {
-        "doctor_id": doctor_id, "day": day.isoformat(), "queue": doctor.has_queue, "max_bookings": doctor.cap,
+        "doctor_id": doctor_id, "day": day.isoformat(), "section_id": section_id,
+        "queue": doctor.has_queue(section_id), "max_bookings": doctor.cap,
         "slots": [{"starts_at": local_iso(clinic, start), "ends_at": local_iso(clinic, end), "taken": start in taken}
-                  for start, end in rules.grid(clinic, day, doctor)],
+                  for start, end in rules.grid(clinic, day, doctor, section_id)],
     }
 
 
@@ -212,7 +250,22 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None):
         eligible = found[1]
     fee, is_follow_up = rules.fee_for(service, eligible)
     return {"fee": fee, "is_follow_up": is_follow_up, "service_price": service.price,
-            "follow_up_price": service.follow_up_price, "doctor_works": bool(doctor.sessions)}
+            "follow_up_price": service.follow_up_price, "section_id": service.section_id,
+            "doctor_works": bool(doctor.sessions_in(service.section_id))}
+
+
+def future_bookings(ctx, doctor_id, weekdays, today, limit=500):
+    """A doctor's open bookings from today on, on these weekdays (Monday is 0), for the schedule-change rule."""
+    return sql.dicts(ctx, """
+        SELECT id, day, queue_no, starts_at, section_id FROM "scheduling_appointment"
+         WHERE clinic_id = %s AND doctor_id = %s AND day >= %s AND status IN ('booked', 'waiting', 'in_room')
+           AND (EXTRACT(ISODOW FROM day)::int - 1) = ANY(%s)
+         ORDER BY day, queue_no LIMIT %s""", [ctx.clinic_id, doctor_id, today, list(weekdays), limit])
+
+
+def has_bookings(ctx):
+    """Whether the place has any appointment at all (the time zone and day end are fixed from then on, design 4.2)."""
+    return bool(sql.row(ctx, 'SELECT 1 FROM "scheduling_appointment" WHERE clinic_id = %s LIMIT 1', [ctx.clinic_id]))
 
 
 def day_counts(ctx, day):

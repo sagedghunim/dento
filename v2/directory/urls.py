@@ -9,4 +9,6 @@ urlpatterns = [
     path("api/v1/platform/clinics", views.clinics_endpoint),
     path("api/v1/platform/clinics/<str:clinic_id>/suspend", views.clinics_suspend),
     path("api/v1/platform/clinics/<str:clinic_id>/reactivate", views.clinics_reactivate),
+    path("api/v1/signup", views.signup_view),
+    path("api/v1/me/places", views.places_view),
 ]

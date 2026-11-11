@@ -1,0 +1,6 @@
+{% load i18n hamada %}{% if groups|length > 1 %}
+<div class="filters" role="group" aria-label="{% translate "Doctors" %}">
+  <button type="button" class="chip-btn" data-filter-doctor="" aria-pressed="true">{% translate "All doctors" %}</button>
+  {% for g in groups %}<button type="button" class="chip-btn" data-filter-doctor="{{ g.id }}" aria-pressed="false"><bdi dir="auto">{{ g.name }}</bdi> <span class="count">{{ g.rows|length|digits }}</span></button>{% endfor %}
+</div>
+{% endif %}

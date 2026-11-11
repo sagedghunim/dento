@@ -1,0 +1,32 @@
+{% load i18n hamada %}
+<dialog class="sheet" id="patient-dialog" aria-labelledby="patient-title">
+<form id="patient-form" novalidate>
+  <header class="dialog-head">
+    <h2 id="patient-title" data-title-new>{% translate "New patient" %}</h2>
+    <h2 data-title-edit hidden>{% translate "Edit the patient's file" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <div class="grid-form">
+      <label class="field">{% translate "Full name" %}<input name="full_name" maxlength="120" dir="auto" autocomplete="off" required></label>
+      <label class="field">{% translate "Mobile" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off"></label>
+      <fieldset class="group"><legend>{% translate "Sex" %}</legend><div class="chips">
+        <label class="chip"><input type="radio" name="sex" value="m"><span>{% translate "Male" %}</span></label>
+        <label class="chip"><input type="radio" name="sex" value="f"><span>{% translate "Female" %}</span></label>
+      </div></fieldset>
+      <label class="field">{% translate "Date of birth" %}<input name="birth_date" type="date" max="{{ config.today }}" min="1900-01-01"></label>
+      <label class="field">{% translate "Or the age in years" %}<input name="age" maxlength="3" dir="ltr" inputmode="numeric" autocomplete="off"></label>
+      <label class="field">{% translate "Address" %}<input name="address" maxlength="200" dir="auto" autocomplete="off"></label>
+    </div>
+    <label class="field">{% translate "Allergies" %}<textarea name="allergies" maxlength="1000" dir="auto"></textarea></label>
+    <label class="field">{% translate "Chronic conditions" %}<textarea name="chronic_conditions" maxlength="1000" dir="auto"></textarea></label>
+    <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="2000" dir="auto"></textarea></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>

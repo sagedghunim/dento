@@ -1,0 +1,3 @@
+{% if perms.book %}{% include "web/_dialog_book.html" %}{% endif %}
+{% if perms.collect %}{% include "web/_dialog_pay.html" %}{% endif %}
+{% include "web/_dialog_small.html" %}

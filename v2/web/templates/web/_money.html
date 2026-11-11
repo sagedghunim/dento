@@ -1,0 +1,10 @@
+{% load i18n hamada %}{% if totals %}
+<section class="card" aria-labelledby="money-title">
+  <h2 id="money-title">{% translate "Money on this day" %}</h2>
+  <dl class="money-sum">
+    <div><dt>{% translate "Collected" %}</dt><dd>{{ totals.collected|money }}</dd></div>
+    <div><dt>{% translate "Refunded" %}</dt><dd>{{ totals.refunded|money }}</dd></div>
+    <div><dt>{% translate "Net" %}</dt><dd>{{ totals.net|money }}</dd></div>
+  </dl>
+</section>
+{% endif %}

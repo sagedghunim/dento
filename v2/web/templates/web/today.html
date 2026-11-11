@@ -1,0 +1,73 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Today" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% if is_today %}{% translate "Today at the clinic" %}{% else %}{{ day|longday }}{% endif %}</h1>
+  <p>{% translate "Every booking, who is waiting, and what is happening right now, for the doctor and the desk on the same screen." %}</p>
+</div>
+
+<div class="today-tools">
+  <nav class="day-nav" aria-label="{% translate "Days" %}">
+    <a class="icon-btn" href="?day={{ prev_day.isoformat }}" aria-label="{% translate "Previous day" %}" title="{% translate "Previous day" %}"><svg class="icon chev-start"><use href="#i-chev"/></svg></a>
+    {% if not is_today %}<a class="btn ghost" href="/">{% translate "Back to today" %}</a>{% endif %}
+    <a class="icon-btn" href="?day={{ next_day.isoformat }}" aria-label="{% translate "Next day" %}" title="{% translate "Next day" %}"><svg class="icon chev-end"><use href="#i-chev"/></svg></a>
+  </nav>
+  {% if perms.book %}<button type="button" class="btn narrow-only" data-open-book><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button>{% endif %}
+  <p class="freshness" data-freshness>
+    <span class="dot" aria-hidden="true"></span>
+    <span data-fresh-text>{% translate "Updated" %} {{ server_time|clock }}</span>
+    <button type="button" class="link-btn" data-try-now hidden>{% translate "Try now" %}</button>
+  </p>
+</div>
+
+<div class="pending-bar" data-pending-bar hidden></div>
+
+<div class="stats" data-stats>
+  <div class="stat"><div class="num" data-stat="total">{{ stats.total|digits }}</div><div class="lbl">{% translate "Bookings" %}</div></div>
+  <div class="stat"><div class="num" data-stat="waiting">{{ stats.waiting|digits }}</div><div class="lbl">{% translate "Waiting now" %}</div></div>
+  <div class="stat"><div class="num" data-stat="in_room">{{ stats.in_room|digits }}</div><div class="lbl">{% translate "With the doctor" %}</div></div>
+  <div class="stat"><div class="num" data-stat="done">{{ stats.done|digits }}</div><div class="lbl">{% translate "Finished" %}</div></div>
+</div>
+
+{% if sections %}
+<div class="filters" role="group" aria-label="{% translate "Sections" %}">
+  <button type="button" class="chip-btn" data-filter-section="" aria-pressed="true">{% translate "All sections" %}</button>
+  {% for s in sections %}<button type="button" class="chip-btn" data-filter-section="{{ s.id }}" aria-pressed="false"><bdi dir="auto">{{ s.name }}</bdi></button>{% endfor %}
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card queue" data-queue-card aria-labelledby="queue-title" data-day="{{ day.isoformat }}" data-version="{{ version }}" data-etag="{{ etag }}" data-server-time="{{ server_time }}" data-poll-after="{{ poll_after }}" data-undo-arrive="{% if features.undo_arrive %}1{% endif %}" data-undo-call="{% if features.undo_call %}1{% endif %}">
+    <h2 id="queue-title">{% if is_today %}{% translate "Today's appointments" %}{% else %}{% translate "Appointments" %}{% endif %}</h2>
+    <p class="card-sub">{% translate "New bookings appear here by themselves, from every screen in the clinic." %}</p>
+    <div data-slot="doctors">{% include "web/_doctor_chips.html" %}</div>
+    <div data-slot="groups" data-list>{% include "web/_queue_groups.html" %}</div>
+    <div data-slot="truncated">{% if truncated %}<p class="notice">{% translate "This day has more bookings than one screen shows. Use the doctor filters." %}</p>{% endif %}</div>
+  </section>
+
+  <div class="stack book-first">
+    {% if perms.book %}
+    <section class="card book-card" aria-labelledby="book-card-title">
+      <h2 id="book-card-title">{% translate "Add a booking" %}</h2>
+      <p class="card-sub">{% translate "Find the patient or add a new one, then the service and the time. A walk-in is booked, marked arrived and paid in one step." %}</p>
+      <form class="form-row" data-quick-book role="search">
+        <label class="field">{% translate "Patient name or mobile" %}
+          <input name="q" type="search" autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search">
+        </label>
+        <button class="btn" type="submit"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button>
+      </form>
+    </section>
+    {% endif %}
+    <section class="card" aria-labelledby="activity-title">
+      <h2 id="activity-title">{% translate "Latest activity" %}</h2>
+      <div data-slot="activity">{% include "web/_activity.html" %}</div>
+    </section>
+    <div data-slot="money">{% include "web/_money.html" %}</div>
+  </div>
+</div>
+
+{% include "web/_dialogs.html" %}
+{{ config|json_script:"clinic-config" }}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/today.js' %}"></script>{% endblock %}

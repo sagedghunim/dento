@@ -52,12 +52,6 @@ def security_page(request, ctx):
 def home(request):
     if request.user.is_authenticated and request.user.is_platform_admin:
         return redirect("/platform")
-    return clinic_home(request)
+    from .pages import today_page
 
-
-@ensure_csrf_cookie
-@page()
-def clinic_home(request, ctx):
-    from core.days import business_day
-
-    return render(request, "web/home.html", {"ctx": ctx, "day": business_day(ctx.clinic)})
+    return today_page(request)  # Today is the home page for the desk and the doctor (design 7.3)

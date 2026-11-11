@@ -520,12 +520,13 @@ class QueryCountTests(M1TestCase):
             ctx = system_ctx(Clinic.objects.get(id=self.a.id), self.a.shard)
             start = sql.row(ctx, 'SELECT last_queue_no FROM "summaries_doctor_day" WHERE clinic_id = %s AND day = %s '
                                  "AND doctor_id = %s", [self.a.id, day, owner])[0]
-            sql.run(ctx, """INSERT INTO "scheduling_appointment" (clinic_id, patient_id, doctor_id, service_id, day,
-                            queue_no, is_extra, status, source, fee, is_follow_up, is_new, auto_closed, note,
+            sql.run(ctx, """INSERT INTO "scheduling_appointment" (clinic_id, patient_id, doctor_id, service_id, section_id,
+                            day, queue_no, is_extra, status, source, fee, is_follow_up, is_new, auto_closed, note,
                             cancel_reason, created_at, updated_at)
-                            SELECT %s, %s, %s, %s, %s, g, false, 'booked', 'clinic', 100, false, false, false, '', '',
+                            SELECT %s, %s, %s, %s, %s, %s, g, false, 'booked', 'clinic', 100, false, false, false, '', '',
                                    now(), now() FROM generate_series(%s, %s) g""",
-                    [self.a.id, patient, owner, self.services_a["consultation"].id, day, start + 1, start + n])
+                    [self.a.id, patient, owner, self.services_a["consultation"].id,
+                     self.services_a["consultation"].section_id, day, start + 1, start + n])
             sql.run(ctx, 'UPDATE "summaries_doctor_day" SET last_queue_no = last_queue_no + %s, booked = booked + %s '
                          "WHERE clinic_id = %s AND day = %s AND doctor_id = %s", [n, n, self.a.id, day, owner])
         return patient

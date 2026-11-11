@@ -1,0 +1,42 @@
+/* Receipts (design 7.5): black text on white only, so thermal printers and photocopies stay legible. */
+@font-face {
+  font-family: "Manrope"; src: url("../fonts/manrope-latin.woff2") format("woff2"); font-weight: 400 800;
+  unicode-range: U+0000-00FF, U+2000-206F, U+2212;
+}
+@font-face {
+  font-family: "Rubik"; src: url("../fonts/rubik-arabic.woff2") format("woff2"); font-weight: 400 800;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200E, U+FB50-FDFF, U+FE70-FEFC;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; background: #fff; color: #000; font-family: "Manrope", "Rubik", system-ui, "Segoe UI", Tahoma, Arial, sans-serif; line-height: 1.45; }
+h1, p, dl, dd { margin: 0; }
+.ltr { direction: ltr; unicode-bidi: isolate; }
+.num { font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-block-end: 1px solid #ccc; background: #f4f4f4; }
+.tool {
+  display: inline-flex; align-items: center; min-height: 44px; padding-inline: 16px; border: 1px solid #888; border-radius: 10px;
+  background: #fff; color: #000; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.tool.primary { background: #0E7C6F; border-color: #0E7C6F; color: #fff; }
+.tool:focus-visible { outline: 3px solid #1D4ED8; outline-offset: 2px; }
+.receipt { margin-inline: auto; background: #fff; }
+.head { text-align: center; border-block-end: 2px solid #000; padding-block-end: 6px; margin-block-end: 8px; }
+.head .place { font-weight: 800; }
+h1 { text-align: center; font-weight: 800; margin-block: 6px; }
+.facts { display: grid; gap: 2px 12px; }
+.facts div, .totals div { display: flex; justify-content: space-between; gap: 8px; }
+.facts dt, .totals dt { font-weight: 700; }
+.lines { width: 100%; border-collapse: collapse; margin-block: 8px; }
+.lines th, .lines td { text-align: start; padding-block: 3px; border-block-end: 1px solid #000; vertical-align: top; }
+.lines th { border-block-end-width: 2px; }
+.lines .n { text-align: end; white-space: nowrap; }
+.totals { display: grid; gap: 2px; margin-block: 6px; }
+.totals .total { font-weight: 800; border-block-start: 2px solid #000; padding-block-start: 3px; }
+.totals .due { font-weight: 800; }
+.foot { text-align: center; margin-block-start: 10px; }
+.foot .small { font-size: .85em; }
+@media print {
+  .toolbar { display: none; }
+}

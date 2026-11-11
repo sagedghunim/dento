@@ -1,0 +1,7 @@
+{% load i18n %}<div data-queue data-version="{{ version }}" data-day="{{ day.isoformat }}" data-server-time="{{ server_time }}">
+  <div data-slot="doctors">{% include "web/_doctor_chips.html" %}</div>
+  <div data-slot="groups">{% include "web/_queue_groups.html" %}</div>
+  <div data-slot="activity">{% include "web/_activity.html" %}</div>
+  <div data-slot="money">{% include "web/_money.html" %}</div>
+  <div data-slot="truncated">{% if truncated %}<p class="notice">{% translate "This day has more bookings than one screen shows. Use the doctor filters." %}</p>{% endif %}</div>
+</div>

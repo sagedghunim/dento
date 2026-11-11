@@ -138,13 +138,14 @@ class RoutingAndRlsTests(ShardTestCase):
                 Service.objects.create(clinic_id=self.b.id, name="x", kind="procedure", price=1)
 
     def test_composite_foreign_key_refuses_another_clinics_doctor(self):
-        from clinics.models import Membership, Schedule
+        from clinics.models import Membership, Schedule, Section
 
         with clinic_transaction(self.b.id, "shard_1"):
             other_doctor = Membership.objects.get(clinic_id=self.b.id, role="doctor")
         with clinic_transaction(self.a.id, "shard_1"):
+            section = Section.objects.get(clinic_id=self.a.id)
             with self.assertRaises(IntegrityError), transaction.atomic(using="shard_1"):
-                Schedule.objects.create(clinic_id=self.a.id, doctor_id=other_doctor.id, weekday=1,
+                Schedule.objects.create(clinic_id=self.a.id, doctor_id=other_doctor.id, section=section, weekday=1,
                                         starts=dt.time(17), ends=dt.time(22))
 
     def test_every_shard_table_with_clinic_id_is_forced_and_policied(self):

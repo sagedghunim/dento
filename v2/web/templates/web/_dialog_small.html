@@ -1,0 +1,58 @@
+{% load i18n hamada %}
+<dialog class="sheet small" id="finish-dialog" aria-labelledby="finish-title">
+<form id="finish-form" novalidate>
+  <header class="dialog-head">
+    <h2 id="finish-title">{% translate "Finish the visit" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <p><span class="who" data-name></span> · <span data-due-text></span></p>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    <fieldset class="group"><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-finish-owed>{% translate "Finish, leave it owed" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Finish and collect" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="cancel-dialog" aria-labelledby="cancel-title">
+<form id="cancel-form" novalidate>
+  <header class="dialog-head">
+    <h2 id="cancel-title">{% translate "Cancel the booking?" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <p class="who" data-name></p>
+    <label class="field">{% translate "Reason (optional)" %}<input name="reason" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Keep the booking" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Cancel booking" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="move-dialog" aria-labelledby="move-title">
+<form id="move-form" novalidate>
+  <header class="dialog-head">
+    <h2 id="move-title">{% translate "Change the time" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <p class="who" data-name></p>
+    {% include "web/_when.html" %}
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Move the booking" %}</button>
+  </footer>
+</form>
+</dialog>

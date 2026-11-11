@@ -1,0 +1,10 @@
+/* A5 with no browser margins, so no URL or title is printed (design 7.5); padding inside instead. */
+@page { size: A5; margin: 0; }
+.receipt { width: 148mm; min-height: 200mm; padding: 12mm 12mm 10mm; font-size: 11pt; }
+h1 { font-size: 15pt; }
+.head .place { font-size: 14pt; }
+.facts { grid-template-columns: 1fr 1fr; }
+@media screen {
+  body { background: #e9ecea; }
+  .receipt { margin-block: 16px; box-shadow: 0 2px 12px rgba(0, 0, 0, .15); }
+}

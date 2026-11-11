@@ -1,0 +1,13 @@
+{% load i18n hamada %}{% for g in groups %}
+<section class="queue-group" data-doctor="{{ g.id }}" data-sections="{{ g.section_ids|join:',' }}" aria-labelledby="doctor-{{ g.id }}">
+  <div class="group-head" data-head>
+    <h3 id="doctor-{{ g.id }}"><bdi dir="auto">{{ g.name }}</bdi></h3>
+    <span class="muted">{% for s in g.sessions %}{{ s.starts|clock }} – {{ s.ends|clock }} · {% if s.mode == "slots" %}{% translate "appointments" %}{% else %}{% translate "queue" %}{% endif %}{% if not forloop.last %} | {% endif %}{% empty %}{% translate "Not working this day" %}{% endfor %}</span>
+    <span class="muted">{% translate "Waiting:" %} {{ g.counts.waiting|digits }} · {% translate "With the doctor:" %} {{ g.counts.in_room|digits }} · {% translate "Done:" %} {{ g.counts.done|digits }}</span>
+  </div>
+  <ol class="rows">{% for a in g.rows %}{% include "web/_row.html" %}{% endfor %}</ol>
+  <p class="empty-note" data-empty{% if g.rows %} hidden{% endif %}>{% translate "No bookings yet." %}</p>
+</section>
+{% empty %}
+<p class="empty-note">{% translate "No doctor works on this day, and nothing is booked." %}</p>
+{% endfor %}

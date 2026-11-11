@@ -1,0 +1,18 @@
+{% load i18n hamada %}{% get_current_language as LANG %}{% business_day ctx as bday %}
+<div class="topbar">
+  <p class="today-date">{{ bday|longday }}</p>
+  <div class="top-actions">
+    <details class="menu account">
+      <summary><span><bdi dir="auto">{{ ctx.membership.display_name }}</bdi></span> <span class="role">· {{ ctx.membership.role|role_label }}</span></summary>
+      <div class="menu-panel">
+        <p class="menu-note"><bdi dir="auto">{{ request.user.full_name }}</bdi> · <bdi class="ltr">{{ request.user.username }}</bdi></p>
+        <a class="menu-item" href="/clinics">{% translate "Switch clinic" %}</a>
+        <a class="menu-item" href="/account/password">{% translate "Change password" %}</a>
+        <a class="menu-item" href="/account/security">{% translate "Two-step sign-in" %}</a>
+        <button type="button" class="menu-item" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}" lang="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
+        <hr>
+        <button type="button" class="menu-item danger" data-action="logout">{% translate "Sign out" %}</button>
+      </div>
+    </details>
+  </div>
+</div>
