@@ -33,6 +33,8 @@ Owners must set up two-step sign-in on first sign-in: scan the QR code with an a
 
 The end-of-day sweep and the summary recompute (design 5.10) run as Procrastinate periodic tasks, one job per shard every 10 minutes: `scheduling.sweep_shard` at :00, :10, ... and `scheduling.recompute_shard` five minutes later. Each visits only the places whose business day ended at least 30 minutes ago, in their own time zone, and that the job hasn't done yet; the directory keeps a copy of each place's time zone and day end for that, and the sweep repairs the copy if it ever differs from the shard. Jobs live in the directory database (`hamada_dir`).
 
+Two daily upkeep tasks run on the same worker: `core.ensure_partitions` keeps the monthly log partitions 6 months ahead on every database (without them, sign-in and file opens fail on the first day of an unprepared month), and `core.clean_request_keys` deletes request keys older than 72 hours. `manage.py ensure_partitions` does the first by hand, and `migrate_all` runs it on every deploy.
+
 Run the worker in its own window, from `v2`:
 
 ```

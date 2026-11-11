@@ -210,7 +210,12 @@ class ReadTests(BillingTestCase):
         foreign = self.book(fixture=self.b, payment={"amount": 100, "method": "cash"}).json()["appointment"]
         self.grant("billing.refund", "billing.discount")
         invoice = foreign["invoice"]["id"]
+        with clinic_transaction(self.b.id, self.b.shard):
+            line = InvoiceLine.objects.filter(clinic_id=self.b.id, invoice_id=invoice).values_list("id", flat=True)[0]
+            payment = Payment.objects.filter(clinic_id=self.b.id, invoice_id=invoice).values_list("id", flat=True)[0]
         for method, url, body in (("GET", f"/api/v1/invoices/{invoice}", None),
+                                  ("DELETE", f"/api/v1/invoices/{invoice}/lines/{line}", {}),
+                                  ("POST", f"/api/v1/payments/{payment}/refund", {"amount": 50}),
                                   ("POST", f"/api/v1/invoices/{invoice}/lines", {"kind": "other", "description": "x",
                                                                                  "unit_price": 1}),
                                   ("PUT", f"/api/v1/invoices/{invoice}/discount", {"discount": 1, "expected_discount": 0}),
@@ -218,6 +223,9 @@ class ReadTests(BillingTestCase):
                                   ("POST", f"/api/v1/appointments/{foreign['id']}/payments", {"amount": 1, "method": "cash"}),
                                   ("POST", f"/api/v1/appointments/{foreign['id']}/invoice", {})):
             self.assertEqual(call(self.desk, method, url, body).status_code, 404, url)
+        with clinic_transaction(self.b.id, self.b.shard):
+            self.assertTrue(InvoiceLine.objects.filter(clinic_id=self.b.id, id=line).exists())
+            self.assertEqual(Payment.objects.get(clinic_id=self.b.id, id=payment).refunded, 0)
 
 
 class MoneyInvariantTests(BillingTestCase):

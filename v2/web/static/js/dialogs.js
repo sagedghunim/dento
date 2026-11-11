@@ -14,6 +14,8 @@ export function openDialog(dialog, opener) {
 
 export function closeDialog(dialog) {
   if (dialog.dataset.busy) return false;  // a save in flight finishes first
+  // An unknown outcome stays on screen until "Try again" or "Discard" (design 7.4, M1 decision R7).
+  if (dialog.dataset.unknown) return false;
   if (dialog.open) dialog.close();
   const opener = dialog._opener;
   if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus();
@@ -27,6 +29,11 @@ export function wireClose(dialog, onClose) {
   dialog.addEventListener("cancel", (event) => {  // Escape
     event.preventDefault();
     if (closeDialog(dialog) && onClose) onClose();
+  });
+  // Browsers may close a modal on Escape whatever the page says (without a recent tap, the cancel event
+  // can't be cancelled). A dialog with a save in flight or an unknown outcome comes straight back (R7).
+  dialog.addEventListener("close", () => {
+    if ((dialog.dataset.unknown || dialog.dataset.busy) && !dialog.open) dialog.showModal();
   });
 }
 
@@ -66,6 +73,8 @@ export class Submitter {
     this.body = dialog.querySelector(".dialog-body");
     this.error = dialog.querySelector("[data-error]");
     this.discard = dialog.querySelector("[data-discard]");
+    this.submit = dialog.querySelector("[data-submit]");
+    this.savedLabel = null;
     this.label = label;
     this.reset();
     if (this.discard) this.discard.addEventListener("click", () => this.giveUp());
@@ -77,8 +86,21 @@ export class Submitter {
     this.unknown = null;  // {method, url, body} while the outcome is unknown
     this.lock(false);
     this.say("");
-    if (this.discard) this.discard.hidden = true;
+    this.showUnknown(false);
   }
+
+  // While unknown: no close, no other action; only "Try again" (the same key and body) or "Discard".
+  showUnknown(on) {
+    if (on) this.dialog.dataset.unknown = "1"; else delete this.dialog.dataset.unknown;
+    if (this.discard) this.discard.hidden = !on;
+    this.dialog.querySelectorAll("[data-close]").forEach((b) => { b.hidden = on; });
+    this.dialog.querySelectorAll("[data-run], [data-finish-owed], [data-collect-now]").forEach((b) => { if (on) b.disabled = true; });
+    if (this.submit && on && this.savedLabel == null) { this.savedLabel = this.submit.textContent; this.submit.textContent = t("try_again"); }
+    if (this.submit && !on && this.savedLabel != null) { this.submit.textContent = this.savedLabel; this.savedLabel = null; }
+  }
+
+  // open() calls this first: a dialog that holds an unknown request reopens as it was, never with a new key.
+  holdsUnknown() { return Boolean(this.unknown); }
 
   say(text) { if (this.error) this.error.textContent = text; }
 
@@ -88,7 +110,7 @@ export class Submitter {
   }
 
   buttons(disabled) {
-    this.form.querySelectorAll("[data-submit], [data-run], [data-finish-owed]").forEach((b) => { b.disabled = disabled; });
+    this.form.querySelectorAll("[data-submit], [data-run], [data-finish-owed], [data-collect-now]").forEach((b) => { b.disabled = disabled; });
   }
 
   // Send, or resend the unconfirmed request. Returns the result for a definite answer, or null.
@@ -100,22 +122,24 @@ export class Submitter {
     this.lock(true);
     this.say("");
     const slow = setTimeout(() => this.say(t("still_saving")), 3000);
+    if (!this.unknown) this.lastLabel = label || this.label;
     const result = await save(request.method, request.url, request.body, {
-      key: this.key, label: label || this.label, onWaiting: () => this.say(t("checking")),
+      key: this.key, label: this.lastLabel, onWaiting: () => this.say(t("checking")),
     });
     clearTimeout(slow);
     delete this.dialog.dataset.busy;
+    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
     this.buttons(false);
     if (!result.settled) {
       this.unknown = request;
       this.say(result.signedOut ? t("signed_out") : t("unknown"));
-      if (this.discard) this.discard.hidden = false;
+      this.showUnknown(true);
       return null;
     }
     this.unknown = null;
     this.key = newKey();
     this.lock(false);
-    if (this.discard) this.discard.hidden = true;
+    this.showUnknown(false);
     if (!isOk(result)) {
       this.say(errorMessage(result, t("failed")));
       return result;

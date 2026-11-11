@@ -13,6 +13,11 @@ class Command(BaseCommand):
         for alias in aliases:
             self.stdout.write(self.style.MIGRATE_HEADING(f"== {alias} ({settings.DATABASES[alias]['NAME']})"))
             call_command("migrate", database=alias, interactive=False, verbosity=max(options["verbosity"] - 1, 0))
+        # Every deploy also refreshes the log partitions (chief judge M1, R5), in case the worker was down.
+        from core.partitions import ensure_all
+
+        for alias, tables in ensure_all().items():
+            self.stdout.write(f"{alias}: partitions ahead {tables}")
         failed = False
         for alias in aliases:
             executor = MigrationExecutor(connections[alias])

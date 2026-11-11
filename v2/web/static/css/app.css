@@ -69,7 +69,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; font-size: 16px; }
+html { -webkit-text-size-adjust: 100%; font-size: 16px; overflow-anchor: none; }  /* today.js anchors rows itself */
 body {
   margin: 0;
   background: var(--bg);
@@ -338,6 +338,9 @@ button.chip-btn .count { color: var(--muted); font-weight: 600; }
 .appt-side { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .appt-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .appt.saving { opacity: .7; }
+/* A tap that came too soon after the row moved is ignored; the row flashes instead (M1 decision R8). */
+.appt.flash { animation: flash .6s ease-out; }
+@keyframes flash { from { background: var(--amber-tint); } to { background: transparent; } }
 .appt.gone { opacity: .45; }
 .appt.done .who, .appt.cancelled .who, .appt.no_show .who { color: var(--muted); }
 .appt.cancelled .who > span:first-child { text-decoration: line-through; }

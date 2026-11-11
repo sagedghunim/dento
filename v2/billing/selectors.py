@@ -9,12 +9,12 @@ from django.utils.translation import gettext as _
 
 from clinics import settings as clinic_settings
 from core import paging, sql
-from core.days import local_iso
+from core.days import business_day, local_iso
 from core.errors import ApiError
 
 INVOICE_SQL = """
     SELECT i.id, i.number, i.status, i.subtotal, i.discount, i.total, i.paid, i.created_at, i.voided_at,
-           i.patient_id, p.full_name, p.phone, p.file_no, i.appointment_id, a.day, a.queue_no, a.doctor_id,
+           i.patient_id, p.full_name, p.phone, p.file_no, i.appointment_id, a.day, a.queue_no, a.doctor_id, a.service_id,
            m.display_name, m.title
       FROM "billing_invoice" i
       JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
@@ -47,9 +47,17 @@ def invoice(ctx, invoice_id):
     if not found:
         raise _not_found()
     i = found[0]
-    lines = sql.dicts(ctx, 'SELECT id, kind, service_id, item_id, description, qty, unit_price, amount, from_list '
-                           'FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
+    lines = sql.dicts(ctx, 'SELECT id, kind, service_id, item_id, description, qty, unit_price, amount, from_list, '
+                           'created_by_id, created_at FROM "billing_invoice_line" '
+                           'WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
                       [ctx.clinic_id, invoice_id])
+    # Each line says whether this person may remove it (design 5.3), so the screen offers "Remove" only then.
+    from .services import may_remove_line
+
+    today = business_day(ctx.clinic)
+    for line in lines:
+        line["removable"] = i["status"] == "open" and may_remove_line(ctx, line, i["service_id"], today)
+        line["created_at"] = local_iso(ctx.clinic, line["created_at"])
     payments = sql.dicts(ctx, "SELECT id, invoice_id, kind, method, amount, refunded, refund_of_id, doctor_id, received_at, "
                               'day, note FROM "billing_payment" WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
                          [ctx.clinic_id, invoice_id])

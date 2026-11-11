@@ -99,6 +99,7 @@ def book_view(request, ctx, data):
 def quote_view(request, ctx, data):
     params = request.GET
     day = validate.iso_day(params["day"]) if params.get("day") else business_day(ctx.clinic)
+    rules.check_day(ctx.clinic, day)  # the same days booking accepts (chief judge M1, R6)
     patient = params.get("patient")
     return selectors.quote(ctx, validate.ident(params.get("doctor"), "doctor"),
                            validate.ident(params.get("service"), "service"), day,

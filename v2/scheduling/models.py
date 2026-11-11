@@ -1,12 +1,21 @@
 """Appointments (design 4.4). A shard table under row-level security, fillfactor 85."""
 
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeOperators
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import F, Func, Q
 from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
 
 STATUSES = ["booked", "waiting", "in_room", "done", "cancelled", "no_show"]
+
+
+class TsTzRange(Func):
+    """tstzrange(starts_at, ends_at): a slot as a half-open range, so adjacent slots don't overlap."""
+
+    function = "TSTZRANGE"
+    output_field = DateTimeRangeField()
 SOURCES = ["clinic", "phone", "online", "whatsapp"]
 
 
@@ -69,6 +78,13 @@ class Appointment(models.Model):
             models.UniqueConstraint(fields=["clinic", "day", "doctor", "queue_no"], name="appointment_turn_uniq"),
             models.UniqueConstraint(fields=["clinic", "doctor", "starts_at"], condition=Q(holds_slot=True),
                                     name="appointment_slot_uniq"),
+            # Equal starts get the clear slot_taken above; this also refuses a slot that overlaps another one of
+            # the same doctor, as after a slot length change (chief judge M1, R4). Its predicate reads only
+            # holds_slot, like the slot index, so status changes stay HOT.
+            ExclusionConstraint(name="appointment_no_overlap",
+                                expressions=[("clinic", RangeOperators.EQUAL), ("doctor", RangeOperators.EQUAL),
+                                             (TsTzRange("starts_at", "ends_at"), RangeOperators.OVERLAPS)],
+                                condition=Q(holds_slot=True)),
             models.CheckConstraint(condition=Q(status__in=STATUSES), name="appointment_status_valid"),
             models.CheckConstraint(condition=Q(source__in=SOURCES), name="appointment_source_valid"),
             models.CheckConstraint(condition=Q(fee__gte=0), name="appointment_fee_not_negative"),

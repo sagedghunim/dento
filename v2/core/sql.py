@@ -32,6 +32,12 @@ def run(ctx, sql, params=()):
 
 
 def statement_timeout(ctx, value):
-    """SET LOCAL, so it ends with the request's transaction (design 4.0: exceptions use SET LOCAL)."""
+    """SET LOCAL, so it ends with the request's transaction (design 4.0: exceptions use SET LOCAL).
+
+    None puts back the role's own setting for the rest of the transaction.
+    """
     with connections[ctx.alias].cursor() as cursor:
-        cursor.execute(f"SET LOCAL statement_timeout = '{int(value)}ms'")
+        if value is None:
+            cursor.execute("SET LOCAL statement_timeout = DEFAULT")
+        else:
+            cursor.execute(f"SET LOCAL statement_timeout = '{int(value)}ms'")

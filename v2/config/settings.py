@@ -121,6 +121,9 @@ def _database(name):
         "DISABLE_SERVER_SIDE_CURSORS": env_bool("PG_BEHIND_PGBOUNCER", False),
         # Two test runs at once (two people, or an agent and a person) need their own databases.
         "TEST": {"NAME": f"test_{name}{env('HAMADA_TEST_DB_SUFFIX', '')}"},
+        # Tests (fixtures of 100,000 rows, CREATE and DROP DATABASE) run without the role's 5 s statement
+        # timeout. The app keeps it; lock_timeout stays for tests too, since the concurrency tests rely on it.
+        **({"OPTIONS": {"options": "-c statement_timeout=0"}} if TESTING else {}),
     }
 
 

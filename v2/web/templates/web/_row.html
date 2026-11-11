@@ -1,4 +1,4 @@
-{% load i18n hamada %}{% spaceless %}<li class="appt {{ a.status }}" data-id="{{ a.id }}" data-status="{{ a.status }}" data-name="{{ a.patient.name }}" data-doctor="{{ a.doctor_id }}" data-section="{{ a.section_id|default_if_none:'' }}" data-due="{{ a.due }}" data-fee="{{ a.fee }}" data-invoice="{{ a.invoice.id|default_if_none:'' }}" data-patient="{{ a.patient.id }}" data-day="{{ a.day }}" data-queue="{{ a.queue_no }}">
+{% load i18n hamada %}{% spaceless %}<li class="appt {{ a.status }}" data-id="{{ a.id }}" data-status="{{ a.status }}" data-name="{{ a.patient.name }}" data-doctor="{{ a.doctor_id }}" data-section="{{ a.section_id|default_if_none:'' }}" data-due="{{ a.due }}" data-fee="{{ a.fee }}" data-paid="{{ a.invoice.paid|default:0 }}" data-invoice="{{ a.invoice.id|default_if_none:'' }}" data-patient="{{ a.patient.id }}" data-day="{{ a.day }}" data-queue="{{ a.queue_no }}">
   <div class="appt-time">{% if a.starts_at %}{{ a.starts_at|clock }}<small>{% translate "Turn" %} {{ a.queue_no|num }}</small>{% else %}{{ a.queue_no|num }}<small>{% translate "Turn" %}</small>{% endif %}</div>
   <div class="appt-body">
   <div class="appt-main">

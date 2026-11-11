@@ -60,6 +60,7 @@ def line_description(appointment):
 def create_invoice(ctx, appointment, number, paid=0):
     """The visit's invoice with one line for its service at the appointment's fee (one statement)."""
     fee = appointment["fee"]
+    now = timezone.now()
     found = sql.row(ctx, f"""
         WITH inv AS (
             INSERT INTO "billing_invoice" (clinic_id, number, patient_id, appointment_id, status, subtotal, discount,
@@ -67,11 +68,11 @@ def create_invoice(ctx, appointment, number, paid=0):
             VALUES (%s, %s, %s, %s, 'open', %s, 0, %s, %s, %s, %s) RETURNING {INVOICE_COLUMNS}),
         line AS (
             INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price,
-                                                amount, from_list)
-            SELECT %s, inv.id, 'service', %s, %s, 1, %s, %s, true FROM inv)
+                                                amount, from_list, created_by_id, created_at)
+            SELECT %s, inv.id, 'service', %s, %s, 1, %s, %s, true, %s, %s FROM inv)
         SELECT {INVOICE_COLUMNS} FROM inv""", [
-        ctx.clinic_id, number, appointment["patient_id"], appointment["id"], fee, fee, paid, timezone.now(),
-        ctx.membership_id, ctx.clinic_id, appointment["service_id"], line_description(appointment), fee, fee])
+        ctx.clinic_id, number, appointment["patient_id"], appointment["id"], fee, fee, paid, now, ctx.membership_id,
+        ctx.clinic_id, appointment["service_id"], line_description(appointment), fee, fee, ctx.membership_id, now])
     return _invoice(found)
 
 
@@ -230,26 +231,49 @@ def add_line(ctx, invoice_id, kind, service_id, description, qty, unit_price):
     amount = qty * unit_price
     line_id = sql.row(ctx, """
         INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price, amount,
-                                            from_list)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
-        ctx.clinic_id, invoice["id"], kind, service_id, description[:200], qty, unit_price, amount, from_list])[0]
+                                            from_list, created_by_id, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+        ctx.clinic_id, invoice["id"], kind, service_id, description[:200], qty, unit_price, amount, from_list,
+        ctx.membership_id, timezone.now()])[0]
     sql.run(ctx, 'UPDATE "billing_invoice" SET subtotal = subtotal + %s, total = total + %s WHERE clinic_id = %s AND id = %s',
             [amount, amount, ctx.clinic_id, invoice["id"]])
     version = Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
     return line_id, version
 
 
+def is_visit_line(line, visit_service_id):
+    """The visit's own service line: the one that charges the visit's service. Removing it is a 100% discount."""
+    return line["kind"] == "service" and visit_service_id is not None and line["service_id"] == visit_service_id
+
+
+def may_remove_line(ctx, line, visit_service_id, today=None):
+    """Who may remove a line (chief judge M1, decision 2; design 5.3).
+
+    billing.discount may remove any line. Without it, a person with billing.collect may remove only a line they
+    added themselves on the current business day, and never the visit's own service line, so the desk can fix its
+    own mis-tap without lowering what the visit costs.
+    """
+    if ctx.can("billing.discount"):
+        return True
+    if not ctx.can("billing.collect") or is_visit_line(line, visit_service_id):
+        return False
+    today = today or business_day(ctx.clinic)
+    return line["created_by_id"] == ctx.membership_id and business_day(ctx.clinic, line["created_at"]) == today
+
+
 def remove_line(ctx, invoice_id, line_id):
-    """Only while paid stays within the new total. A line not from the list needs billing.discount. Audited."""
+    """Only while paid stays within the new total, and only for who may_remove_line allows. Audited."""
     invoice, appointment = _lock_invoice(ctx, invoice_id)
     _require_open(invoice)
-    line = sql.row(ctx, 'SELECT id, kind, service_id, description, qty, unit_price, amount, from_list '
-                        'FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s AND id = %s',
+    line = sql.row(ctx, 'SELECT id, kind, service_id, description, qty, unit_price, amount, from_list, created_by_id, '
+                        'created_at FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s AND id = %s',
                    [ctx.clinic_id, invoice["id"], line_id])
     if line is None:
         raise not_found("line")
-    if not line[7]:
-        ctx.require("billing.discount")
+    if not may_remove_line(ctx, dict(zip(("id", "kind", "service_id", "description", "qty", "unit_price", "amount",
+                                          "from_list", "created_by_id", "created_at"), line)),
+                           appointment["service_id"] if appointment else None):
+        raise ApiError("forbidden", _("You don't have permission to do this."), 403)
     amount = line[6]
     if invoice["paid"] > invoice["total"] - amount:
         raise _paid_exceeds()

@@ -5,7 +5,7 @@ import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { Submitter, When, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
 import { t } from "./strings.js";
-import { toast } from "./shell.js";
+import { alertMessage, toast } from "./shell.js";
 
 const config = JSON.parse(document.getElementById("clinic-config").textContent);
 
@@ -248,19 +248,31 @@ export function initBook({ onBooked, defaults } = {}) {
     if (problem) { submitter.say(problem); return; }
     const printing = Boolean(b.payment && field("print") && field("print").checked);
     const tab = printing ? openPrintTab() : null;  // opened in the tap, where Safari allows it
-    const result = await submitter.run("POST", "/api/v1/appointments", b, t("booking"));
+    const who = patient ? patient.name : (b.new_patient && b.new_patient.full_name) || "";
+    const label = [t("booking"), who, b.payment ? moneyText(b.payment.amount) : ""].filter(Boolean).join(" · ");
+    const result = await submitter.run("POST", "/api/v1/appointments", b, label);
     if (!result || !isOk(result)) { if (tab) tab.close(); return; }
     const appointment = result.data.appointment;
-    if (tab && appointment.invoice) tab.location.href = receiptUrl(appointment.invoice.id);
+    // "Collected" only when the answer's invoice shows the money (M1 decision R2), never from what was sent.
+    const paid = Boolean(b.payment && appointment.invoice && appointment.invoice.paid >= b.payment.amount);
+    if (tab && paid) tab.location.href = receiptUrl(appointment.invoice.id);
+    else if (tab) tab.close();
     dialog.close();
-    toast(t("booked", { name: appointment.patient.name, n: appointment.queue_no }),
-      printing && !tab && appointment.invoice ? { label: t("print_receipt"), href: receiptUrl(appointment.invoice.id) } : null);
+    const names = { name: appointment.patient.name, n: localDigits(appointment.queue_no) };
+    if (paid) {
+      toast(t("booked_paid", { ...names, amount: moneyText(appointment.invoice.paid) }),
+        printing && !tab ? { label: t("print_receipt"), href: receiptUrl(appointment.invoice.id) } : null);
+    } else {
+      toast(t("booked", names));
+      if (b.payment) alertMessage(t("booked_not_paid"));
+    }
     if (onBooked) onBooked(result.data);
   });
 
   // --- opening ---
 
   function open({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener } = {}) {
+    if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one (R7)
     form.reset();
     submitter.reset();
     results.replaceChildren();

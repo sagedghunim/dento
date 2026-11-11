@@ -1368,3 +1368,15 @@ msgstr "اسم المستخدم من 3 إلى 30 حرفًا إنجليزيًا �
 #, python-format
 msgid "Sections: %(count)s"
 msgstr "الأقسام: %(count)s"
+
+msgid "The visit was already finished. Nothing was collected."
+msgstr "كانت الزيارة قد انتهت بالفعل. لم يُحصَّل أي مبلغ."
+
+msgid "Booked: {name}, turn {n}, {amount} collected"
+msgstr "تم الحجز: {name}، الدور {n}، وتم تحصيل {amount}"
+
+msgid "Booked, but nothing was collected. Take the payment from the row."
+msgstr "تم الحجز، لكن لم يُحصَّل أي مبلغ. حصِّل المبلغ من صف الحجز."
+
+msgid "You can't remove this item. Ask someone who can give discounts."
+msgstr "لا يمكنك حذف هذا البند. اطلبه من شخص لديه صلاحية الخصم."

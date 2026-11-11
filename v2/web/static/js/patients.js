@@ -65,6 +65,7 @@ if (patientDialog) {
   }
 
   function open(edit, opener) {
+    if (submitter.holdsUnknown()) { openDialog(patientDialog, opener); return; }
     editing = edit;
     form.reset();
     submitter.reset();

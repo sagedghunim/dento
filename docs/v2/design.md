@@ -301,7 +301,7 @@ Platform admins hold no memberships. This is checked when a member is added and 
   - `PRIMARY KEY (clinic_id, at, id)`, which also serves a clinic's newest-first list; index `(clinic_id, patient_id, at, id)` for "who opened this file";
   - kept 24 months online, then detached, archived and dropped.
 - `accounts_account_event` (directory, 4.1).
-- **Partition upkeep** (`core/partitions.py`, `manage.py ensure_partitions`), as `hamada_owner`: each new partition is created standalone with a CHECK matching its bounds, **given RLS and the standard policy before it is attached**, then attached (ShareUpdateExclusiveLock, so file opens don't wait). Old partitions leave by `DETACH PARTITION … CONCURRENTLY`. A daily run keeps 3 months ahead, and an alert fires below 2. CI runs the upkeep once under the production roles (M5).
+- **Partition upkeep** (`core/partitions.py`, `manage.py ensure_partitions`), as `hamada_owner`: each new partition is created standalone with a CHECK matching its bounds, **given RLS and the standard policy before it is attached**, then attached (ShareUpdateExclusiveLock, so file opens don't wait). Old partitions leave by `DETACH PARTITION … CONCURRENTLY`. A daily Procrastinate task (`core.ensure_partitions`) keeps the current month and **6 months ahead** on the directory and every shard, and `migrate_all` runs the same upkeep on every deploy; an alert fires below **3** future months. Empty partitions cost almost nothing, and six months give a small team a quarter to notice a dead worker. CI runs the upkeep once under the production roles (M5).
 
 **Why the business tables aren't partitioned by time.** Appointments, invoices, payments and the stock ledger are read per clinic across all time, and other rows refer to them. Time partitions would force the partition column into every foreign key and unique key, and turn a patient's history into a probe of every partition. They grow out by shards instead.
 
@@ -337,13 +337,20 @@ Platform admins hold no memberships. This is checked when a member is added and 
 **Lock order.** Every transaction takes locks in this global order:
 1. the request key;
 2. the appointment (`SELECT … FOR NO KEY UPDATE`, or a conditional `UPDATE`);
-3. the invoice;
-4. payment rows;
-5. inventory items;
-6. expenses;
-7. counter rows, in the order `patient_file`, `invoice`, `prescription`;
-8. `summaries_doctor_day` rows;
-9. `summaries_clinic_day` rows.
+3. doctor membership rows (`clinics_membership`):
+   - booking and reschedule take `FOR SHARE` on the target doctor, in a statement of its own before they read the doctor's sessions (a lock taken inside the session query would still read the sessions from before the wait);
+   - schedule changes take `FOR NO KEY UPDATE`, several rows in one statement in id order;
+   - the two conflict, so a booking and a schedule change for one doctor go one at a time; two bookings don't wait for each other;
+4. session rows (`clinics_schedule`), only in schedule changes;
+5. the patient (`patients_patient`), only in a patient edit (a conditional `UPDATE` on the expected values);
+6. the clinic row (`clinics_clinic`, `FOR NO KEY UPDATE`), only in a settings change;
+7. the invoice;
+8. payment rows;
+9. inventory items;
+10. expenses;
+11. counter rows, in the order `patient_file`, `invoice`, `prescription`;
+12. `summaries_doctor_day` rows;
+13. `summaries_clinic_day` rows.
 
 A flow writes **all** its changes to one summary table in **one statement**, in key order (doctor-days by (day, doctor_id), clinic-days by day), for example a payment on a past day's visit that changes the payment day's `collected` and the visit day's version.
 
@@ -351,10 +358,10 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
 
 | Flow | Locks, in order |
 |---|---|
-| Booking (5.1), with optional arrive and payment | key → [new patient: counter patient_file] → [payment: counter invoice, taken here and kept for `ensure_invoice`] → doctor_day (one upsert: turn, booked, collected) → clinic_day (one upsert) |
+| Booking (5.1), with optional arrive and payment | key → doctor membership `FOR SHARE` → [new patient: counter patient_file] → [payment: counter invoice, taken here and kept for `ensure_invoice`] → doctor_day (one upsert: turn, booked, collected) → clinic_day (one upsert) |
 | Status change (5.2) | key → appointment (conditional UPDATE) → doctor_day → clinic_day |
 | Finish with payment | key → appointment → invoice (or counter invoice for a new one) → doctor_day → clinic_day |
-| Reschedule | key → appointment → both doctor_day rows in one statement → both clinic_day rows in one statement |
+| Reschedule | key → appointment → target doctor membership `FOR SHARE` → both doctor_day rows in one statement → both clinic_day rows in one statement |
 | Cancel | key → appointment → invoice (read; void if empty) → doctor_day → clinic_day |
 | Payment, line, discount, void (5.3) | key → appointment → invoice (or counter invoice) → doctor_day → clinic_day |
 | Refund | key → appointment → invoice → the payment → doctor_day (refund day) → clinic_day (refund day and the appointment's day, one statement) |
@@ -365,6 +372,11 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
 | Visit note (5.6) | key → note (conditional on version) |
 | End-of-day sweep (5.10) | the day's open appointments in one statement by id → for in-room visits without an invoice, counter invoice → that clinic-day's doctor_day rows in one statement → clinic_day |
 | Recompute (5.10) | that clinic-day's doctor_day rows `FOR UPDATE` in one statement → clinic_day `FOR UPDATE` → aggregate the source rows (no locks) → write |
+| Schedule change (create, update, delete) | key → doctor membership(s) `FOR NO KEY UPDATE` in id order → the session row → read the doctor's future bookings (no locks, every one, in keyset pages) → clinic_day (today's version) |
+| Patient edit | key → patient (conditional on the expected values) → clinic_day (today's version) |
+| Settings change | key → clinic row → [time zone or day end: the directory's copy after the shard commits] |
+
+No cycle comes from the membership rows: reschedule goes appointment → membership, while booking and schedule changes take no appointment lock before the membership, and two `FOR SHARE` locks don't conflict. A schedule change never locks an appointment, a counter or a doctor_day row.
 
 - **Deadlocks** (`40P01`): the server retries the whole transaction once. **Lock timeouts** (`55P03`): the request has already waited 2 s, so it answers 409 `busy` with `Retry-After`, and the client resends the same key.
 - **Errors:** services raise `ApiError(code, message, status)`. Constraint violations that users can cause map to 409 with a code. Anything else is a 500, logged with the request id, and never retried by the client.
@@ -404,7 +416,7 @@ The answer is the new row (turn, invoice id, amount due) and the new version.
 
 `GET /api/v1/appointments/quote?patient=&doctor=&service=&day=` returns the fee and `is_follow_up` for the Book dialog, using the same rule.
 
-A schedule change that would leave a future slot booking off the grid, or outside the doctor's hours, is refused with the list of affected bookings.
+A schedule change that would leave a future slot booking off the grid, or outside the doctor's hours, is refused with the list of affected bookings. Every future booking is checked (in keyset pages), and a slot booking is covered only when its start and its end are a slot of the new grid. The database also refuses two slot visits of one doctor that overlap (`appointment_no_overlap`, an exclusion constraint on `tstzrange(starts_at, ends_at)` where `holds_slot`), answered as 409 `slot_taken`.
 
 ### 5.2 Status changes
 
@@ -429,6 +441,7 @@ A schedule change that would leave a future slot booking off the grid, or outsid
   - otherwise it takes a new turn on the new doctor-day, so the old number is a gap (turn numbers may have gaps; invoice, file and prescription numbers may not);
   - `last_queue_no` never goes down.
 - **finish** with a payment runs the 5.3 payment flow in the same transaction (R4.3).
+  - If someone else already finished the visit, a finish **with a payment** is not a harmless repeat: its cash was never recorded. It answers 409 `already_finished` with the current appointment and its invoice, and writes nothing. The desk then takes the payment on the done visit through the payments endpoint. A finish without a payment stays a harmless 200.
 - Every action answers with the updated row and the new version.
 
 ### 5.3 Invoices and payments
@@ -440,7 +453,12 @@ A schedule change that would leave a future slot booking off the grid, or outsid
   3. `UPDATE billing_invoice SET paid = paid + :a WHERE clinic_id = :c AND id = :i AND status = 'open' AND paid + :a <= total`. No row is 409 `over_balance`;
   4. insert the payment with the patient, the appointment's doctor and the business day;
   5. `doctor_day.collected` (payment day, doctor) and `clinic_day.collected` (payment day) go up; the version of the appointment's day is bumped.
-- **Lines:** `POST /api/v1/invoices/{id}/lines` adds a line. A list price needs `billing.collect`; any other price needs `billing.discount`. `DELETE /api/v1/invoices/{id}/lines/{line}` removes one, only while `paid` stays <= the new total.
+- **Lines:** `POST /api/v1/invoices/{id}/lines` adds a line. A list price needs `billing.collect`; any other price needs `billing.discount`. Each line records who added it (`created_by_id`, the membership) and when (`created_at`).
+- **Removing a line:** `DELETE /api/v1/invoices/{id}/lines/{line}`, only while `paid` stays <= the new total. Who may:
+  - **the visit's own service line** (kind `service`, for the visit's service) always needs `billing.discount`: removing it is a 100% discount;
+  - **any other line** needs `billing.discount`, unless the same membership added it on the same business day, so the desk can fix its own mis-tap with `billing.collect`.
+  - Every line in an invoice's answer carries `removable` for the person asking, and the screen offers "Remove" only then. A refusal is 403. The removal is audited.
+- **Finish after finish:** a finish with a payment on a visit someone else already finished answers 409 `already_finished` (5.2); nothing is collected.
 - **Discount:** `PUT /api/v1/invoices/{id}/discount` with `{discount, expected_discount}`, absolute, under `billing.discount`. It is refused if the expected value doesn't match or if `paid` would exceed the new total. Audited.
 - **Refund** (`billing.refund`): lock the appointment, then the invoice; `UPDATE billing_payment SET refunded = refunded + :a WHERE … AND refunded + :a <= amount`; insert a refund row (its own business day, the original's doctor); take the amount off `invoice.paid`; `doctor_day.refunded` and `clinic_day.refunded` go up on the refund's day. Audited.
 - **Void** (`billing.refund`): only while paid = 0. Audited. A void invoice no longer blocks a new one for the visit, since the one-invoice index covers only open invoices.
@@ -545,7 +563,9 @@ All periodic jobs fan out by shard and by batches of about 500 clinics, with one
   - `waiting` → `no_show` with `arrived_at` kept and `auto_closed` set ("left without being seen", pending Saged);
   - `in_room` → `done` with `auto_closed` set, its invoice ensured and flagged for the owner.
 - **Recompute**, one clinic-day per transaction, for every past day whose `changed_since_recompute` is set. It runs after the business day ends. It locks the summary rows `FOR UPDATE` first, then aggregates the source rows, then writes. A difference is fixed, logged, and counted in a metric.
-- **Request-key cleanup**, partition upkeep, expired sessions and throttles, and the `user_clinic` reconciliation, as `hamada_maint`.
+- **Partition upkeep**, daily (`core.ensure_partitions`): the current month and 6 more on the directory and every shard, with an alert below 3 (4.10). `migrate_all` runs it too.
+- **Request-key cleanup**, daily in the 04:00–09:00 Cairo window (`core.clean_request_keys`): rows older than 72 hours, in batches of about 5,000. Until a `hamada_maint` alias exists it walks each shard's places from the directory, one transaction per place under row-level security.
+- Expired sessions and throttles, and the `user_clinic` reconciliation, as `hamada_maint`.
 - Jobs run with a system `Ctx`. Their audit actor is "system", and their `created_by_id` is null.
 - The Procrastinate worker connects straight to PostgreSQL for LISTEN, not through PgBouncer's transaction mode; or it polls.
 
@@ -730,7 +750,13 @@ Each is a sequence of idempotent steps with its own request key. A failed step i
 ### 9.1 Deploying and migrating
 
 - `migrate_all` runs as a one-off step, as `hamada_owner`, before the web containers update. Schema changes use expand and contract, so old and new code both work during a deploy.
-- **Migrations on large tables:** `lock_timeout` with retries, `CREATE INDEX CONCURRENTLY`, constraints added `NOT VALID` and validated later, backfills in batches in jobs. A stored generated column can't be added cheaply later, so such columns go in a table's first migration.
+- **Migrations on large tables:** `lock_timeout` with retries, `CREATE INDEX CONCURRENTLY`, and a stored generated column only in a table's first migration (it can't be added cheaply later). A constraint that needs a full scan (an exclusion constraint) goes in while the table is empty.
+- **Backfilling a column on a table with data** (M2 medicines and M3 stock items carry `section_id`; M4 recomputes `day`):
+  1. **No `NO FORCE ROW LEVEL SECURITY`** in a shard migration: it takes ACCESS EXCLUSIVE until commit and stops every request on the shard. Production migrates as `hamada_owner`, which bypasses RLS; dev and tests give the owner BYPASSRLS or backfill per clinic with `set_config`.
+  2. **Migration A, short locks only:** the nullable column; its foreign key `NOT VALID` (`CompositeForeignKey` gets a `validate=False` option); a not-null `CHECK (col IS NOT NULL) NOT VALID`. From then on the code writes the column.
+  3. **A resumable management command** backfills in keyset batches of about 5,000 on `(clinic_id, id)`, each batch its own transaction with `lock_timeout`, logging progress.
+  4. **Migration B:** `VALIDATE CONSTRAINT` on both (SHARE UPDATE EXCLUSIVE only), then `SET NOT NULL`, which uses the validated check and skips the scan, then drop the `CHECK`; `SeparateDatabaseAndState` keeps Django's state in step.
+  - The tooling is written with the first backfill on a table that holds data. The `section_id` backfill already applied stays as it is: no shard held live data.
 
 ### 9.2 Availability
 
@@ -766,7 +792,7 @@ Restore a database; fail over; migrate across shards; move a clinic; partition u
 |---|---|---|
 | Today, unchanged (304) | 20 ms | 2 directory (session, user) + 3 shard (`set_config`, membership, version) |
 | Today, full fragment | 150 ms | 3 shard + version, appointments, doctor-days, doctors, items |
-| Book (with arrive and payment) | 200 ms | at most 12 |
+| Book (with arrive and payment) | 200 ms | at most 13 (12, plus the `FOR SHARE` on the doctor's row) |
 | Status change | 100 ms | 5–7 |
 | Payment | 150 ms | at most 10 |
 | Patient search | 150 ms (300 ms timeout) | 1–2 |

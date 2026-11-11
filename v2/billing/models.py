@@ -6,6 +6,7 @@ open invoice (audited): voids and refunds keep their rows.
 
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Now
 from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
@@ -75,6 +76,9 @@ class InvoiceLine(models.Model):
     unit_price = models.BigIntegerField()
     amount = models.BigIntegerField()
     from_list = models.BooleanField(default=False)  # the service's list price
+    # Who added it and when: the desk may remove its own line on the same business day (design 5.3).
+    created_by_id = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(db_default=Now())
 
     class Meta:
         db_table = "billing_invoice_line"

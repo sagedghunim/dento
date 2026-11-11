@@ -553,7 +553,8 @@ class QueryCountTests(M1TestCase):
         # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version.
         self.assertEqual(small[1], 3)
         self.assertLessEqual(small[0], 6)
-        self.assertLessEqual(small[2], 12)
+        # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4).
+        self.assertLessEqual(small[2], 13)
 
 
 class FinishTests(M1TestCase):

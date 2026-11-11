@@ -39,6 +39,9 @@ def _slot_taken():
     return ApiError("slot_taken", _("This time is already booked."), 409, fields={"starts_at": "taken"})
 
 
+SLOT_CONSTRAINTS = ("appointment_slot_uniq", "appointment_no_overlap")  # an equal start, or an overlapping slot
+
+
 def _constraint(error):
     cause = error.__cause__
     diag = getattr(cause, "diag", None)
@@ -66,7 +69,7 @@ def book(ctx, request):
         if day != today:
             raise _not_today()
 
-    doctor, service = rules.doctor_day_and_service(ctx, request["doctor_id"], request["service_id"], day)
+    doctor, service = rules.doctor_day_and_service(ctx, request["doctor_id"], request["service_id"], day, lock=True)
     # The section comes from the service; the doctor must have a session in it that day (design D1).
     starts_at, ends_at = rules.resolve_slot(clinic, day, doctor, request["starts_at"], service.section_id)
     is_extra = bool(request["extra"] and starts_at is not None)
@@ -110,7 +113,7 @@ def book(ctx, request):
             arrived_at=now if request["arrive"] else None, created_at=now, created_by_id=ctx.membership_id,
             updated_at=now, updated_by_id=ctx.membership_id)
     except IntegrityError as error:
-        if _constraint(error) == "appointment_slot_uniq":
+        if _constraint(error) in SLOT_CONSTRAINTS:
             raise _slot_taken()
         raise
 
@@ -170,7 +173,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None)
                            '(SELECT name FROM "clinics_service" s WHERE s.clinic_id = "scheduling_appointment".clinic_id '
                            'AND s.id = "scheduling_appointment".service_id)', params)
     if changed is None:
-        return _unchanged(ctx, appointment_id, action, target, today)
+        return _unchanged(ctx, appointment_id, action, target, today, with_payment=payment is not None)
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
                             "service_name"), changed))
     day, doctor_id = appointment["day"], appointment["doctor_id"]
@@ -215,11 +218,18 @@ def undo(ctx, appointment_id, action, seen):
     return Deltas().clinic_day(day).write_clinics(ctx)[day]
 
 
-def _unchanged(ctx, appointment_id, action, target, today):
+def _unchanged(ctx, appointment_id, action, target, today, with_payment=False):
     current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list("status", "day").first()
     if current is None:
         raise rules.not_found("appointment")
     status, day = current
+    if status == target and action == "finish" and with_payment:
+        # Someone else finished it first. This request's cash was never recorded, so it must not look like
+        # a success: the desk takes the payment on the done visit instead (chief judge M1, R2; design 5.2).
+        from .selectors import appointment as appointment_row
+
+        raise ApiError("already_finished", _("The visit was already finished. Nothing was collected."), 409,
+                       fields={"status": status}, extra={"appointment": appointment_row(ctx, appointment_id)})
     if status == target:
         return None  # already done: a harmless repeat, nothing changes
     if action == "arrive" and status == "booked" and day != today:
@@ -269,7 +279,7 @@ def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
     if status != "booked":
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
     rules.check_day(clinic, day)
-    doctor = rules.doctor_day(ctx, doctor_id, day)
+    doctor = rules.doctor_day(ctx, doctor_id, day, lock=True)
     new_starts, new_ends = rules.resolve_slot(clinic, day, doctor, starts_at, section_id)  # the visit keeps its section
     is_extra = bool(extra and new_starts is not None)
     if (doctor_id, day, new_starts, is_extra) == (old_doctor, old_day, old_starts, old_extra):
@@ -288,7 +298,7 @@ def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
                 [day, doctor_id, queue_no, new_starts, new_ends, is_extra, timezone.now(), ctx.membership_id,
                  ctx.clinic_id, appointment_id])
     except IntegrityError as error:
-        if _constraint(error) == "appointment_slot_uniq":
+        if _constraint(error) in SLOT_CONSTRAINTS:
             raise _slot_taken()
         raise
     deltas.clinic_day(old_day).clinic_day(day)

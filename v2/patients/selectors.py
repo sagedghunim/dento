@@ -41,7 +41,18 @@ def phone_prefix(raw):
 
 
 def search(ctx, query, today):
-    """At most 20 files, as 1-2 index-only scans plus one statement for the details of what was found."""
+    """At most 20 files, as 1-2 index-only scans plus one statement for the details of what was found.
+
+    The searches run under a 300 ms statement timeout (design 5.7). SET LOCAL would otherwise last for
+    the rest of the request's transaction, so a successful search puts the role's timeout back. After a
+    timeout the transaction is rolled back, which undoes the SET LOCAL with it.
+    """
+    found = _search(ctx, query, today)
+    sql.statement_timeout(ctx, None)
+    return found
+
+
+def _search(ctx, query, today):
     query = (query or "").strip()
     if looks_like_phone(query):
         digits = "".join(ch for ch in ascii_digits(query) if ch.isdigit())

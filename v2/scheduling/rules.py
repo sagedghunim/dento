@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from django.utils.translation import gettext as _
 
 from clinics import settings as clinic_settings
-from core import sql
+from core import sql, validate
 from core.days import business_day, zone
 from core.errors import ApiError
 
@@ -104,14 +104,34 @@ def _doctor_from(rows, offset):
     return doctor
 
 
-def doctor_day(ctx, doctor_id, day):
-    """One statement: the doctor (active owner or doctor of this clinic) and their sessions that weekday."""
+def lock_doctor(ctx, doctor_id):
+    """FOR SHARE on the doctor's membership row before a booking or a move reads the sessions.
+
+    A schedule change takes FOR NO KEY UPDATE on the same row before it reads the bookings, so the two wait
+    for each other: a booking can't be stranded by a change it raced, nor use a stale max_bookings (chief judge
+    M1, R4; design 5.0). Two bookings take FOR SHARE together without waiting.
+    """
+    sql.run(ctx, 'SELECT 1 FROM "clinics_membership" WHERE clinic_id = %s AND id = %s FOR SHARE', [ctx.clinic_id, doctor_id])
+
+
+def doctor_day(ctx, doctor_id, day, lock=False):
+    """One statement: the doctor (active owner or doctor of this clinic) and their sessions that weekday.
+
+    `lock` (reschedule) first locks the target doctor's row; reads such as the slot grid don't.
+    """
+    if lock:
+        lock_doctor(ctx, doctor_id)
     rows = sql.rows(ctx, _session_rows_sql(False), [ctx.clinic_id, doctor_id, day.weekday(), ctx.clinic_id])
     return _doctor_from(rows, 0)
 
 
-def doctor_day_and_service(ctx, doctor_id, service_id, day):
-    """One statement for booking and quotes: the service with its follow-up price, the doctor and their sessions."""
+def doctor_day_and_service(ctx, doctor_id, service_id, day, lock=False):
+    """One statement for booking and quotes: the service with its follow-up price, the doctor and their sessions.
+
+    `lock` (booking) first locks the doctor's row; a quote doesn't.
+    """
+    if lock:
+        lock_doctor(ctx, doctor_id)
     rows = sql.rows(ctx, _session_rows_sql(True),
                     [ctx.clinic_id, service_id, doctor_id, day.weekday(), ctx.clinic_id])
     sid, name, kind, price, active, follow_price, follow_active, section_id = rows[0][:8]
@@ -164,7 +184,13 @@ def parse_instant(value, name="starts_at"):
         raise ApiError("invalid", f"{name} must be a time with its offset", fields={name: "datetime"})
     if instant.tzinfo is None:
         raise ApiError("invalid", f"{name} must be a time with its offset", fields={name: "datetime"})
-    return instant.astimezone(dt.UTC)
+    try:
+        utc = instant.astimezone(dt.UTC)
+    except OverflowError:  # an offset that pushes year 1 or 9999 out of range
+        raise ApiError("invalid", f"{name} is out of range", fields={name: "range"})
+    if not validate.DAY_MIN <= utc.date() <= validate.DAY_MAX:
+        raise ApiError("invalid", f"{name} is out of range", fields={name: "range"})
+    return utc
 
 
 def resolve_slot(clinic, day, doctor, starts_at, section_id=None):
@@ -218,8 +244,10 @@ def stranded(clinic, bookings, sessions):
     """The bookings that `sessions` (one doctor's, after a schedule change) no longer cover (design 5.1).
 
     A booking is covered by the doctor's sessions on its weekday in its own section: a slot booking
-    needs its time on their grid, a turn without a time needs a queue session. `bookings` are dicts
-    with day, section_id and starts_at; `sessions` are Session objects with a `weekday` attribute.
+    needs its whole slot, start and end, to be a slot of their grid (a 20-minute visit is not covered
+    by a 15-minute grid that starts at the same time); a turn without a time needs a queue session.
+    `bookings` are dicts with day, section_id, starts_at and ends_at; `sessions` are Session objects
+    with a `weekday` attribute.
     """
     by_weekday = {}
     for session in sessions:
@@ -233,8 +261,8 @@ def stranded(clinic, bookings, sessions):
         else:
             key = (booking["day"], section_id)
             if key not in grids:
-                grids[key] = {start for start, _end in grid(clinic, booking["day"], doctor, section_id)}
-            covered = booking["starts_at"] in grids[key]
+                grids[key] = set(grid(clinic, booking["day"], doctor, section_id))
+            covered = (booking["starts_at"], booking["ends_at"]) in grids[key]
         if not covered:
             out.append(booking)
     return out

@@ -164,8 +164,9 @@ class PatientTests(M1TestCase):
         small = counts()
         bulk_patients(self.a, 10000)
         self.assertEqual(counts(), small)
-        # set_config, membership, SET LOCAL; then 1-2 searches; then the details of what was found, if anything.
-        self.assertEqual(small, (5, 6, 5, 4))
+        # set_config, membership, SET LOCAL; then 1-2 searches; then the details of what was found, if anything;
+        # then the timeout put back, so it doesn't outlive the search (chief judge M1, R1).
+        self.assertEqual(small, (6, 7, 6, 5))
 
 
 class SearchPlanTests(TransactionTestCase):

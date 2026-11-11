@@ -15,6 +15,14 @@ def _bad_cursor():
     return ApiError("invalid", "after must be a cursor from a previous page", fields={"after": "cursor"})
 
 
+def _cursor_id(raw):
+    """An id inside a cursor: a bigint, so the database never sees a value it can't hold."""
+    value = int(raw)
+    if not 0 <= value <= 2**63 - 1:
+        raise ValueError(raw)
+    return value
+
+
 def day_cursor(request):
     """A cursor over (day DESC, id DESC): 'YYYY-MM-DD.id'."""
     raw = request.GET.get("after")
@@ -22,7 +30,7 @@ def day_cursor(request):
         return None
     try:
         day, ident = raw.split(".", 1)
-        return dt.date.fromisoformat(day), int(ident)
+        return dt.date.fromisoformat(day), _cursor_id(ident)
     except ValueError:
         raise _bad_cursor()
 
@@ -34,7 +42,7 @@ def time_cursor(request):
         return None
     try:
         micros, ident = raw.split(".", 1)
-        return dt.datetime(1970, 1, 1, tzinfo=dt.UTC) + dt.timedelta(microseconds=int(micros)), int(ident)
+        return dt.datetime(1970, 1, 1, tzinfo=dt.UTC) + dt.timedelta(microseconds=int(micros)), _cursor_id(ident)
     except (ValueError, OverflowError):
         raise _bad_cursor()
 

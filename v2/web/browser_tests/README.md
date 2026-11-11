@@ -1,0 +1,33 @@
+# Browser tests
+
+Headless Edge, driven over the DevTools protocol by plain Node scripts (Node 24 or later; no packages).
+They cover what Django's test client can't: the M1 decisions R2, R7 and R8.
+
+| Test | Checks |
+|---|---|
+| `e1_rows_stay.mjs` | R8: at 390 px with touch, a row under a resting finger stays put when a booking lands above it; a tap within 700 ms of a row's redraw is ignored |
+| `e2_no_double_booking.mjs` | R7: a booking whose answer is lost can't be closed away, "Try again" books once, and a page change lists it instead of resending it |
+| `e3_finish_collect.mjs` | R2: "Finish and collect" after another screen finished the visit says nothing was collected, and "Collect now" takes the payment once |
+
+## Run
+
+1. Start a dev server with demo data (`seed_demo`) on a day the demo dental clinic works (Saturday to Thursday). It needs two doctors working today.
+2. From the repo root:
+
+```
+node v2/web/browser_tests/run.mjs
+```
+
+Each file also runs alone, for example `node v2/web/browser_tests/e1_rows_stay.mjs`.
+
+Settings, from the environment:
+
+| Variable | Default |
+|---|---|
+| `HAMADA_BT_BASE` | `http://127.0.0.1:8003` |
+| `HAMADA_BT_USER` | `sara` (the front desk) |
+| `HAMADA_BT_PASSWORD` | `Hamada-Demo-2026` |
+| `HAMADA_BT_CLINIC` | `سمايل` (part of the clinic's name, for someone in several clinics) |
+| `HAMADA_BT_EDGE` | `C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe` |
+
+The tests book new patients named `Bt …` on the server they run against. Run them against development data only.

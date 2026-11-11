@@ -10,6 +10,7 @@ const PENDING = "hamada.pending";
 const TIMEOUT_MS = 10000;
 const GIVE_UP_MS = 20000;
 const DAY_MS = 24 * 3600 * 1000;
+const AUTO_MS = 2 * 60 * 1000;  // an automatic resend at page load only this soon after the first send (R7)
 
 export const membership = () => (meta && meta.dataset.membership) || "";
 const userId = () => (meta && meta.dataset.user) || "";
@@ -152,8 +153,10 @@ export function pendingList() {
 }
 
 // Run one action, owning its key until a definite answer. `label` names it for the "not confirmed" list.
-export async function save(method, url, body, { key, onWaiting, label } = {}) {
-  const entry = { url, method, body, key: key || newKey(), label: label || "", user: userId(),
+// `auto` marks a request that is safe to resend unattended: a row action whose body carries the status
+// it expects, so a resend after the person redid it is a harmless 200 or a 409, never a second effect.
+export async function save(method, url, body, { key, onWaiting, label, auto = false } = {}) {
+  const entry = { url, method, body, key: key || newKey(), label: label || "", auto, user: userId(),
                   membership: membership(), created_at: Date.now() };
   writePending([...readPending().filter((p) => p.key !== entry.key), entry]);
   const result = await send(method, url, body, { key: entry.key, onWaiting });
@@ -172,6 +175,9 @@ export async function retryPending(key, { onWaiting } = {}) {
 }
 
 // After a reload or a new sign-in: settle saves whose answers were lost, for this person and clinic only.
+// Only `auto` entries younger than 2 minutes are resent here (M1 decision R7). Every other one, such as a
+// booking, a payment or a bill line, waits in the page's "not confirmed" bar for "Try again" or "Discard":
+// the person may already have redone it, and resending would do it twice.
 export async function settlePending() {
   const all = readPending();
   if (!userId()) return [];  // the sign-in page: keep them for whoever signs in next
@@ -186,6 +192,7 @@ export async function settlePending() {
       results.push({ entry, status: 0, settled: false, expired: true });
       continue;
     }
+    if (!entry.auto || Date.now() - entry.created_at > AUTO_MS) continue;  // listed, not resent
     const result = await send(entry.method, entry.url, entry.body, { key: entry.key });
     if (result.settled) forget(entry.key);
     results.push({ entry, ...result });

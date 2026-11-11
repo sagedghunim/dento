@@ -1,6 +1,7 @@
 // Shared page behaviour: sign-out, the language switch, toasts, menus, "/" for search, and saves whose
 // answers were lost before a reload.
-import { clearPending, newKey, save, send, settlePending } from "./api.js";
+import { clearPending, discardPending, errorMessage, isOk, newKey, pendingList, retryPending, save, send, settlePending } from "./api.js";
+import { t } from "./strings.js";
 
 const toastEl = document.getElementById("toast");
 const alertEl = document.getElementById("alert");
@@ -80,7 +81,64 @@ window.addEventListener("hamada:signed-out", () => {
   window.location.href = "/login?next=" + next;
 });
 
+// --- saves whose outcome is unknown: listed on every clinic page with "Try again" and "Discard" only ---
+// (design 7.4, M1 decision R7). Nothing here is resent without the person asking.
+
+function pendingBar() {
+  let bar = document.querySelector("[data-pending-bar]");
+  if (!bar) {
+    const topbar = document.querySelector(".wrap > .topbar");
+    if (!topbar) return null;
+    bar = document.createElement("div");
+    bar.className = "pending-bar";
+    bar.dataset.pendingBar = "";
+    topbar.after(bar);
+  }
+  return bar;
+}
+
+function button(text, className, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = className;
+  b.textContent = text;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+export function renderPending() {
+  const items = pendingList();
+  const bar = items.length ? pendingBar() : document.querySelector("[data-pending-bar]");
+  if (!bar) return;
+  bar.hidden = !items.length;
+  bar.replaceChildren(...items.map((p) => {
+    const box = document.createElement("div");
+    box.className = "notice pending-item";
+    box.setAttribute("role", "alert");
+    const text = document.createElement("span");
+    text.textContent = t("not_confirmed", { what: p.label || "" });
+    const actions = document.createElement("span");
+    actions.className = "appt-actions";
+    const again = button(t("try_again"), "btn", async () => {
+      again.disabled = true;
+      const result = await retryPending(p.key);  // the same key and body: never done twice
+      if (result && result.expired) alertMessage(t("check_record"));
+      else if (result && result.settled && !isOk(result)) alertMessage(errorMessage(result, t("failed")));
+      else if (result && result.settled) toast(t("saved"));
+      renderPending();
+      window.dispatchEvent(new CustomEvent("hamada:pending-settled"));
+    });
+    const drop = button(t("discard"), "btn ghost", () => { discardPending(p.key); renderPending(); alertMessage(t("check_record")); });
+    actions.append(again, drop);
+    box.append(text, actions);
+    return box;
+  }));
+}
+
+window.addEventListener("hamada:pending-changed", () => renderPending());
+
 settlePending().then((results) => {
+  renderPending();
   if (!results.length) return;
   if (results.some((r) => r.expired)) {
     alertMessage(ar() ? "لم نتأكد من حفظ عملية سابقة. راجع السجل." : "We couldn't confirm an earlier save. Check the record.");

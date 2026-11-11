@@ -1,5 +1,7 @@
 """Small validators for request bodies (design 6.1)."""
 
+import datetime as _dt
+
 from core.errors import ApiError
 
 
@@ -51,12 +53,20 @@ def path_id(value, not_found):
     return value
 
 
-def iso_day(value, name="day"):
-    import datetime as dt
+# Days a request may name. Wide enough for any visit, narrow enough that day arithmetic (windows, grids,
+# rollovers) never leaves Python's calendar, which would be a 500 (chief judge M1, R6).
+DAY_MIN = _dt.date(1900, 1, 1)
+DAY_MAX = _dt.date(2199, 12, 31)
 
+
+def iso_day(value, name="day"):
     if isinstance(value, str):
         try:
-            return dt.date.fromisoformat(value.strip())
+            day = _dt.date.fromisoformat(value.strip())
         except ValueError:
-            pass
+            day = None
+        if day is not None:
+            if not DAY_MIN <= day <= DAY_MAX:
+                raise ApiError("invalid", f"{name} is out of range", fields={name: "range"})
+            return day
     raise ApiError("invalid", f"{name} must be a date (YYYY-MM-DD)", fields={name: "date"})

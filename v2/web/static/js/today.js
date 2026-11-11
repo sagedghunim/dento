@@ -1,11 +1,11 @@
 // Today (design 5.11, 7.4): the queue fragment polled with its ETag, one poller per browser and clinic,
 // rows patched in place and never moved under the finger, a stale indicator, and one-tap row actions.
-import { discardPending, errorMessage, fetchText, isOk, membership, pendingList, retryPending, save } from "./api.js";
+import { errorMessage, fetchText, isOk, membership, pendingList, save } from "./api.js";
 import { initBook } from "./book.js";
-import { el, parseFragment, receiptUrl } from "./dialogs.js";
+import { parseFragment, receiptUrl } from "./dialogs.js";
 import { clockParts, localDigits } from "./numbers.js";
 import { initPay } from "./pay.js";
-import { alertMessage, toast } from "./shell.js";
+import { alertMessage, renderPending, toast } from "./shell.js";
 import { t } from "./strings.js";
 import { initVisitDialogs } from "./visit.js";
 
@@ -16,7 +16,6 @@ const meta = document.querySelector('meta[name="hamada"]');
 const freshness = document.querySelector("[data-freshness]");
 const freshText = document.querySelector("[data-fresh-text]");
 const tryNow = document.querySelector("[data-try-now]");
-const pendingBar = document.querySelector("[data-pending-bar]");
 
 const dayParam = new URLSearchParams(window.location.search).get("day") || "";
 const url = "/today/queue" + (dayParam ? `?day=${encodeURIComponent(dayParam)}` : "");
@@ -183,12 +182,61 @@ let lastActivity = 0;
 let lastPointer = "mouse";
 let deferred = null;
 let deferredSince = 0;
+let pointerX = -1;
+let pointerY = -1;
 for (const name of ["pointermove", "pointerdown", "wheel", "keydown", "touchstart"]) {
   card.addEventListener(name, (event) => {
     lastActivity = Date.now();
     if (event.pointerType) lastPointer = event.pointerType;
     if (name === "touchstart") lastPointer = "touch";
+    if (event.clientX != null) { pointerX = event.clientX; pointerY = event.clientY; }
+    else if (event.touches && event.touches[0]) { pointerX = event.touches[0].clientX; pointerY = event.touches[0].clientY; }
   }, { passive: true });
+}
+
+// --- rows stay where the eye and the finger are (M1 decision R8) ---
+// Before a patch, the anchor is the row under the last pointer, else the row with focus, else the first
+// fully visible row; after it, the page scrolls by however far that row moved. Any row whose place on
+// screen or whose buttons changed is stamped, and a tap on it within 700 ms is ignored and the row flashes.
+
+const MOVED_MS = 700;
+const movedAt = new Map();  // id -> time its position or its buttons last changed
+const actsOf = (row) => [...row.querySelectorAll("[data-act]")].map((b) => b.dataset.act).join(",");
+
+function snapshot() {
+  const rows = [...list.querySelectorAll(".appt")];
+  const tops = new Map(rows.map((row) => [row.dataset.id, { top: row.getBoundingClientRect().top, acts: actsOf(row) }]));
+  let anchor = null;
+  if (pointerX >= 0) {
+    const under = document.elementFromPoint(pointerX, pointerY);
+    anchor = under && under.closest && under.closest(".appt");
+  }
+  if (!anchor && document.activeElement) anchor = document.activeElement.closest && document.activeElement.closest(".appt");
+  if (!anchor) anchor = rows.find((row) => { const r = row.getBoundingClientRect(); return r.height && r.top >= 0 && r.bottom <= window.innerHeight; });
+  return { tops, anchorId: anchor ? anchor.dataset.id : null, anchorTop: anchor ? anchor.getBoundingClientRect().top : 0 };
+}
+
+function settle(before) {
+  if (before.anchorId) {
+    const anchor = list.querySelector(`.appt[data-id="${before.anchorId}"]`);
+    if (anchor) {
+      const delta = anchor.getBoundingClientRect().top - before.anchorTop;
+      if (Math.abs(delta) >= 1) window.scrollBy(0, delta);
+    }
+  }
+  const now = Date.now();
+  list.querySelectorAll(".appt").forEach((row) => {
+    const was = before.tops.get(row.dataset.id);
+    if (!was || Math.abs(row.getBoundingClientRect().top - was.top) >= 2 || was.acts !== actsOf(row)) movedAt.set(row.dataset.id, now);
+  });
+}
+
+function tooSoon(row) {
+  if (Date.now() - (movedAt.get(row.dataset.id) || 0) >= MOVED_MS) return false;
+  row.classList.remove("flash");
+  void row.offsetWidth;  // restart the animation
+  row.classList.add("flash");
+  return true;
 }
 window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
 card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
@@ -213,6 +261,7 @@ function flushDeferred() {
 setInterval(flushDeferred, 700);
 
 function flushHeld() {
+  const before = heldRows.size ? snapshot() : null;
   for (const [id, html] of heldRows) {
     const row = list.querySelector(`.appt[data-id="${id}"]`);
     if (!row) { heldRows.delete(id); continue; }
@@ -221,6 +270,7 @@ function flushHeld() {
     replaceRow(row, html);
   }
   stats();
+  if (before) settle(before);
 }
 
 function replaceRow(row, html) {
@@ -247,6 +297,7 @@ function apply(html) {
   deferredSince = 0;
   const root = parseFragment(html).querySelector("[data-queue]");
   if (!root) return;
+  const before = snapshot();
   for (const name of ["doctors", "activity", "money", "truncated"]) {
     const fresh = root.querySelector(`[data-slot="${name}"]`);
     const live = document.querySelector(`[data-slot="${name}"]`);
@@ -259,6 +310,7 @@ function apply(html) {
   card.dataset.version = root.dataset.version;
   applyFilters();
   stats();
+  settle(before);
 }
 
 function patchGroups(fresh) {
@@ -397,6 +449,7 @@ function visitOf(row) {
   const service = row.querySelector(".what bdi");
   return {
     id: Number(row.dataset.id), status: row.dataset.status, name, due: Number(row.dataset.due), fee: Number(row.dataset.fee),
+    paid: Number(row.dataset.paid) || 0,
     invoiceId: row.dataset.invoice ? Number(row.dataset.invoice) : null, doctorId: Number(row.dataset.doctor),
     day: row.dataset.day, service: service ? service.textContent : "",
   };
@@ -420,7 +473,8 @@ async function quick(id, action, status, name) {
   acting.set(`${id}:busy`, true);
   const row = list.querySelector(`.appt[data-id="${id}"]`);
   if (row) markActing(row);
-  const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status }, { label: `${t(MESSAGES[action], { name })}` });
+  // auto: the body carries the expected status, so a resend at the next page load is harmless (R7).
+  const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status }, { label: t(MESSAGES[action], { name }), auto: true });
   acting.delete(key);
   acting.delete(`${id}:busy`);
   const now = list.querySelector(`.appt[data-id="${id}"]`);
@@ -440,6 +494,7 @@ card.addEventListener("click", (event) => {
   const button = event.target.closest("[data-act]");
   if (!button || button.disabled) return;
   const row = button.closest(".appt");
+  if (tooSoon(row)) { event.preventDefault(); return; }  // the row just moved or changed under the finger
   const menu = button.closest("details");
   if (menu) menu.open = false;
   const v = visitOf(row);
@@ -463,33 +518,6 @@ card.addEventListener("click", (event) => {
   }
 });
 
-// --- requests whose outcome is unknown: "try again" or "discard" only (design 7.4) ---
-
-function renderPending() {
-  const items = pendingList();
-  pendingBar.hidden = !items.length;
-  pendingBar.replaceChildren(...items.map((p) => {
-    const box = el("div", "notice pending-item");
-    box.append(el("span", null, t("not_confirmed", { what: p.label || "" })));
-    const actions = el("span", "appt-actions");
-    const again = el("button", "btn", t("try_again"));
-    again.type = "button";
-    again.addEventListener("click", async () => {
-      again.disabled = true;
-      const result = await retryPending(p.key);
-      if (result && result.settled && !isOk(result)) alertMessage(errorMessage(result, t("failed")));
-      renderPending();
-      changed();
-    });
-    const drop = el("button", "btn ghost", t("discard"));
-    drop.type = "button";
-    drop.addEventListener("click", () => { discardPending(p.key); renderPending(); alertMessage(t("check_record")); });
-    actions.append(again, drop);
-    box.append(actions);
-    return box;
-  }));
-}
-
 // --- quick booking from the card, and "/" for search (design 7.6) ---
 
 const quickForm = document.querySelector("[data-quick-book]");
@@ -512,6 +540,5 @@ document.querySelectorAll("[data-slot]").forEach((slot) => { if (slot.dataset.sl
 rememberRows();
 applyFilters();
 stats();
-renderPending();
 showFreshness();
-window.addEventListener("hamada:pending-settled", () => { renderPending(); changed(); });
+window.addEventListener("hamada:pending-settled", () => changed());

@@ -46,7 +46,8 @@ export function initPay({ onChanged } = {}) {
         const right = el("span", "amt");
         right.append(money(line.amount));
         li.append(label, right);
-        if (perms.collect && open && invoice.lines.length > 1) {
+        // Only lines this person may remove, as the server says per line (M1 decision R3).
+        if (open && line.removable === true) {
           const remove = el("button", "btn danger", t("remove"));
           remove.type = "button";
           remove.dataset.run = "remove-line";
@@ -135,7 +136,7 @@ export function initPay({ onChanged } = {}) {
       const amount = parsePiastres(field("amount").value);
       if (!amount) { submitter.say(t("bad_amount")); return; }
       const method = form.querySelector('[name="method"]:checked').value;
-      result = await submitter.run("POST", `/api/v1/appointments/${visit.id}/payments`, { amount, method }, t("payment"));
+      result = await submitter.run("POST", `/api/v1/appointments/${visit.id}/payments`, { amount, method }, [t("payment"), visit.name, moneyText(amount)].join(" · "));
       if (result && isOk(result)) {
         toast(t("collected", { amount: moneyText(amount), name: visit.name }));
         visit.invoiceId = result.data.invoice.id;
@@ -149,23 +150,28 @@ export function initPay({ onChanged } = {}) {
       if (!qty) { submitter.say(t("bad_qty")); return; }
       if (!(await ensureInvoice())) { afterUnknown(); return; }
       const kind = services[serviceId] && services[serviceId].kind === "procedure" ? "procedure" : "service";
-      result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/lines`, { kind, service_id: serviceId, qty }, t("bill"));
+      result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/lines`, { kind, service_id: serviceId, qty }, `${t("bill")} · ${visit.name}`);
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("amount").dataset.touched; render(); }
     } else if (name === "remove-line") {
-      result = await submitter.run("DELETE", `/api/v1/invoices/${invoice.id}/lines/${button.dataset.line}`, {}, t("bill"));
+      result = await submitter.run("DELETE", `/api/v1/invoices/${invoice.id}/lines/${button.dataset.line}`, {}, `${t("bill")} · ${visit.name}`);
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("amount").dataset.touched; render(); }
+      if (result && result.status === 403) {  // the rule changed or the line isn't ours: show the bill as it is
+        const message = errorMessage(result, t("not_removable"));
+        await load();
+        submitter.say(message);
+      }
     } else if (name === "discount") {
       const discount = parsePiastres(field("discount").value);
       if (discount === null) { submitter.say(t("bad_amount")); return; }
       if (!(await ensureInvoice())) { afterUnknown(); return; }
-      result = await submitter.run("PUT", `/api/v1/invoices/${invoice.id}/discount`, { discount, expected_discount: invoice.discount }, t("bill"));
+      result = await submitter.run("PUT", `/api/v1/invoices/${invoice.id}/discount`, { discount, expected_discount: invoice.discount }, `${t("bill")} · ${visit.name}`);
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("discount").dataset.touched; delete field("amount").dataset.touched; render(); toast(t("discount_saved")); }
       if (result && result.status === 409) await load();  // someone changed it meanwhile: show the current value
     } else if (name === "refund") {
       const option = field("refund_of").selectedOptions[0];
       const amount = parsePiastres(field("refund_amount").value);
       if (!option || !amount) { submitter.say(t("bad_amount")); return; }
-      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount }, t("refund_row"));
+      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
       if (result && isOk(result)) { toast(t("refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
     } else if (name === "void") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/void`, {}, t("bill"));
@@ -202,6 +208,7 @@ export function initPay({ onChanged } = {}) {
   form.addEventListener("submit", (event) => event.preventDefault());
 
   function open(v) {
+    if (submitter.holdsUnknown()) { openDialog(dialog); return; }  // never a new key over an unknown one (R7)
     visit = { ...v };
     invoice = null;
     form.reset();

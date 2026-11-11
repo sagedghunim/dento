@@ -6,8 +6,10 @@
   then attached. ATTACH takes only a ShareUpdateExclusiveLock on the parent, so
   inserts (every file open writes one) don't wait, as they would behind
   CREATE TABLE ... PARTITION OF. The CHECK lets ATTACH skip scanning the table.
-- `ensure_partitions()` keeps the current month and `months_ahead` more. A daily
-  job runs it; fewer than 2 future partitions logs an error for the alert.
+- `ensure_partitions()` keeps the current month and `months_ahead` (6) more. A daily
+  job runs it (core.jobs), and so does every `migrate_all`; fewer than 3 future
+  partitions logs an error for the alert. Six months gives a small team a quarter to
+  notice a dead worker (chief judge M1, R5).
 - Old partitions leave with DETACH PARTITION ... CONCURRENTLY (`detach_partition`).
 """
 
@@ -17,6 +19,9 @@ import logging
 from django.db import connections
 
 log = logging.getLogger(__name__)
+
+MONTHS_AHEAD = 6
+ALERT_BELOW = 3
 
 # table -> (database kind, time column, months kept online)
 PARTITIONED_TABLES = {
@@ -53,7 +58,7 @@ def tables_for(alias):
     return [table for table, (table_kind, _, _) in PARTITIONED_TABLES.items() if table_kind == kind]
 
 
-def ensure_partitions(alias, months_ahead=3, today=None, tables=None):
+def ensure_partitions(alias, months_ahead=MONTHS_AHEAD, today=None, tables=None):
     """Create missing monthly partitions on one database. Returns {table: future partitions}."""
     connection = connections[alias]
     today = today or dt.datetime.now(dt.UTC).date()
@@ -89,9 +94,21 @@ def ensure_partitions(alias, months_ahead=3, today=None, tables=None):
                 existing.add(name)
         future = sum(1 for name in existing if name > partition_name(table, current))
         result[table] = future
-        if future < 2:
+        if future < ALERT_BELOW:
             log.error("Only %s future partitions exist for %s on %s", future, table, alias)
     return result
+
+
+def ensure_all(today=None, months_ahead=MONTHS_AHEAD):
+    """The directory and every shard, each in its own transaction. Returns {alias: {table: future partitions}}."""
+    from django.conf import settings
+    from django.db import transaction
+
+    found = {}
+    for alias in ["default", *settings.SHARDS]:
+        with transaction.atomic(using=alias):
+            found[alias] = ensure_partitions(alias, months_ahead=months_ahead, today=today)
+    return found
 
 
 def droppable_partitions(alias, table, keep_months, today=None):
