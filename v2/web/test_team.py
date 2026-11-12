@@ -124,8 +124,9 @@ class TodayOwnVisitsTests(M1TestCase):
         queue = fragment(self.a.client("doctor"), "/today/queue").content.decode()
         self.assertNotIn("data-act", self.row(queue, self.owner_visit))
 
-    def test_the_owner_the_desk_and_a_granted_doctor_act_on_every_row(self):
-        for client in (self.owner, self.desk):
+    def test_the_desk_and_a_granted_doctor_act_on_every_row(self):
+        self.assertEqual(self.owner.get("/")["Location"], "/overview")  # the owner manages, never runs the queue
+        for client in (self.desk,):
             self.assertIn('data-act="call"', self.row(client.get("/").content.decode(), self.owner_visit))
         set_codes(self.a, "doctor", granted=["appointments.others"])
         self.assertIn('data-act="call"', self.row(self.a.client("doctor").get("/").content.decode(), self.owner_visit))

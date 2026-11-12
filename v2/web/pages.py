@@ -205,10 +205,9 @@ def today_queue(request, ctx):
 @page()
 @clinic_page
 def today_page(request, ctx):
-    # The home page: an owner who manages (no sessions of their own) and anyone with reports but no queue get the
-    # Overview instead (Saged, 2026-11-12). /today itself still opens for an owner who asks for it.
-    if request.path == "/" and (nav.is_manager(ctx) or (ctx.can("reports.view") and not any(
-            ctx.can(code) for code in QUEUE_CODES))):
+    # The owner and anyone with reports but no queue get the Overview instead (Saged, 2026-11-12).
+    if nav.is_manager(ctx) or (request.path == "/" and ctx.can("reports.view") and not any(
+            ctx.can(code) for code in QUEUE_CODES)):
         return redirect("/overview")
     if not any(ctx.can(code) for code in QUEUE_CODES):
         if ctx.can("patients.view"):

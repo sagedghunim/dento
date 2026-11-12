@@ -36,16 +36,11 @@ MANAGER_SECTIONS = ("overview", "finances", "team", "patients")
 
 
 def is_manager(ctx):
-    """An owner with no doctor sessions (schedules) here: Overview is their home, Today and booking are hidden.
+    """The owner manages the place: Overview is their home; Today, booking, walk-in and Prescription are hidden.
 
-    An owner who also works as a doctor keeps Today first. One indexed lookup (schedule_session_uniq).
-    """
+    Saged, 2026-11-12: the owner never books, even when they also treat patients."""
     membership = getattr(ctx, "membership", None)
-    if membership is None or getattr(membership, "role", None) != "owner":
-        return False
-    from clinics.models import Schedule
-
-    return not Schedule.objects.filter(clinic_id=ctx.clinic_id, doctor_id=ctx.membership_id).exists()
+    return membership is not None and getattr(membership, "role", None) == "owner"
 
 
 def visible(ctx):

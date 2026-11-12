@@ -47,14 +47,13 @@ class OwnerNavTests(OverviewCase):
         html = owner.get("/overview").content.decode()
         self.assertEqual(nav_links(html), ["/overview", "/finances", "/team", "/patients"])
         self.assertNotIn("data-book-patient", owner.get("/patients").content.decode())  # lookup only
-        self.assertEqual(owner.get("/today").status_code, 200)  # still reachable when asked for
+        self.assertEqual(owner.get("/today")["Location"], "/overview")
 
-    def test_an_owner_who_also_treats_keeps_today_first(self):
+    def test_an_owner_who_also_treats_still_only_manages(self):
         owner = self.sessions(keep=True)
-        self.assertEqual(owner.get("/").status_code, 200)
+        self.assertEqual(owner.get("/")["Location"], "/overview")
         links = nav_links(owner.get("/overview").content.decode())
-        self.assertEqual(links[:2], ["/", "/overview"])
-        self.assertIn("/inventory", links)
+        self.assertEqual(links, ["/overview", "/finances", "/team", "/patients"])
 
     def test_others_are_unchanged(self):
         desk = self.a.client("assistant")

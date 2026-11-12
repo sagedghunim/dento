@@ -111,10 +111,10 @@ class TodayTests(M1TestCase):
 
     def test_navigation_follows_permissions_and_marks_unbuilt_sections(self):
         desk = self.desk.get("/").content.decode()
-        owner = self.owner.get("/").content.decode()
+        owner = self.owner.get("/overview").content.decode()
         self.assertIn("الحسابات", desk)  # finances: the desk sees the register (cash.collect, M3)
         self.assertIn("الحسابات", owner)
-        self.assertIn("قريباً", owner)      # not built in M1
+        self.assertNotIn('href="/prescriptions"', owner)  # the owner manages, never books or prescribes
         self.assertIn('href="/patients"', desk)
 
     def test_the_fragment_answers_304_while_nothing_changes(self):

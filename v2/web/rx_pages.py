@@ -6,7 +6,7 @@ from when they write a prescription in the visit. Actions go through /api/v1/med
 import json
 
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET
 from core.api import page
 
 from . import places
+from . import nav
 from .http import clinic_page, fragment
 
 CODE = "settings.medicines"
@@ -54,6 +55,8 @@ def _templates(ctx):
 @page(perm=CODE)
 @clinic_page
 def prescriptions_page(request, ctx):
+    if nav.is_manager(ctx):  # the owner manages; doctors write prescriptions (Saged, 2026-11-12)
+        return redirect("/overview")
     sections = places.sections(ctx)
     return render(request, "web/prescriptions.html", {
         "ctx": ctx, "nav_active": "prescription", "medicines": _medicines(ctx), "templates": _templates(ctx),
