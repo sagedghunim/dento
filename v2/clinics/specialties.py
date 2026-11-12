@@ -1,89 +1,41 @@
-"""Specialty templates (design 4.2): copied into a clinic when it is created or changes specialty.
+"""Specialty templates (design 4.2, E2, E4): copied into a section when it is created or changes specialty.
 
-Data, not tables: they never vary per clinic until copied, and a clinic edits its own copy.
-Prices are in piastres. Medicines and stock items are copied once those tables exist (M2, M3).
+Data, not tables: they never vary per clinic until copied, and a clinic edits its own copy. The data lives in
+`clinics/catalogue/` (dental.py, others.py). Here each specialty has:
+- `name` (ar, en);
+- `services`: what the desk books (Arabic, English, kind, price in piastres, minutes);
+- `procedures`: what the doctor records (dicts, prices in piastres, with a description where one is written);
+- `medicines`: the medicine library (dicts);
+- `templates`: named prescriptions (name, lines as (trade name, strength), notes).
+`CARDS` is the order of the sign-up cards (design E2). `internal` stays for places created with it.
 """
 
-SPECIALTIES = {
-    "dental": {
-        "name": {"ar": "أسنان", "en": "Dental"},
-        "services": [
-            # (Arabic, English, kind, price in piastres, minutes)
-            ("كشف", "Consultation", "consultation", 300_00, 20),
-            ("إعادة كشف", "Follow-up", "follow_up", 0, 10),
-            ("تنظيف جير", "Cleaning", "procedure", 500_00, 30),
-            ("حشو عادي", "Filling", "procedure", 600_00, 30),
-            ("علاج عصب", "Root canal", "procedure", 2000_00, 60),
-            ("خلع", "Extraction", "procedure", 500_00, 20),
-            ("زراعة", "Implant", "procedure", 15000_00, 90),
-            ("تبييض", "Whitening", "procedure", 3000_00, 60),
-        ],
-        "medicines": [
-            ("Amoxicillin 500 mg", "Capsules", "1 capsule, 3 times a day"),
-            ("Ibuprofen 400 mg", "Tablets", "1 tablet when in pain, after food"),
-            ("Paracetamol 500 mg", "Tablets", "1–2 tablets, up to 4 times a day"),
-            ("Metronidazole 500 mg", "Tablets", "1 tablet, 3 times a day"),
-            ("Chlorhexidine 0.12%", "Mouthwash", "Rinse for 1 minute, twice a day"),
-        ],
-        "stock": [("Anesthesia carpules", "carpule"), ("Composite syringes", "syringe"), ("Gloves", "box")],
-    },
-    "pediatrics": {
-        "name": {"ar": "أطفال", "en": "Pediatrics"},
-        "services": [
-            ("كشف", "Consultation", "consultation", 350_00, 15),
-            ("إعادة كشف", "Follow-up", "follow_up", 0, 10),
-            ("متابعة نمو", "Growth check", "procedure", 200_00, 15),
-            ("تطعيم", "Vaccination", "procedure", 150_00, 10),
-        ],
-        "medicines": [
-            ("Paracetamol syrup 120 mg/5 ml", "Syrup", "By weight, every 6 hours when needed"),
-            ("Amoxicillin suspension 250 mg/5 ml", "Suspension", "By weight, 3 times a day"),
-            ("Oral rehydration salts", "Sachets", "1 sachet in 200 ml water after each loose stool"),
-        ],
-        "stock": [("Syringes", "piece"), ("Tongue depressors", "box")],
-    },
-    "dermatology": {
-        "name": {"ar": "جلدية", "en": "Dermatology"},
-        "services": [
-            ("كشف", "Consultation", "consultation", 400_00, 15),
-            ("إعادة كشف", "Follow-up", "follow_up", 0, 10),
-            ("جلسة ليزر", "Laser session", "procedure", 1200_00, 30),
-            ("جلسة تقشير", "Peeling session", "procedure", 800_00, 30),
-        ],
-        "medicines": [("Fusidic acid cream 2%", "Cream", "Apply twice a day for 7 days")],
-        "stock": [("Peeling solution", "bottle")],
-    },
-    "internal": {
-        "name": {"ar": "باطنة", "en": "Internal medicine"},
-        "services": [
-            ("كشف", "Consultation", "consultation", 300_00, 15),
-            ("إعادة كشف", "Follow-up", "follow_up", 0, 10),
-            ("متابعة سكر", "Diabetes follow-up", "procedure", 150_00, 10),
-        ],
-        "medicines": [("Metformin 500 mg", "Tablets", "1 tablet twice a day with food")],
-        "stock": [("Glucose test strips", "box")],
-    },
-    "ophthalmology": {
-        "name": {"ar": "رمد", "en": "Ophthalmology"},
-        "services": [
-            ("كشف", "Consultation", "consultation", 350_00, 15),
-            ("إعادة كشف", "Follow-up", "follow_up", 0, 10),
-            ("قياس نظر", "Vision test", "procedure", 150_00, 15),
-        ],
-        "medicines": [("Artificial tears", "Eye drops", "1 drop 4 times a day")],
-        "stock": [("Eye drops samples", "bottle")],
-    },
-    "physiotherapy": {
-        "name": {"ar": "علاج طبيعي", "en": "Physiotherapy"},
-        "services": [
-            ("تقييم", "Assessment", "consultation", 300_00, 30),
-            ("متابعة", "Follow-up", "follow_up", 0, 15),
-            ("جلسة علاج", "Treatment session", "procedure", 250_00, 45),
-        ],
-        "medicines": [],
-        "stock": [("Electrode pads", "pack")],
-    },
-}
+from .catalogue import dental, others
+
+CARDS = ["dental", "pediatrics", "dermatology", "obgyn", "ent", "ophthalmology", "orthopedics", "cardiology",
+         "physiotherapy", "veterinary"]
+
+
+def _build(name, services, procedures, medicines, templates=(), descriptions=None):
+    descriptions = descriptions or {}
+    return {
+        "name": name,
+        "services": [(ar, en, kind, price * 100, minutes) for ar, en, kind, price, minutes in services],
+        "procedures": [{"name_ar": ar, "name_en": en, "category": category, "unit": unit, "price": price * 100,
+                        "typical_min": low * 100, "typical_max": high * 100, "condition": condition,
+                        "description": descriptions.get(en, "")}
+                       for ar, en, category, unit, price, low, high, condition in procedures],
+        "medicines": [{"name": name_, "generic": generic, "strength": strength, "form": form, "default_dose": dose,
+                       "default_note": note} for name_, generic, strength, form, dose, note in medicines],
+        "templates": list(templates),
+    }
+
+
+SPECIALTIES = {"dental": _build(dental.NAME, dental.SERVICES, dental.PROCEDURES, dental.MEDICINES, dental.TEMPLATES,
+                               dental.DESCRIPTIONS)}
+for _code in [*CARDS[1:], "internal"]:
+    _spec = others.SPECIALTIES[_code]
+    SPECIALTIES[_code] = _build(_spec["name"], _spec["services"], _spec["procedures"], _spec["medicines"])
 
 
 def choices():

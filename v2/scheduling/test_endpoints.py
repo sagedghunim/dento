@@ -33,6 +33,9 @@ def objects(test, fixture):
 
     booked, waiting, in_room = book(), book(arrive=True), book(arrive=True)
     call(client, "POST", f"/api/v1/appointments/{in_room['id']}/call", {"status": "waiting"})
+    assisted, readied = book(arrive=True), book(arrive=True)
+    call(client, "POST", f"/api/v1/appointments/{assisted['id']}/assist", {"status": "waiting"})
+    call(client, "POST", f"/api/v1/appointments/{readied['id']}/ready", {"status": "waiting"})
     paid = book(payment={"amount": 1000, "method": "cash"})
     invoice = call(client, "GET", f"/api/v1/invoices/{paid['invoice']['id']}").json()["invoice"]
     line = call(client, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
@@ -40,6 +43,7 @@ def objects(test, fixture):
     unpaid = book()
     unpaid_invoice = call(client, "POST", f"/api/v1/appointments/{unpaid['id']}/invoice").json()["invoice"]
     return SimpleNamespace(booked=booked["id"], waiting=waiting["id"], in_room=in_room["id"], paid=paid["id"],
+                           assisted=assisted["id"], readied=readied["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
                            unpaid_invoice=unpaid_invoice["id"], patient=booked["patient"]["id"], owner=owner,
                            doctor=fixture.membership("doctor").id, procedure=services["procedure"].id,
@@ -68,6 +72,14 @@ def mutating(test, o):
                         {"status": "waiting", "note": 1}, ["appointments.queue"]),
         "undo call": ("POST", f"/api/v1/appointments/{o.in_room}/undo-call", {"status": "in_room"},
                       {"status": "in_room", "note": 1}, ["appointments.queue"]),
+        "assist": ("POST", f"/api/v1/appointments/{o.waiting}/assist", {"status": "waiting"},
+                   {"status": "waiting", "note": 1}, ["appointments.queue"]),
+        "ready": ("POST", f"/api/v1/appointments/{o.waiting}/ready", {"status": "waiting"},
+                  {"status": "waiting", "note": 1}, ["appointments.queue"]),
+        "undo assist": ("POST", f"/api/v1/appointments/{o.assisted}/undo-assist", {"status": "with_assistant"},
+                        {"status": "with_assistant", "note": 1}, ["appointments.queue"]),
+        "undo ready": ("POST", f"/api/v1/appointments/{o.readied}/undo-ready", {"status": "ready"},
+                       {"status": "ready", "note": 1}, ["appointments.queue"]),
         "finish": ("POST", f"/api/v1/appointments/{o.in_room}/finish", {"status": "in_room"},
                    {"status": "in_room", "note": 1}, ["appointments.queue"]),
         "cancel": ("POST", f"/api/v1/appointments/{o.booked}/cancel", {"status": "booked"},
@@ -152,6 +164,8 @@ class EndpointMatrixTests(M1TestCase):
     def test_t9_access_is_declared_exactly_on_the_views_that_read_files(self):
         declared = {}
         for pattern in get_resolver().url_patterns:
+            if getattr(getattr(pattern, "urlconf_module", None), "__name__", "") == "clinical.urls":
+                continue  # M2's routes: clinical.test_endpoints checks them the same way
             for route in getattr(pattern, "url_patterns", []):
                 views = getattr(route.callback, "api_views", None) or {"": route.callback}
                 for view in views.values():

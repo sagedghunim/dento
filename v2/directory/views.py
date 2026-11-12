@@ -35,17 +35,21 @@ def clinics_list(request, data):
 @api("POST", member=False, replay=_replay_clinic)
 def clinics_create(request, data):
     platform.require_platform_admin(request)
-    # A clinic sends `specialty`; a center sends kind "center" and `sections` [{specialty, name?}] (design D1).
+    # A clinic sends `specialty`; a center sends kind "center" and `sections` [{specialty, count?, name?}] and an
+    # optional layout "one_place" or "branches" (design D1, E2).
     has_sections = data.get("sections") is not None
-    entry, owner, temporary = platform.create(
+    entries, owner, temporary = platform.create(
         name=text(data, "name", 120), specialty=None if has_sections else choice(data, "specialty", list(SPECIALTIES)),
         city=text(data, "city", 60, required=False), owner_username=text(data, "owner_username", 150),
         owner_name=text(data, "owner_name", 120), owner_phone=text(data, "owner_phone", 20, required=False),
         language=choice(data, "language", ["ar", "en"]) if "language" in data else "ar",
         kind=choice(data, "kind", ["clinic", "center"]) if "kind" in data else "clinic",
         sections=data.get("sections") if has_sections else None,
+        layout=choice(data, "layout", ["one_place", "branches"]) if data.get("layout") else "one_place",
     )
-    return Result({"clinic": _clinic_body(entry), "owner": owner.username, "temporary_password": temporary},
+    entry = entries[0]
+    return Result({"clinic": _clinic_body(entry), "clinics": [_clinic_body(e) for e in entries],
+                   "owner": owner.username, "temporary_password": temporary},
                   status=201, target_type="clinic", target_id=entry.id)
 
 

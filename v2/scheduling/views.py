@@ -10,6 +10,7 @@ from core.errors import ApiError
 from core.numbers import parse_money
 
 from . import rules, selectors, services
+from .models import STATUSES
 
 QUEUE_CODES = ("appointments.book", "appointments.queue")
 
@@ -126,7 +127,7 @@ def slots_view(request, ctx, data, doctor_id):
 def _status_view(action, perm):
     def view(request, ctx, data, appointment_id):
         appointment_id = _appointment_id(appointment_id)
-        seen = validate.choice(data, "status", ["booked", "waiting", "in_room", "done", "cancelled", "no_show"])
+        seen = validate.choice(data, "status", STATUSES)
         payment = _payment(data) if action == "finish" else None
         if payment is not None:
             ctx.require("billing.collect")
@@ -140,8 +141,56 @@ def _status_view(action, perm):
 
 
 arrive_view = _status_view("arrive", "appointments.queue")
+assist_view = _status_view("assist", "appointments.queue")
+ready_view = _status_view("ready", "appointments.queue")
 call_view = _status_view("call", "appointments.queue")
-finish_view = _status_view("finish", "appointments.queue")
+def _next_visit(data):
+    value = data.get("next_visit")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ApiError("invalid", "next_visit must be an object", fields={"next_visit": "object"})
+    starts_at = value.get("starts_at")
+    return {"doctor_id": validate.ident(value.get("doctor_id"), "next_visit.doctor_id"),
+            "service_id": validate.ident(value.get("service_id"), "next_visit.service_id"),
+            "day": validate.iso_day(value.get("day"), "next_visit.day"),
+            "starts_at": rules.parse_instant(starts_at, "next_visit.starts_at") if starts_at else None,
+            "extra": validate.boolean(value, "extra"), "note": validate.text(value, "note", 500, required=False)}
+
+
+def _finish_answer(ctx, appointment_id, version, next_appointment=None):
+    """The finish dialog's answer (design E3): the visit, its invoice lines, total, paid and remaining, the
+    patient's balance across visits, and the next visit if one was booked."""
+    from billing import selectors as billing_read
+
+    body = selectors.answer(ctx, appointment_id, version)
+    body["invoice"] = billing_read.visit_invoice(ctx, appointment_id)
+    body["balance"] = billing_read.patient_balance(ctx, body["appointment"]["patient"]["id"])
+    body["next_appointment"] = next_appointment
+    return body
+
+
+def _replay_finish(ctx, stored):
+    return _finish_answer(ctx, stored["target_id"], None)
+
+
+@api("POST", perm="appointments.queue", replay=_replay_finish)
+def finish_view(request, ctx, data, appointment_id):
+    """finish {status, payment?, earlier?: {amount, method}, next_visit?: {doctor_id, service_id, day, starts_at?}}.
+
+    One request: the visit's payment, the patient's earlier balance (oldest invoices first) and the next
+    booking all commit together or not at all. A finish after someone else's is 409 already_finished.
+    """
+    appointment_id = _appointment_id(appointment_id)
+    seen = validate.choice(data, "status", STATUSES)
+    payment, earlier = _payment(data), _payment(data, "earlier")
+    if payment is not None or earlier is not None:
+        ctx.require("billing.collect")
+    outcome = {}
+    version = services.change_status(ctx, appointment_id, "finish", seen, payment=payment, earlier=earlier,
+                                     next_visit=_next_visit(data), outcome=outcome)
+    return Result(_finish_answer(ctx, appointment_id, version, outcome.get("next_appointment")),
+                  target_type="appointment", target_id=appointment_id)
 cancel_view = _status_view("cancel", "appointments.book")
 
 
@@ -150,7 +199,7 @@ def _undo_view(action):
 
     def view(request, ctx, data, appointment_id):
         appointment_id = _appointment_id(appointment_id)
-        seen = validate.choice(data, "status", ["booked", "waiting", "in_room", "done", "cancelled", "no_show"])
+        seen = validate.choice(data, "status", STATUSES)
         version = services.undo(ctx, appointment_id, action, seen)
         return Result(selectors.answer(ctx, appointment_id, version), target_type="appointment",
                       target_id=appointment_id)
@@ -160,13 +209,15 @@ def _undo_view(action):
 
 
 undo_arrive_view = _undo_view("undo_arrive")
+undo_assist_view = _undo_view("undo_assist")
+undo_ready_view = _undo_view("undo_ready")
 undo_call_view = _undo_view("undo_call")
 
 
 @api("POST", perm="appointments.book", replay=_replay_appointment)
 def reschedule_view(request, ctx, data, appointment_id):
     appointment_id = _appointment_id(appointment_id)
-    seen = validate.choice(data, "status", ["booked", "waiting", "in_room", "done", "cancelled", "no_show"])
+    seen = validate.choice(data, "status", STATUSES)
     starts_at = data.get("starts_at")
     version = services.reschedule(
         ctx, appointment_id, seen, validate.ident(data.get("doctor_id"), "doctor_id"), validate.iso_day(data.get("day")),

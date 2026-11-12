@@ -63,12 +63,22 @@ class SectionBackfillTests(TransactionTestCase):
             for table in ("clinics_service", "clinics_schedule", "scheduling_appointment"):
                 cursor.execute(f"SELECT DISTINCT section_id FROM {table} WHERE clinic_id = %s", [CLINIC])
                 found[table] = [r[0] for r in cursor.fetchall()]
+            # M2 (clinical 0002): the place gets its section's procedures, medicines and templates.
+            cursor.execute("SELECT count(*) FROM clinical_procedure WHERE clinic_id = %s AND section_id = %s",
+                           [CLINIC, section])
+            procedures = cursor.fetchone()[0]
+            cursor.execute("SELECT count(*) FROM clinical_medicine WHERE clinic_id = %s", [CLINIC])
+            medicines = cursor.fetchone()[0]
             cursor.execute("COMMIT")
             cursor.execute("""SELECT relname FROM pg_class WHERE relname IN ('clinics_clinic', 'clinics_section',
                               'clinics_service', 'clinics_schedule', 'scheduling_appointment') AND relforcerowsecurity""")
             forced = sorted(r[0] for r in cursor.fetchall())
         self.assertEqual((name, specialty, active, kind), ("أطفال", "pediatrics", True, "clinic"))
         self.assertTrue(low <= section <= high, section)  # the new table's ids come from the shard's range
+        from clinics.specialties import SPECIALTIES
+
+        self.assertEqual((procedures, medicines), (len(SPECIALTIES["pediatrics"]["procedures"]),
+                                                   len(SPECIALTIES["pediatrics"]["medicines"])))
         self.assertEqual(found, {"clinics_service": [section], "clinics_schedule": [section],
                                  "scheduling_appointment": [section]})
         self.assertEqual(forced, ["clinics_clinic", "clinics_schedule", "clinics_section", "clinics_service",

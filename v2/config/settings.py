@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "summaries",
     "scheduling",
     "billing",
+    "clinical",
     "audit",
     "web",
 ]
@@ -123,7 +124,10 @@ def _database(name):
         "TEST": {"NAME": f"test_{name}{env('HAMADA_TEST_DB_SUFFIX', '')}"},
         # Tests (fixtures of 100,000 rows, CREATE and DROP DATABASE) run without the role's 5 s statement
         # timeout. The app keeps it; lock_timeout stays for tests too, since the concurrency tests rely on it.
-        **({"OPTIONS": {"options": "-c statement_timeout=0"}} if TESTING else {}),
+        # A TestCase holds one transaction per database for the whole test, so a long test that works on one
+        # shard leaves the other idle in its transaction: tests also lift the role's idle-in-transaction timeout.
+        **({"OPTIONS": {"options": "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0"}}
+           if TESTING else {}),
     }
 
 
@@ -186,6 +190,10 @@ CSRF_FAILURE_VIEW = "core.views.csrf_failure"
 LOGIN_URL = "/login"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 64 * 1024  # design 6.1
+# Attachments (design E3): images and PDFs up to 10 MB, behind a storage class; S3 replaces LocalStorage later.
+ATTACHMENT_STORAGE = env("HAMADA_ATTACHMENT_STORAGE", "clinical.files.LocalStorage")
+ATTACHMENTS_ROOT = env("HAMADA_ATTACHMENTS_ROOT", str(BASE_DIR / "var" / "attachments"))
+FILE_UPLOAD_MAX_MEMORY_SIZE = 256 * 1024  # larger uploads spool to a temporary file, not memory
 
 # The prototype and the warehouse run on the same host on other ports, and
 # cookies ignore ports, so Hamada v2 uses its own cookie names.

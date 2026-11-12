@@ -1,11 +1,14 @@
-// Sign-up and "add a place" (design D2, D3): clinic or center, the specialties (a center's become
-// sections with editable names), the place, and for a new owner the account. One request, one key
-// until a definite answer. The password is never kept in sessionStorage, so this form uses send(),
-// not save().
+// Sign-up and "add a place" (design D2, E2): clinic or center, then the specialty cards. A clinic picks
+// one card; a center gives each card a count with − and + (0 to 20, at least 2 in all), and each count
+// becomes that many sections with generated, editable names. A center also says whether its sections are
+// one place (`one_place`) or separate branches (`branches`). Then the place and, for a new owner, the account.
+// One request, one key until a definite answer. The password is never kept in sessionStorage, so this form
+// uses send(), not save().
 import { errorMessage, isOk, newKey, send } from "./api.js";
-import { asciiDigits } from "./numbers.js";
+import { asciiDigits, localDigits } from "./numbers.js";
 import { t } from "./strings.js";
 
+const MAX_SECTIONS = 20;
 const form = document.getElementById("signup-form");
 const mode = form.dataset.mode;
 const field = (name) => form.elements.namedItem(name);
@@ -14,54 +17,69 @@ const rowTemplate = document.getElementById("section-row");
 const error = form.querySelector("[data-error]");
 const submit = form.querySelector("[data-submit]");
 const label = submit.textContent;
-const order = [];            // specialties in the order they were picked
-const typed = {};            // section names the person edited, by specialty
+const cards = [...form.querySelectorAll(".spec-card")];  // in the order design E2 gives
+const counts = Object.fromEntries(cards.map((card) => [card.dataset.code, 0]));
+const typed = {};            // section names the person edited, by "code#n"
 let key = newKey();
 let unknown = null;          // the body sent when the outcome is unknown
 
 const kind = () => form.querySelector('[name="kind"]:checked').value;
-const picked = () => order.filter((code) => form.querySelector(`[name="specialty"][value="${code}"]`).checked);
+const layout = () => (form.querySelector('[name="layout"]:checked') || {}).value || "one_place";
+const total = () => Object.values(counts).reduce((a, b) => a + b, 0);
+const cardOf = (code) => cards.find((card) => card.dataset.code === code);
+
+// A count of 1 gives the specialty's name; N gives "Name 1" … "Name N" (design E2).
+function sectionsWanted() {
+  if (kind() === "clinic") {
+    const pick = form.querySelector('[name="specialty"]:checked');
+    return pick ? [{ code: pick.value, n: 1, of: 1 }] : [];
+  }
+  return cards.flatMap((card) => Array.from({ length: counts[card.dataset.code] }, (_, i) => ({ code: card.dataset.code, n: i + 1, of: counts[card.dataset.code] })));
+}
+
+const generated = (s) => (s.of === 1 ? cardOf(s.code).dataset.name : `${cardOf(s.code).dataset.name} ${localDigits(s.n)}`);
 
 function showKind() {
   const center = kind() === "center";
   form.querySelectorAll("[data-when-kind]").forEach((node) => { node.hidden = node.dataset.whenKind !== kind(); });
-  if (!center) {
-    const keep = picked()[0];
-    form.querySelectorAll('[name="specialty"]').forEach((box) => { box.checked = box.value === keep; });
-  }
-  renderNames();
+  if (center) form.querySelectorAll('[name="specialty"]').forEach((radio) => { radio.checked = false; });
+  render();
 }
 
-function renderNames() {
+function render() {
   const center = kind() === "center";
-  const codes = picked();
-  names.hidden = !center || !codes.length;
-  names.replaceChildren(...(center ? codes : []).map((code) => {
+  cards.forEach((card) => {
+    const n = counts[card.dataset.code];
+    card.querySelector("[data-count]").textContent = localDigits(n);
+    card.classList.toggle("on", center && n > 0);
+    card.querySelector('[data-step="-1"]').disabled = n === 0;
+    card.querySelector('[data-step="1"]').disabled = n >= MAX_SECTIONS || total() >= MAX_SECTIONS;
+  });
+  const wanted = center ? sectionsWanted() : [];
+  names.hidden = !wanted.length;
+  names.replaceChildren(...wanted.map((s) => {
     const row = rowTemplate.content.firstElementChild.cloneNode(true);
-    const box = form.querySelector(`[name="specialty"][value="${code}"]`);
-    row.querySelector("[data-label]").textContent = t("section_name", { name: box.dataset.name });
+    const id = `${s.code}#${s.n}`;
+    row.querySelector("[data-label]").textContent = t("section_name", { name: generated(s) });
     const input = row.querySelector("input");
-    input.value = typed[code] != null ? typed[code] : box.dataset.name;
-    input.dataset.code = code;
+    input.value = typed[id] != null ? typed[id] : generated(s);
+    input.dataset.id = id;
     return row;
   }));
 }
 
+form.addEventListener("click", (event) => {
+  const step = event.target.closest("[data-step]");
+  if (!step || step.disabled || unknown) return;
+  const code = step.closest(".spec-card").dataset.code;
+  counts[code] = Math.max(0, Math.min(MAX_SECTIONS, counts[code] + Number(step.dataset.step)));
+  render();
+});
 form.addEventListener("change", (event) => {
-  const target = event.target;
-  if (target.name === "kind") showKind();
-  if (target.name === "specialty") {
-    const at = order.indexOf(target.value);
-    if (at >= 0) order.splice(at, 1);
-    if (target.checked) order.push(target.value);
-    if (target.checked && kind() === "clinic") {
-      form.querySelectorAll('[name="specialty"]').forEach((box) => { if (box !== target) box.checked = false; });
-    }
-    renderNames();
-  }
+  if (event.target.name === "kind") showKind();
 });
 form.addEventListener("input", (event) => {
-  if (event.target.name === "section_name") typed[event.target.dataset.code] = event.target.value;
+  if (event.target.name === "section_name") typed[event.target.dataset.id] = event.target.value;
   if (!unknown) { error.textContent = ""; clearFieldErrors(); }
 });
 
@@ -70,19 +88,23 @@ function clearFieldErrors() {
   form.querySelectorAll("[aria-invalid]").forEach((node) => node.removeAttribute("aria-invalid"));
 }
 
+// One entry per section, each `count: 1` with its name: the names stay exactly as shown, and a server
+// that predates `count` and `layout` still reads it as before (design D2).
 function body() {
-  const codes = picked();
+  const center = kind() === "center";
   const out = {
     kind: kind(),
-    sections: codes.map((code) => {
-      const input = names.querySelector(`input[data-code="${code}"]`);
-      const name = input ? input.value.trim() : "";
-      return name ? { specialty: code, name } : { specialty: code };
+    sections: sectionsWanted().map((s) => {
+      if (!center) return { specialty: s.code, count: 1 };
+      const input = names.querySelector(`input[data-id="${s.code}#${s.n}"]`);
+      const name = (input ? input.value.trim() : "") || generated(s);
+      return { specialty: s.code, count: 1, name };
     }),
     name: field("name").value.trim(),
     city: field("city").value.trim(),
     phone: asciiDigits(field("phone").value).trim(),
   };
+  if (center) out.layout = layout();
   if (mode === "signup") {
     out.owner = {
       full_name: field("owner_full_name").value.trim(),
@@ -127,6 +149,7 @@ form.addEventListener("submit", async (event) => {
     const count = sending.sections.length;
     if (sending.kind === "clinic" && count !== 1) { error.textContent = t("pick_one"); return; }
     if (sending.kind === "center" && count < 2) { error.textContent = t("pick_two"); return; }
+    if (count > MAX_SECTIONS) { error.textContent = t("too_many"); return; }
   }
   form.dataset.busy = "1";
   submit.disabled = true;

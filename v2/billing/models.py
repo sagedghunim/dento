@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
 
-METHODS = ["cash", "card", "wallet", "instapay", "other"]
+METHODS = ["cash", "card", "transfer", "wallet", "instapay", "other"]  # transfer: design E3
 LINE_KINDS = ["service", "procedure", "material", "other"]
 
 

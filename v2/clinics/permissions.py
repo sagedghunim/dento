@@ -9,6 +9,12 @@ CODES = {
     "patients.edit": _("Create and edit patient files"),
     "clinical.view": _("Read visit notes and prescriptions"),
     "clinical.write": _("Write visit notes and prescriptions"),
+    # The visit (design E3).
+    "visits.vitals": _("Record vital signs"),
+    "visits.notes": _("Write the complaint and the visit notes"),
+    "prescriptions.write": _("Write prescriptions"),
+    "settings.medicines": _("Edit the medicines list and prescription templates"),
+    "procedures.record": _("Record procedures, the dental chart and treatment plans"),
     "billing.collect": _("Take payments and add list-price lines"),
     "billing.discount": _("Give discounts and prices not from the list"),
     "billing.refund": _("Refund payments and void invoices"),
@@ -32,9 +38,11 @@ TEMPLATES = {
     "doctor": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "clinical.view",
         "clinical.write", "billing.collect", "inventory.use", "consults.manage",
+        "visits.vitals", "visits.notes", "prescriptions.write", "settings.medicines", "procedures.record",
     }),
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
+        "visits.vitals",
     }),
 }
 

@@ -368,8 +368,14 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
 | Stock use, several items (5.4) | key → items in one statement by id → clinic_day (only if an item crosses its threshold) |
 | Purchase, adjustment | key → item → clinic_day (purchase: expenses) |
 | Expense and its void | key → expense → clinic_day |
-| Prescription (5.5) | key → counter prescription |
-| Visit note (5.6) | key → note (conditional on version) |
+| Prescription (5.5) | key → [medicines added from it: insert, `ON CONFLICT DO NOTHING` on the active-name index] → counter prescription |
+| Visit note (5.6) | key → note (`FOR NO KEY UPDATE`, then conditional on version) → [after the visit day: revision insert] |
+| Finish with earlier balance and next visit (E3) | key → appointment (conditional UPDATE) → the visit's invoice and the patient's other open invoices with something owed, one statement by id → [counter invoice] → next visit's doctor membership `FOR SHARE` → doctor_day (one upsert: done, collected, the next visit's turn) → clinic_day (one upsert). The membership comes after the invoices here; no cycle, because schedule changes (the only `FOR NO KEY UPDATE` holders of a membership) never lock an invoice. Older invoices are locked without their appointments; flows that lock an appointment then its invoice never wait on this visit's appointment afterwards |
+| Vitals (E3) | key → vitals row (insert `ON CONFLICT DO NOTHING`, or UPDATE conditional on version) |
+| Record a procedure (E3) | key → appointment → plan item (`FOR NO KEY UPDATE`) → invoice (or counter invoice) → tooth row (upsert) → clinic_day |
+| Tooth state (E3) | key → tooth row (`FOR NO KEY UPDATE`, then upsert) |
+| Treatment plan (E3) | key → plan row (`FOR NO KEY UPDATE`, for new items' positions) → its items; a status move is one conditional UPDATE on the item |
+| Library rows: medicines, prescription templates, procedures (E3) | key → the row (template: `FOR NO KEY UPDATE`, conditional on version, then its lines replaced) |
 | End-of-day sweep (5.10) | the day's open appointments in one statement by id → for in-room visits without an invoice, counter invoice → that clinic-day's doctor_day rows in one statement → clinic_day |
 | Recompute (5.10) | that clinic-day's doctor_day rows `FOR UPDATE` in one statement → clinic_day `FOR UPDATE` → aggregate the source rows (no locks) → write |
 | Schedule change (create, update, delete) | key → doctor membership(s) `FOR NO KEY UPDATE` in id order → the session row → read the doctor's future bookings (no locks, every one, in keyset pages) → clinic_day (today's version) |

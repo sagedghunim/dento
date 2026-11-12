@@ -153,8 +153,8 @@ msgstr "ليست لديك صلاحية للقيام بهذا."
 msgid "Your session changed. Trying again."
 msgstr "تغيرت جلستك. جارٍ المحاولة مرة أخرى."
 
-msgid "Hamada"
-msgstr "حمادة"
+msgid "Dento"
+msgstr "دينتو"
 
 msgid "Sign out"
 msgstr "تسجيل الخروج"
@@ -523,8 +523,10 @@ msgid "Enter a valid phone number."
 msgstr "أدخل رقم هاتف صحيحًا."
 
 #, python-format
-msgid "Too many new places from this connection. Try again in %(minutes)s minutes."
-msgstr "أماكن جديدة كثيرة من هذا الاتصال. حاول مرة أخرى بعد %(minutes)s دقيقة."
+msgid ""
+"Too many new places from this connection. Try again in %(minutes)s minutes."
+msgstr ""
+"أماكن جديدة كثيرة من هذا الاتصال. حاول مرة أخرى بعد %(minutes)s دقيقة."
 
 msgid "This doctor doesn't work in this section on that day."
 msgstr "هذا الطبيب لا يعمل في هذا القسم في ذلك اليوم."
@@ -825,7 +827,8 @@ msgstr "لا يوجد مريض يطابق هذا البحث."
 msgid "refunded"
 msgstr "مردود"
 
-msgid "This day has more bookings than one screen shows. Use the doctor filters."
+msgid ""
+"This day has more bookings than one screen shows. Use the doctor filters."
 msgstr "حجوزات هذا اليوم أكثر مما تعرضه شاشة واحدة. استخدم تصفية الأطباء."
 
 msgid "appointments"
@@ -918,8 +921,12 @@ msgstr "القائمة الرئيسية"
 msgid "Soon"
 msgstr "قريباً"
 
-msgid "One app for many specialties. Each clinic sees the services, medicines and stock list that fit its specialty."
-msgstr "تطبيق واحد لتخصصات كثيرة. كل عيادة ترى الخدمات والأدوية وأصناف المخزون التي تناسب تخصصها."
+msgid ""
+"One app for many specialties. Each clinic sees the services, medicines and "
+"stock list that fit its specialty."
+msgstr ""
+"تطبيق واحد لتخصصات كثيرة. كل عيادة ترى الخدمات والأدوية وأصناف المخزون التي "
+"تناسب تخصصها."
 
 msgid "Saving…"
 msgstr "جارٍ الحفظ…"
@@ -1134,7 +1141,8 @@ msgstr "تعديل"
 msgid "Visits"
 msgstr "الزيارات"
 
-msgid "Newest first. Visit notes and prescriptions come with the doctor's screens."
+msgid ""
+"Newest first. Visit notes and prescriptions come with the doctor's screens."
 msgstr "الأحدث أولًا. ملاحظات الزيارات والروشتات تأتي مع شاشات الطبيب."
 
 msgid "Fee"
@@ -1167,7 +1175,9 @@ msgstr "المبلغ"
 msgid "No payments yet."
 msgstr "لا توجد مدفوعات بعد."
 
-msgid "Search by the first letters of any part of the name, by mobile number or by file number."
+msgid ""
+"Search by the first letters of any part of the name, by mobile number or by "
+"file number."
 msgstr "ابحث بأول حروف أي جزء من الاسم، أو برقم الموبايل، أو برقم الملف."
 
 msgid "Name, mobile or file number"
@@ -1176,7 +1186,8 @@ msgstr "الاسم أو الموبايل أو رقم الملف"
 msgid "Search"
 msgstr "بحث"
 
-msgid "Type at least two letters or digits. Lists never load every patient at once."
+msgid ""
+"Type at least two letters or digits. Lists never load every patient at once."
 msgstr "اكتب حرفين أو رقمين على الأقل. القوائم لا تعرض كل المرضى مرة واحدة."
 
 msgid "Receipt"
@@ -1224,14 +1235,19 @@ msgstr "العودة إلى أماكنك"
 msgid "Add a clinic or a medical center"
 msgstr "إضافة عيادة أو مركز طبي"
 
-msgid "Start Hamada in your clinic"
-msgstr "ابدأ حمادة في عيادتك"
+msgid "Start Dento in your clinic"
+msgstr "ابدأ دينتو في عيادتك"
 
-msgid "You become the owner of the new place. Your account and password stay the same."
+msgid ""
+"You become the owner of the new place. Your account and password stay the "
+"same."
 msgstr "ستصبح مالك المكان الجديد. حسابك وكلمة مرورك كما هما."
 
-msgid "Four short steps. Your place works as soon as you finish, and you can add the team later."
-msgstr "أربع خطوات قصيرة. يعمل مكانك فور الانتهاء، ويمكنك إضافة الفريق لاحقًا."
+msgid ""
+"Four short steps. Your place works as soon as you finish, and you can add "
+"the team later."
+msgstr ""
+"أربع خطوات قصيرة. يعمل مكانك فور الانتهاء، ويمكنك إضافة الفريق لاحقًا."
 
 msgid "Sign-up isn't open yet on this server."
 msgstr "التسجيل غير متاح بعد على هذا الخادم."
@@ -1242,8 +1258,11 @@ msgstr "عيادة أم مركز طبي؟"
 msgid "One specialty, for example a dental or a children's clinic."
 msgstr "تخصص واحد، مثل عيادة أسنان أو عيادة أطفال."
 
-msgid "Several sections under one roof, each with its own specialty, one front desk and one patient file."
-msgstr "عدة أقسام في مكان واحد، لكل قسم تخصصه، مع استقبال واحد وملف واحد لكل مريض."
+msgid ""
+"Several sections under one roof, each with its own specialty, one front desk"
+" and one patient file."
+msgstr ""
+"عدة أقسام في مكان واحد، لكل قسم تخصصه، مع استقبال واحد وملف واحد لكل مريض."
 
 msgid "The specialty"
 msgstr "التخصص"
@@ -1251,11 +1270,10 @@ msgstr "التخصص"
 msgid "The center's sections"
 msgstr "أقسام المركز"
 
-msgid "Each specialty brings its own services, prices and medicine list. You can change them later."
+msgid ""
+"Each specialty brings its own services, prices and medicine list. You can "
+"change them later."
 msgstr "لكل تخصص خدماته وأسعاره وقائمة أدويته. يمكنك تعديلها لاحقًا."
-
-msgid "Pick two or more. Each one becomes a section; you can rename it."
-msgstr "اختر تخصصين أو أكثر. يصبح كل تخصص قسمًا، ويمكنك تغيير اسمه."
 
 msgid "The place"
 msgstr "بيانات المكان"
@@ -1269,7 +1287,9 @@ msgstr "هاتف المكان (اختياري)"
 msgid "Your account"
 msgstr "حسابك"
 
-msgid "You are the owner. After this you set up two-step sign-in with an authenticator app on your phone."
+msgid ""
+"You are the owner. After this you set up two-step sign-in with an "
+"authenticator app on your phone."
 msgstr "أنت المالك. بعد ذلك تفعّل الدخول بخطوتين بتطبيق مصادقة على موبايلك."
 
 msgid "Username"
@@ -1305,8 +1325,11 @@ msgstr "مستخدم بالفعل"
 msgid "Today at the clinic"
 msgstr "اليوم في العيادة"
 
-msgid "Every booking, who is waiting, and what is happening right now, for the doctor and the desk on the same screen."
-msgstr "كل الحجوزات، ومن ينتظر، وما يحدث الآن، للطبيب والاستقبال على شاشة واحدة."
+msgid ""
+"Every booking, who is waiting, and what is happening right now, for the "
+"doctor and the desk on the same screen."
+msgstr ""
+"كل الحجوزات، ومن ينتظر، وما يحدث الآن، للطبيب والاستقبال على شاشة واحدة."
 
 msgid "Days"
 msgstr "الأيام"
@@ -1347,14 +1370,19 @@ msgstr "مواعيد اليوم"
 msgid "Appointments"
 msgstr "المواعيد"
 
-msgid "New bookings appear here by themselves, from every screen in the clinic."
+msgid ""
+"New bookings appear here by themselves, from every screen in the clinic."
 msgstr "الحجوزات الجديدة تظهر هنا تلقائيًا، من كل شاشات العيادة."
 
 msgid "Add a booking"
 msgstr "إضافة حجز"
 
-msgid "Find the patient or add a new one, then the service and the time. A walk-in is booked, marked arrived and paid in one step."
-msgstr "ابحث عن المريض أو أضف مريضًا جديدًا، ثم اختر الخدمة والموعد. المريض الحاضر يُحجز له ويُسجَّل وصوله ويدفع في خطوة واحدة."
+msgid ""
+"Find the patient or add a new one, then the service and the time. A walk-in "
+"is booked, marked arrived and paid in one step."
+msgstr ""
+"ابحث عن المريض أو أضف مريضًا جديدًا، ثم اختر الخدمة والموعد. المريض الحاضر "
+"يُحجز له ويُسجَّل وصوله ويدفع في خطوة واحدة."
 
 msgid "Patient name or mobile"
 msgstr "اسم المريض أو الموبايل"
@@ -1362,8 +1390,12 @@ msgstr "اسم المريض أو الموبايل"
 msgid "Latest activity"
 msgstr "آخر الأحداث"
 
-msgid "A username has 3 to 30 English letters, digits, dots, dashes or underscores, and starts with a letter."
-msgstr "اسم المستخدم من 3 إلى 30 حرفًا إنجليزيًا أو رقمًا أو نقطة أو شرطة أو شرطة سفلية، ويبدأ بحرف."
+msgid ""
+"A username has 3 to 30 English letters, digits, dots, dashes or underscores,"
+" and starts with a letter."
+msgstr ""
+"اسم المستخدم من 3 إلى 30 حرفًا إنجليزيًا أو رقمًا أو نقطة أو شرطة أو شرطة "
+"سفلية، ويبدأ بحرف."
 
 #, python-format
 msgid "Sections: %(count)s"
@@ -1380,3 +1412,171 @@ msgstr "تم الحجز، لكن لم يُحصَّل أي مبلغ. حصِّل �
 
 msgid "You can't remove this item. Ask someone who can give discounts."
 msgstr "لا يمكنك حذف هذا البند. اطلبه من شخص لديه صلاحية الخصم."
+
+msgid ""
+"Give each specialty a number of sections, two or more in all. You can rename"
+" each section."
+msgstr ""
+"حدّد عدد الأقسام لكل تخصص، قسمين أو أكثر في المجموع. يمكنك تغيير اسم كل قسم."
+
+msgid "Fewer"
+msgstr "أقل"
+
+msgid "More"
+msgstr "أكثر"
+
+msgid ""
+"Are all the sections in one place, with one front desk and one cash desk?"
+msgstr "هل كل الأقسام في مكان واحد، باستقبال واحد وخزينة واحدة؟"
+
+msgid "Yes, one center"
+msgstr "نعم، مركز واحد"
+
+msgid "No, separate branches"
+msgstr "لا، فروع منفصلة"
+
+msgid ""
+"Separate branches become one place each, under your account. You move "
+"between them from the place picker."
+msgstr "يصبح كل فرع مكانًا مستقلًا تحت حسابك، وتتنقل بينها من قائمة الأماكن."
+
+msgid "A place has at most 20 sections."
+msgstr "للمكان 20 قسمًا على الأكثر."
+
+msgid "A plan has 1 to 60 items."
+msgstr "الخطة من 1 إلى 60 بندًا."
+
+msgid "A prescription has 1 to 30 lines."
+msgstr "الروشتة من 1 إلى 30 سطرًا."
+
+msgid "A template with this name already exists."
+msgstr "يوجد قالب بهذا الاسم بالفعل."
+
+msgid "Check the blood pressure numbers."
+msgstr "راجع أرقام ضغط الدم."
+
+msgid "Choose a file."
+msgstr "اختر ملفًا."
+
+msgid "Choose one place or separate branches."
+msgstr "اختر مكانًا واحدًا أو فروعًا منفصلة."
+
+msgid "Each specialty has 1 to 20 sections."
+msgstr "لكل تخصص من 1 إلى 20 قسمًا."
+
+msgid "Earlier balance"
+msgstr "رصيد سابق"
+
+msgid "Edit the medicines list and prescription templates"
+msgstr "تعديل قائمة الأدوية وقوالب الروشتات"
+
+msgid "Enter both blood pressure numbers."
+msgstr "أدخل رقمي ضغط الدم."
+
+msgid "Only caries and fillings take surfaces."
+msgstr "الأسطح للتسوس والحشو فقط."
+
+msgid "Only images (JPEG, PNG, WebP) and PDF files can be attached."
+msgstr "يمكن إرفاق الصور (JPEG وPNG وWebP) وملفات PDF فقط."
+
+msgid "Pick the section."
+msgstr "اختر القسم."
+
+msgid "Pick the tooth."
+msgstr "اختر السن."
+
+msgid "Record procedures on a visit that has arrived."
+msgstr "سجّل الإجراءات على زيارة حضر صاحبها."
+
+msgid "Record procedures, the dental chart and treatment plans"
+msgstr "تسجيل الإجراءات ومخطط الأسنان وخطط العلاج"
+
+msgid "Record vital signs"
+msgstr "تسجيل العلامات الحيوية"
+
+msgid "Reload and try again."
+msgstr "أعد التحميل وحاول مرة أخرى."
+
+msgid "Send the changes."
+msgstr "أرسل التعديلات."
+
+msgid "Send the file as a form upload."
+msgstr "أرسل الملف كرفع من نموذج."
+
+msgid "Someone changed the vital signs meanwhile. Reload and try again."
+msgstr "غيّر شخص آخر العلامات الحيوية في الأثناء. أعد التحميل وحاول مرة أخرى."
+
+msgid "Someone changed this note meanwhile. Compare and save again."
+msgstr "غيّر شخص آخر هذه الملاحظة في الأثناء. قارن واحفظ مرة أخرى."
+
+msgid "Someone changed this template meanwhile. Reload and try again."
+msgstr "غيّر شخص آخر هذا القالب في الأثناء. أعد التحميل وحاول مرة أخرى."
+
+msgid "Someone changed this tooth meanwhile. Reload and try again."
+msgstr "غيّر شخص آخر حالة هذا السن في الأثناء. أعد التحميل وحاول مرة أخرى."
+
+msgid "Surfaces are M, O, D, B and L, each once."
+msgstr "الأسطح هي M وO وD وB وL، كلٌّ مرة واحدة."
+
+msgid "The file is larger than 10 MB."
+msgstr "الملف أكبر من 10 ميجابايت."
+
+msgid "The typical range is upside down."
+msgstr "النطاق المعتاد مقلوب."
+
+msgid "This attachment wasn't found."
+msgstr "لم يُعثر على هذا المرفق."
+
+msgid "This change doesn't apply to an item in that status."
+msgstr "هذا التغيير لا ينطبق على بند في هذه الحالة."
+
+msgid "This medicine is already in the list."
+msgstr "هذا الدواء موجود في القائمة بالفعل."
+
+msgid "This medicine wasn't found."
+msgstr "لم يُعثر على هذا الدواء."
+
+msgid "This plan item changed meanwhile."
+msgstr "تغيّر بند الخطة هذا في الأثناء."
+
+msgid "This plan item is already done or dropped."
+msgstr "بند الخطة هذا تم أو أُلغي بالفعل."
+
+msgid "This plan item is for another procedure."
+msgstr "بند الخطة هذا لإجراء آخر."
+
+msgid "This plan item wasn't found."
+msgstr "لم يُعثر على بند الخطة هذا."
+
+msgid "This prescription template wasn't found."
+msgstr "لم يُعثر على قالب الروشتة هذا."
+
+msgid "This prescription wasn't found."
+msgstr "لم يُعثر على هذه الروشتة."
+
+msgid "This procedure belongs to another section."
+msgstr "هذا الإجراء تابع لقسم آخر."
+
+msgid "This procedure is already in the list."
+msgstr "هذا الإجراء موجود في القائمة بالفعل."
+
+msgid "This procedure isn't offered any more."
+msgstr "هذا الإجراء لم يعد متاحًا."
+
+msgid "This procedure wasn't found."
+msgstr "لم يُعثر على هذا الإجراء."
+
+msgid "This treatment plan wasn't found."
+msgstr "لم يُعثر على خطة العلاج هذه."
+
+msgid "This visit was cancelled or missed."
+msgstr "هذه الزيارة أُلغيت أو لم يحضر صاحبها."
+
+msgid "Use an FDI tooth number: 11-48 or 51-85."
+msgstr "استخدم رقم سن FDI: من 11 إلى 48 أو من 51 إلى 85."
+
+msgid "Write prescriptions"
+msgstr "كتابة الروشتات"
+
+msgid "Write the complaint and the visit notes"
+msgstr "كتابة الشكوى وملاحظات الزيارة"

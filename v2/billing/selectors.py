@@ -125,3 +125,31 @@ def day_sums(ctx, day):
         SELECT doctor_id, coalesce(sum(amount) FILTER (WHERE kind = 'payment'), 0),
                coalesce(sum(amount) FILTER (WHERE kind = 'refund'), 0)
           FROM "billing_payment" WHERE clinic_id = %s AND day = %s GROUP BY doctor_id""", [ctx.clinic_id, day])}
+
+
+BALANCE_LIMIT = 50  # invoices listed; the total covers them all
+
+
+def patient_balance(ctx, patient_id):
+    """What a patient owes across visits (design E3): open invoices with something left, oldest first."""
+    rows = sql.dicts(ctx, """
+        SELECT i.id, i.number, i.appointment_id, a.day, i.total, i.paid, i.created_at
+          FROM "billing_invoice" i
+          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
+         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status = 'open' AND i.paid < i.total
+         ORDER BY i.created_at, i.id""", [ctx.clinic_id, patient_id])
+    return {"owed": sum(r["total"] - r["paid"] for r in rows), "count": len(rows),
+            "invoices": [{"id": r["id"], "number": r["number"], "appointment_id": r["appointment_id"],
+                          "day": r["day"].isoformat() if r["day"] else None, "total": r["total"], "paid": r["paid"],
+                          "due": r["total"] - r["paid"]} for r in rows[:BALANCE_LIMIT]]}
+
+
+def visit_invoice(ctx, appointment_id):
+    """The visit's open invoice with its lines, for the finish dialog: lines, total, paid and remaining."""
+    found = sql.row(ctx, 'SELECT id FROM "billing_invoice" WHERE clinic_id = %s AND appointment_id = %s '
+                         "AND status = 'open'", [ctx.clinic_id, appointment_id])
+    if found is None:
+        return None
+    body = invoice(ctx, found[0])
+    body["remaining"] = body["total"] - body["paid"]
+    return body

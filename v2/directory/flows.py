@@ -49,35 +49,84 @@ def specialty_name(code, language="ar"):
     return names.get(language, names["en"])
 
 
-def clean_sections(kind, sections, language="ar"):
-    """Validate a place's kind and sections (design D1, D2): a clinic has exactly one, a center 2 to 20.
+def _expand(sections, language):
+    """[{specialty, count, name?}] into one {specialty, name, index} per section (design E2).
 
-    `sections` is a list of {"specialty": code, "name": optional}. A section without a name takes its
-    specialty's name. Names must differ. Returns [{"specialty", "name"}].
+    A count of N gives "<name> 1" ... "<name> N", a count of 1 just the name; the name defaults to the
+    specialty's. One entry per section with count 1 and its own name (what the sign-up screen sends) keeps
+    each edited name exactly.
     """
-    if kind not in ("clinic", "center"):
-        raise ApiError("invalid", _("Choose a clinic or a medical center."), fields={"kind": "choice"})
-    if not isinstance(sections, list):
+    if not isinstance(sections, list) or not sections:
         raise ApiError("invalid", _("Pick the specialty of each section."), fields={"sections": "required"})
-    low, high = (1, 1) if kind == "clinic" else (2, MAX_SECTIONS)
-    if not low <= len(sections) <= high:
-        raise ApiError("invalid", _("A clinic has one specialty; a medical center has 2 to 20 sections."),
-                       fields={"sections": "count"})
-    cleaned, seen = [], set()
+    expanded = []
     for index, section in enumerate(sections):
         if not isinstance(section, dict) or section.get("specialty") not in SPECIALTIES:
             raise ApiError("invalid", _("Pick a specialty from the list."), fields={f"sections.{index}.specialty": "choice"})
+        count = section.get("count", 1)
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_SECTIONS:
+            raise ApiError("invalid", _("Each specialty has 1 to 20 sections."), fields={f"sections.{index}.count": "range"})
         name = section.get("name")
         if name is not None and not isinstance(name, str):
             raise ApiError("invalid", "name must be text", fields={f"sections.{index}.name": "text"})
-        name = clean_name(name or "") or specialty_name(section["specialty"], language)
-        if len(name) > 120:
-            raise ApiError("invalid", "name is too long", fields={f"sections.{index}.name": "too_long"})
-        if name.casefold() in seen:
-            raise ApiError("invalid", _("Give each section its own name."), fields={f"sections.{index}.name": "duplicate"})
-        seen.add(name.casefold())
-        cleaned.append({"specialty": section["specialty"], "name": name})
-    return cleaned
+        base = clean_name(name or "") or specialty_name(section["specialty"], language)
+        for number in range(1, count + 1):
+            expanded.append({"specialty": section["specialty"], "name": base if count == 1 else f"{base} {number}",
+                             "index": index})
+    return expanded
+
+
+def _check_place(sections):
+    if len(sections) > MAX_SECTIONS:
+        raise ApiError("invalid", _("A place has at most 20 sections."), fields={"sections": "count"})
+    seen = set()
+    for section in sections:
+        if len(section["name"]) > 120:
+            raise ApiError("invalid", "name is too long", fields={f"sections.{section['index']}.name": "too_long"})
+        if section["name"].casefold() in seen:
+            raise ApiError("invalid", _("Give each section its own name."),
+                           fields={f"sections.{section['index']}.name": "duplicate"})
+        seen.add(section["name"].casefold())
+    return [{"specialty": s["specialty"], "name": s["name"]} for s in sections]
+
+
+def plan_places(kind, sections, language="ar", layout="one_place"):
+    """Validate the sign-up cards (design D2, E2) and return the places to create, each a list of sections.
+
+    A clinic has exactly one section. A center has at least 2 in all. With layout "one_place" they are one
+    center; with "branches" each specialty becomes its own place under the same owner, with that card's
+    sections (a place with one section is a clinic). A place has at most 20 sections, with distinct names.
+    """
+    if kind not in ("clinic", "center"):
+        raise ApiError("invalid", _("Choose a clinic or a medical center."), fields={"kind": "choice"})
+    if layout not in ("one_place", "branches"):
+        raise ApiError("invalid", _("Choose one place or separate branches."), fields={"layout": "choice"})
+    expanded = _expand(sections, language)
+    if (kind == "clinic" and len(expanded) != 1) or (kind == "center" and len(expanded) < 2):
+        raise ApiError("invalid", _("A clinic has one specialty; a medical center has 2 to 20 sections."),
+                       fields={"sections": "count"})
+    if kind == "clinic" or layout == "one_place":
+        return [_check_place(expanded)]
+    groups = {}
+    for section in expanded:
+        groups.setdefault(section["specialty"], []).append(section)
+    return [_check_place(group) for group in groups.values()]
+
+
+def clean_sections(kind, sections, language="ar"):
+    """One place's sections (design D1): a clinic has exactly one, a center 2 to 20. Returns [{"specialty", "name"}]."""
+    return plan_places(kind, sections, language)[0]
+
+
+def create_planned(*, name, owner, kind, places, city="", phone="", language="ar", default_session=False, shard=None):
+    """Create places already validated by plan_places. Branches are named "<name> - <specialty>", each a clinic or
+    a center by its number of sections."""
+    entries = []
+    for place in places:
+        branch_kind = kind if len(places) == 1 else ("center" if len(place) > 1 else "clinic")
+        place_name = name if len(places) == 1 else f"{name} - {specialty_name(place[0]['specialty'], language)}"[:120]
+        entries.append(create_clinic(name=place_name, owner=owner, kind=branch_kind, sections=place, city=city,
+                                     phone=phone, language=language, default_session=default_session, shard=shard))
+    return entries
 
 
 def create_clinic(*, name, owner, specialty_code=None, kind="clinic", sections=None, city="", phone="", language="ar",
@@ -123,6 +172,7 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
                                                          display_name=owner.full_name, title="")
         for section in existing:
             copy_services(clinic, section, language)
+            copy_catalogues(clinic, section, language)
         for counter in ("patient_file", "invoice", "prescription"):
             Counter.objects.get_or_create(clinic=clinic, name=counter)
         if default_session and not Schedule.objects.filter(clinic_id=clinic.id, doctor=owner_membership).exists():
@@ -131,6 +181,13 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
                          starts=DEFAULT_SESSION["starts"], ends=DEFAULT_SESSION["ends"], mode=DEFAULT_SESSION["mode"])
                 for weekday in DEFAULT_SESSION["weekdays"]])
         return owner_membership.id
+
+
+def copy_catalogues(clinic, section, language="ar"):
+    """The section's procedures, medicines and prescription templates, from its specialty (design E3, E4)."""
+    from clinical.services import copy_specialty
+
+    copy_specialty(clinic.id, section, language)
 
 
 def copy_services(clinic, section, language="ar"):

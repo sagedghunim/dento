@@ -20,6 +20,8 @@ DAY_SETTINGS = ("timezone", "day_ends_at")
 
 
 def clinic_payload(ctx):
+    from billing.models import METHODS
+
     clinic = ctx.clinic
     today = business_day(clinic)
     services = Service.objects.filter(clinic_id=clinic.id, is_active=True).order_by("sort", "id")
@@ -38,7 +40,7 @@ def clinic_payload(ctx):
         "services": [{"id": s.id, "section_id": s.section_id, "name": s.name, "kind": s.kind, "price": s.price,
                       "duration_min": s.duration_min, "follow_up_service_id": s.follow_up_service_id} for s in services],
         "doctors": [{"id": d.id, "name": d.display_name, "today": hours.get(d.id, [])} for d in doctors],
-        "payment_methods": ["cash", "card", "wallet", "instapay", "other"],
+        "payment_methods": list(METHODS),  # transfer added for the finish dialog (design E3)
         "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "codes": sorted(ctx.codes)},
     }
 

@@ -362,3 +362,69 @@ def refund(ctx, payment_id, amount, method=None, note=""):
     deltas.write_doctors(ctx)
     versions = deltas.write_clinics(ctx)
     return row, invoice, versions[visit_day]
+
+
+# --- The visit (design E3) ------------------------------------------------------------------------------------
+
+
+def add_visit_line(ctx, appointment, kind, description, qty, unit_price, from_list):
+    """A line on a locked visit's invoice (a recorded procedure). Creates the invoice if it has none.
+
+    Lock order: the appointment (held by the caller) -> the invoice (or the invoice counter for a new one).
+    Returns (line id, invoice). The caller bumps the visit day's version.
+    """
+    invoice, _created = ensure_invoice(ctx, appointment)
+    _require_open(invoice)
+    amount = qty * unit_price
+    line_id = sql.row(ctx, """
+        INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price, amount,
+                                            from_list, created_by_id, created_at)
+        VALUES (%s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+        ctx.clinic_id, invoice["id"], kind, description[:200], qty, unit_price, amount, from_list, ctx.membership_id,
+        timezone.now()])[0]
+    updated = sql.row(ctx, f'UPDATE "billing_invoice" SET subtotal = subtotal + %s, total = total + %s '
+                           f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
+                      [amount, amount, ctx.clinic_id, invoice["id"]])
+    return line_id, _invoice(updated)
+
+
+def lock_patient_invoices(ctx, patient_id, appointment_id):
+    """The visit's own open invoice and the patient's other open invoices with something owed, locked in one
+    statement in id order (design 5.0: several rows of one table in key order). Returns them oldest first."""
+    rows = sql.rows(ctx, f'SELECT {INVOICE_COLUMNS}, created_at FROM "billing_invoice" WHERE clinic_id = %s '
+                         "AND patient_id = %s AND status = 'open' AND (paid < total OR appointment_id = %s) "
+                         "ORDER BY id FOR NO KEY UPDATE", [ctx.clinic_id, patient_id, appointment_id])
+    found = [dict(_invoice(r[:-1]), created_at=r[-1]) for r in rows]
+    return sorted(found, key=lambda i: (i["created_at"], i["id"]))
+
+
+def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today):
+    """'Also collect the earlier balance' (design E3): pay the patient's older unpaid invoices, oldest first.
+
+    `invoices` come from lock_patient_invoices. The amount may not exceed what they owe. Each payment row
+    carries its invoice's visit doctor, and the summaries change as for any payment (design 5.3).
+    """
+    older = [i for i in invoices if i["appointment_id"] != appointment_id and i["paid"] < i["total"]]
+    owed = sum(i["total"] - i["paid"] for i in older)
+    if amount > owed:
+        raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"earlier.amount": "over_balance"})
+    visits = {r[0]: (r[1], r[2]) for r in sql.rows(
+        ctx, 'SELECT id, doctor_id, day FROM "scheduling_appointment" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
+        [ctx.clinic_id, [i["appointment_id"] for i in older if i["appointment_id"]]])}
+    payments, left = [], amount
+    for invoice in older:
+        if left <= 0:
+            break
+        part = min(left, invoice["total"] - invoice["paid"])
+        sql.run(ctx, 'UPDATE "billing_invoice" SET paid = paid + %s WHERE clinic_id = %s AND id = %s',
+                [part, ctx.clinic_id, invoice["id"]])
+        doctor_id, day = visits.get(invoice["appointment_id"], (None, None))
+        payments.append(_insert_payment(ctx, invoice, invoice["patient_id"], doctor_id, "payment", method, part, today,
+                                        _("Earlier balance")))
+        if doctor_id is not None:
+            deltas.doctor_day(today, doctor_id, collected=part)
+        deltas.clinic_day(today, collected=part)
+        if day is not None:
+            deltas.clinic_day(day)  # that visit's day shows what is owed
+        left -= part
+    return payments

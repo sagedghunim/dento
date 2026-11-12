@@ -53,6 +53,6 @@ def verify(secret, code, *, last_step=0, now=None, window=1):
     return None
 
 
-def provisioning_uri(secret, account, issuer="Hamada"):
+def provisioning_uri(secret, account, issuer="Dento"):
     label = quote(f"{issuer}:{account}")
     return f"otpauth://totp/{label}?secret={secret}&issuer={quote(issuer)}&algorithm=SHA1&digits={DIGITS}&period={STEP_SECONDS}"

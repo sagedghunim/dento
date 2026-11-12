@@ -28,7 +28,7 @@ from core.errors import ApiError
 from core.text import clean_name, is_valid_phone, normalize_phone
 from core.validate import text
 
-from .flows import clean_sections, create_account, create_clinic
+from .flows import create_account, create_planned, plan_places
 from .models import DirectoryClinic, UserClinic
 
 HONEYPOT = "website"
@@ -46,14 +46,20 @@ def _nested(prefix, call):
 
 
 def clean_place(data, language):
-    """kind, sections, name, city and an optional phone, validated as the platform admin's form is (D2)."""
-    sections = clean_sections(data.get("kind"), data.get("sections"), language)
+    """kind, sections, layout, name, city and an optional phone, validated as the platform admin's form is (D2, E2).
+
+    `sections` is [{specialty, count?, name?}]: a card with a count (names made from the specialty), or one entry
+    per section with count 1 and its own name. `layout` is "one_place" (default) or "branches"; with branches each
+    specialty becomes its own place under the same owner. Returns the places to create, each a list of sections.
+    """
+    layout = data.get("layout") or "one_place"
+    places = plan_places(data.get("kind"), data.get("sections"), language, layout)
     name = clean_name(text(data, "name", 120))
     city = clean_name(text(data, "city", 60))
     phone = normalize_phone(text(data, "phone", 20, required=False))
     if phone and not is_valid_phone(phone):
         raise ApiError("invalid", _("Enter a valid phone number."), fields={"phone": "phone"})
-    return {"kind": data["kind"], "sections": sections, "name": name, "city": city, "phone": phone}
+    return {"kind": data["kind"], "layout": layout, "places": places, "name": name, "city": city, "phone": phone}
 
 
 def clean_owner(data):
@@ -146,8 +152,8 @@ def sign_up(request, data):
             # Another sign-up took the username or mobile between the check and the insert.
             _refuse_taken(owner["username"], owner["mobile"])
             raise
-        entry = create_clinic(name=place["name"], owner=user, kind=place["kind"], sections=place["sections"],
-                              city=place["city"], phone=place["phone"], language=language, default_session=True)
+        entry = create_planned(name=place["name"], owner=user, kind=place["kind"], places=place["places"],
+                               city=place["city"], phone=place["phone"], language=language, default_session=True)[0]
         event(user.id, "signup", request)
         _complete(request, user, mfa=False)
         pick_clinic(request, user, _membership_id(user, entry.id))
@@ -164,9 +170,11 @@ def sign_up(request, data):
     return keyed_public_call(request, SIGNUP_ENDPOINT, data, work, replay, hash_data=_hash_data(data))
 
 
-def place_body(user, entry):
+def place_body(user, entry, entries=None):
+    """The place that became active, and every place the request created (several for separate branches, E2)."""
     membership_id = _membership_id(user, entry.id)
     return {"clinic": {"id": entry.id, "name": entry.name, "kind": entry.kind}, "membership_id": membership_id,
+            "clinics": [{"id": e.id, "name": e.name, "kind": e.kind} for e in (entries or [entry])],
             "next": "home" if user.has_totp else "security"}
 
 
@@ -183,11 +191,12 @@ def add_place(request, user, data):
     if wait:
         raise _too_many(wait)
     _take_place(ip)
-    entry = create_clinic(name=place["name"], owner=user, kind=place["kind"], sections=place["sections"],
-                          city=place["city"], phone=place["phone"], language=user.language, default_session=True)
+    entries = create_planned(name=place["name"], owner=user, kind=place["kind"], places=place["places"],
+                             city=place["city"], phone=place["phone"], language=user.language, default_session=True)
+    entry = entries[0]
     event(user.id, "place_added", request)
     pick_clinic(request, user, _membership_id(user, entry.id))
-    return Result(place_body(user, entry), status=201, target_type="clinic", target_id=entry.id)
+    return Result(place_body(user, entry, entries), status=201, target_type="clinic", target_id=entry.id)
 
 
 def replay_place(user, stored):

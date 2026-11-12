@@ -11,7 +11,7 @@ from core.errors import ApiError
 from core.routing import clinic_transaction
 from core.text import is_valid_phone, normalize_phone
 
-from .flows import clean_sections, create_account, create_clinic
+from .flows import create_account, create_planned, plan_places
 from .models import DirectoryClinic, UserClinic
 
 
@@ -47,13 +47,18 @@ def clinic_rows(limit=100, after=None):
     return {"items": items, "next": str(rows[limit - 1].id) if len(rows) > limit else None}
 
 
-def create(name, specialty, city, owner_username, owner_name, owner_phone, language, kind="clinic", sections=None):
-    """A place with its owner: a clinic with one specialty, or a center with `sections` (design D1, D2)."""
+def create(name, specialty, city, owner_username, owner_name, owner_phone, language, kind="clinic", sections=None,
+           layout="one_place"):
+    """A place with its owner: a clinic with one specialty, or a center with `sections` (design D1, D2, E2).
+
+    `sections` takes the sign-up's cards ([{specialty, count?, name?}]); with layout "branches" each specialty
+    becomes its own place under the one owner. Returns (entries, owner, temporary password).
+    """
     if sections is None:
         if specialty not in SPECIALTIES:
             raise ApiError("invalid", _("Pick a specialty from the list."), fields={"specialty": "choice"})
         sections = [{"specialty": specialty}]
-    sections = clean_sections(kind, sections, language)
+    places = plan_places(kind, sections, language, layout)
     phone = normalize_phone(owner_phone) if owner_phone else None
     if phone and not is_valid_phone(phone):
         raise ApiError("invalid", _("Enter a valid mobile number."), fields={"owner_phone": "phone"})
@@ -62,9 +67,9 @@ def create(name, specialty, city, owner_username, owner_name, owner_phone, langu
     with transaction.atomic(using="default"):
         owner = create_account(owner_username, owner_name, phone=phone, language=language)
         temporary = _temporary_password(owner)
-    entry = create_clinic(name=name, owner=owner, kind=kind, sections=sections, city=city, language=language,
-                          default_session=True)
-    return entry, owner, temporary
+    entries = create_planned(name=name, owner=owner, kind=kind, places=places, city=city, language=language,
+                             default_session=True)
+    return entries, owner, temporary
 
 
 def _temporary_password(owner):

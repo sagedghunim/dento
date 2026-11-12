@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# No patient name in the title: it prints, and stays in a shared PC's history (design 7.5). #}
-  <title>{% translate "Receipt" %} {{ r.number|digits }}</title>
+  <title>{% translate "Receipt" %} {{ r.number|digits }} · {% translate "Dento" %}</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="{% static 'css/print.css' %}">
   <link rel="stylesheet" href="{% if paper == '80mm' %}{% static 'css/print-80mm.css' %}{% else %}{% static 'css/print-a5.css' %}{% endif %}">
@@ -59,7 +59,7 @@
     {% endif %}
     <footer class="foot">
       <p>{% translate "Thank you. Keep this receipt." %}</p>
-      <p class="small">{% translate "Printed" %} {{ printed_at|shortday }} · {{ printed_at|clock }}</p>
+      <p class="small">{% translate "Printed" %} {{ printed_at|shortday }} · {{ printed_at|clock }} · {% translate "Dento" %}</p>
     </footer>
   </main>
 </body>

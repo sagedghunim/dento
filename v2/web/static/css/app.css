@@ -443,6 +443,13 @@ dialog.sheet[open] { display: flex; flex-direction: column; }
 .spec-btn:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 .spec-btn .tick { position: absolute; inset-block-start: 10px; inset-inline-end: 12px; display: none; }
 .spec-btn:has(input:checked) .tick { display: block; }
+/* Sign-up cards (design E2): a radio for a clinic, a − n + counter for a center. Plain until the final design. */
+.spec-card { cursor: default; display: flex; flex-direction: column; gap: 8px; }
+.spec-card .spec-pick { cursor: pointer; }
+.spec-card .spec-pick input { position: static; opacity: 1; width: 20px; height: 20px; margin-inline-end: 8px; vertical-align: middle; accent-color: var(--teal); }
+.spec-card.on { border-color: var(--teal); background: var(--teal-tint); }
+.counter { display: flex; align-items: center; gap: 10px; }
+.counter output { min-width: 2ch; text-align: center; font-weight: 800; font-size: 1.1rem; }
 .step-title { display: flex; align-items: baseline; gap: 8px; }
 .step-no { color: var(--teal-dark); }
 .sections-list { display: grid; gap: 10px; margin-block-start: 12px; }

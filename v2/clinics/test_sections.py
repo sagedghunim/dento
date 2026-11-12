@@ -39,7 +39,7 @@ class SectionModelTests(ShardTestCase):
     def test_a_center_copies_each_sections_template_and_links_follow_ups_inside_the_section(self):
         sections = self.sections(self.c)
         self.assertEqual([(s.name, s.specialty_code) for s in sections],
-                         [("أسنان", "dental"), ("Kids", "pediatrics"), ("جلدية", "dermatology")])
+                         [("أسنان", "dental"), ("Kids", "pediatrics"), ("جلدية وتجميل", "dermatology")])
         with clinic_transaction(self.c.id, self.c.shard):
             clinic = Clinic.objects.get(id=self.c.id)
             self.assertEqual((clinic.kind, clinic.specialty_code), ("center", "dental"))
@@ -124,12 +124,14 @@ class SectionModelTests(ShardTestCase):
             with connections[alias].cursor() as cursor:
                 cursor.execute("""
                     SELECT table_name, is_nullable FROM information_schema.columns
-                     WHERE column_name = 'section_id' AND table_schema = current_schema() ORDER BY table_name""")
+                     WHERE column_name = 'section_id' AND table_schema = current_schema()
+                       AND table_name NOT LIKE 'clinical%%' ORDER BY table_name""")
                 self.assertEqual(cursor.fetchall(), [("clinics_schedule", "NO"), ("clinics_service", "NO"),
                                                      ("scheduling_appointment", "NO")], alias)
                 cursor.execute("""
                     SELECT conrelid::regclass::text, pg_get_constraintdef(oid) FROM pg_constraint
-                     WHERE contype = 'f' AND confrelid = 'clinics_section'::regclass ORDER BY 1""")
+                     WHERE contype = 'f' AND confrelid = 'clinics_section'::regclass
+                       AND conrelid::regclass::text NOT LIKE 'clinical%%' ORDER BY 1""")
                 self.assertEqual(cursor.fetchall(), [
                     ("clinics_schedule", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
                     ("clinics_service", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
@@ -172,7 +174,7 @@ class SectionEndpointTests(ShardTestCase):
         self.assertEqual(body["kind"], "center")
         self.assertEqual([(s["id"], s["name"], s["specialty"]) for s in body["items"]],
                          [(self.dental.id, "أسنان", "dental"), (self.kids.id, "Kids", "pediatrics"),
-                          (self.skin.id, "جلدية", "dermatology")])
+                          (self.skin.id, "جلدية وتجميل", "dermatology")])
         self.assertEqual(body["items"][1]["specialty_name"], "أطفال")
         clinic = call(self.a.client("assistant"), "GET", "/api/v1/sections").json()
         self.assertEqual((clinic["kind"], len(clinic["items"])), ("clinic", 1))

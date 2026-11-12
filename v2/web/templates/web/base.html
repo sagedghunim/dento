@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   {# No patient names in titles: they print and stay in a shared PC's history (design 7.5). #}
-  <title>{% block title %}{% translate "Hamada" %}{% endblock %} · {% translate "Hamada" %}</title>
+  <title>{% block title %}{% translate "Dento" %}{% endblock %} · {% translate "Dento" %}</title>
   <link rel="icon" href="data:,">
   <link rel="preload" href="{% static 'fonts/rubik-arabic.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
@@ -27,7 +27,7 @@
   {% else %}
     {% block plainbar %}
     <header class="plainbar">
-      <a class="brand" href="/">{% translate "Hamada" %}</a>
+      <a class="brand" href="/">{% translate "Dento" %}</a>
       <span class="spacer"></span>
       {% if request.user.is_authenticated %}
         <span class="muted"><bdi dir="auto">{{ request.user.full_name }}</bdi></span>

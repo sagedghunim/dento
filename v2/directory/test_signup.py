@@ -86,7 +86,7 @@ class SignUpTests(ShardTestCase):
             self.assertEqual(set(Schedule.objects.filter(clinic_id=link.clinic_id).values_list("section_id", flat=True)),
                              {first.id})
             self.assertEqual(Clinic.objects.get(id=link.clinic_id).specialty_code, "pediatrics")
-        self.assertEqual(sections, [("الأطفال", "pediatrics"), ("جلدية", "dermatology"), ("تجميل الأسنان", "dental")])
+        self.assertEqual(sections, [("الأطفال", "pediatrics"), ("جلدية وتجميل", "dermatology"), ("تجميل الأسنان", "dental")])
 
     def test_bad_input_is_a_clear_400_with_the_field(self):
         cases = [

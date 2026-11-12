@@ -41,6 +41,7 @@ class AuditAccess(models.Model):
         PRESCRIPTION = 5
         INVOICE = 6
         HISTORY = 7
+        ATTACHMENT = 8  # opening an attachment's file (design E3)
 
     id = models.BigAutoField(primary_key=True)
     clinic_id = models.BigIntegerField()

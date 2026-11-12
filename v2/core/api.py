@@ -67,6 +67,34 @@ def _json_body(request):
     return data
 
 
+UPLOAD_OVERHEAD = 64 * 1024  # multipart boundaries and the small text fields beside the file
+
+
+def _upload_body(request, max_bytes):
+    """A multipart upload (design E3 attachments): the text fields, and the file's size and SHA-256 for the hash.
+
+    The declared length is checked before anything is read, so an oversized body never reaches the disk.
+    The view reads the file itself from request.FILES["file"].
+    """
+    if not request.content_type.startswith("multipart/form-data"):
+        raise ApiError("invalid_body", _("Send the file as a form upload."), 415)
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length <= 0 or length > max_bytes + UPLOAD_OVERHEAD:
+        raise ApiError("too_large", _("The file is larger than 10 MB."), 413, fields={"file": "too_large"})
+    data = {name: request.POST.get(name) for name in request.POST}
+    upload = request.FILES.get("file")
+    if upload is not None:
+        digest = hashlib.sha256()
+        for chunk in upload.chunks():
+            digest.update(chunk)
+        upload.seek(0)
+        data["file"] = {"size": upload.size, "sha256": digest.hexdigest()}
+    return data
+
+
 def request_hash(request, data):
     canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
     return hashlib.sha256(f"{request.method} {request.path}\n{canonical}".encode()).hexdigest()
@@ -211,7 +239,7 @@ def _db_error(error):
 
 
 def api(method="GET", perm=None, access=None, member=True, key=True, allow_password_change=False, replay=None,
-        headers=None):
+        headers=None, upload=None):
     """Declare a JSON endpoint: its method, permission codes and whether it returns clinical data.
 
     member=True views are called as view(request, ctx, data, ...); member=False views
@@ -219,6 +247,7 @@ def api(method="GET", perm=None, access=None, member=True, key=True, allow_passw
     access-log action the view records (a test checks every clinical view declares it).
     `headers` is a callable returning headers for every answer, refusals included (Today's
     Poll-After, design 5.11); a successful answer's own headers take precedence.
+    `upload` (a size in bytes) makes a mutating view take a multipart body with one `file` (design E3).
     """
     codes = (perm,) if isinstance(perm, str) else tuple(perm or ())
     needs_key = key and method in MUTATING
@@ -232,7 +261,13 @@ def api(method="GET", perm=None, access=None, member=True, key=True, allow_passw
             try:
                 if request.method != method:
                     raise ApiError("method_not_allowed", _("This method isn't allowed here."), 405)
-                data = _json_body(request) if method in MUTATING else {}
+                if method not in MUTATING:
+                    data = {}
+                elif upload:
+                    _require_user(request, allow_password_change)  # nobody signed out gets a file read
+                    data = _upload_body(request, upload)
+                else:
+                    data = _json_body(request)
                 if not member:
                     response = _account_call(request, view, data, args, kwargs, endpoint, needs_key,
                                              allow_password_change, replay)
@@ -271,6 +306,8 @@ def _clinic_call(request, user, alias, clinic_id, membership_id, view, data, arg
                     if stored is not None:
                         return _respond(request, _replayed(ctx, stored, replay), key)
                 result = view(request, ctx, data, *args, **kwargs)
+                if isinstance(result, HttpResponseBase) and key is None:
+                    return result  # a file a GET streams (an attachment, design E3)
                 if not isinstance(result, Result):
                     result = Result(result or {})
                 if key is not None:

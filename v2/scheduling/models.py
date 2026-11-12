@@ -8,7 +8,8 @@ from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
 
-STATUSES = ["booked", "waiting", "in_room", "done", "cancelled", "no_show"]
+# The visit's stages (design E3): booked -> waiting -> with_assistant (optional) -> ready -> in_room -> done.
+STATUSES = ["booked", "waiting", "with_assistant", "ready", "in_room", "done", "cancelled", "no_show"]
 
 
 class TsTzRange(Func):
@@ -23,6 +24,8 @@ class Appointment(models.Model):
     class Status(models.TextChoices):
         BOOKED = "booked"
         WAITING = "waiting"
+        WITH_ASSISTANT = "with_assistant"
+        READY = "ready"
         IN_ROOM = "in_room"
         DONE = "done"
         CANCELLED = "cancelled"
@@ -50,7 +53,7 @@ class Appointment(models.Model):
     starts_at = models.DateTimeField(null=True, blank=True)  # slot bookings only
     ends_at = models.DateTimeField(null=True, blank=True)
     is_extra = models.BooleanField(default=False)  # added to a full slot on purpose
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.BOOKED)
+    status = models.CharField(max_length=14, choices=Status.choices, default=Status.BOOKED)
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.CLINIC)
     fee = models.BigIntegerField(default=0)
     is_follow_up = models.BooleanField(default=False)
@@ -58,6 +61,8 @@ class Appointment(models.Model):
     auto_closed = models.BooleanField(default=False)  # closed by the end-of-day sweep
     note = models.CharField(max_length=500, blank=True, default="")
     arrived_at = models.DateTimeField(null=True, blank=True)
+    with_assistant_at = models.DateTimeField(null=True, blank=True)
+    ready_at = models.DateTimeField(null=True, blank=True)
     called_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
@@ -96,10 +101,20 @@ class Appointment(models.Model):
             # The timestamps each status needs.
             models.CheckConstraint(
                 condition=~Q(status="booked")
-                | Q(arrived_at__isnull=True, called_at__isnull=True, finished_at__isnull=True, cancelled_at__isnull=True),
-                name="appointment_booked_times"),
-            models.CheckConstraint(condition=~Q(status="waiting") | Q(arrived_at__isnull=False, called_at__isnull=True),
-                                   name="appointment_waiting_times"),
+                | Q(arrived_at__isnull=True, with_assistant_at__isnull=True, ready_at__isnull=True,
+                    called_at__isnull=True, finished_at__isnull=True, cancelled_at__isnull=True),
+                name="appointment_booked_v2_times"),
+            models.CheckConstraint(
+                condition=~Q(status="waiting")
+                | Q(arrived_at__isnull=False, with_assistant_at__isnull=True, ready_at__isnull=True, called_at__isnull=True),
+                name="appointment_waiting_v2_times"),
+            models.CheckConstraint(
+                condition=~Q(status="with_assistant")
+                | Q(arrived_at__isnull=False, with_assistant_at__isnull=False, ready_at__isnull=True, called_at__isnull=True),
+                name="appointment_with_assistant_times"),
+            models.CheckConstraint(
+                condition=~Q(status="ready") | Q(arrived_at__isnull=False, ready_at__isnull=False, called_at__isnull=True),
+                name="appointment_ready_times"),
             models.CheckConstraint(condition=~Q(status="in_room") | Q(arrived_at__isnull=False, called_at__isnull=False),
                                    name="appointment_in_room_times"),
             models.CheckConstraint(

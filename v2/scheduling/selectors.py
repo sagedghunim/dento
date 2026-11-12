@@ -17,12 +17,13 @@ from summaries import selectors as summaries
 from . import rules
 
 TODAY_LIMIT = 1000
-OPEN_STATUSES = ("booked", "waiting", "in_room", "done")
+OPEN_STATUSES = ("booked", "waiting", "with_assistant", "ready", "in_room", "done")
+STATUS_KEYS = ("booked", "waiting", "with_assistant", "ready", "in_room", "done", "cancelled", "no_show")
 
 # The columns every appointment payload is built from (one query with joins inside the clinic).
 ROW_SQL = """
     SELECT a.id, a.day, a.queue_no, a.status, a.starts_at, a.ends_at, a.is_extra, a.source, a.fee, a.is_follow_up,
-           a.is_new, a.auto_closed, a.note, a.arrived_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
+           a.is_new, a.auto_closed, a.note, a.arrived_at, a.with_assistant_at, a.ready_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name,
            i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid
@@ -35,6 +36,19 @@ ROW_SQL = """
 
 def _iso(clinic, instant):
     return local_iso(clinic, instant) if instant else None
+
+
+def timings(r):
+    """Seconds spent (design E3): waiting (arrival to call-in), with the doctor (call-in to done) and in all.
+
+    Only spans that have ended; a screen counts a running one from the times it has.
+    """
+    def span(start, end):
+        return int((end - start).total_seconds()) if start and end else None
+
+    return {"waiting_seconds": span(r["arrived_at"], r["called_at"]),
+            "doctor_seconds": span(r["called_at"], r["finished_at"]),
+            "total_seconds": span(r["arrived_at"], r["finished_at"])}
 
 
 def payload(clinic, r):
@@ -51,7 +65,9 @@ def payload(clinic, r):
         "starts_at": _iso(clinic, r["starts_at"]), "ends_at": _iso(clinic, r["ends_at"]), "is_extra": r["is_extra"],
         "source": r["source"], "fee": r["fee"], "is_follow_up": r["is_follow_up"], "is_new": r["is_new"],
         "auto_closed": r["auto_closed"], "note": r["note"], "arrived_at": _iso(clinic, r["arrived_at"]),
+        "with_assistant_at": _iso(clinic, r.get("with_assistant_at")), "ready_at": _iso(clinic, r.get("ready_at")),
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
+        "timings": timings(r),
         "cancelled_at": _iso(clinic, r["cancelled_at"]), "cancel_reason": r["cancel_reason"],
         "doctor_id": r["doctor_id"], "section_id": r["section_id"],
         "patient": {"id": r["patient_id"], "name": r["patient_name"], "phone": r["patient_phone"],
@@ -165,7 +181,7 @@ def today_data(ctx, day, state, section_id=None):
                              *(a["doctor_id"] for a in appointments)}):
         info = doctors.get(doctor_id, {"id": doctor_id, "name": "", "sessions": []})
         mine = [a for a in appointments if a["doctor_id"] == doctor_id]
-        counts = {status: 0 for status in ("booked", "waiting", "in_room", "done", "cancelled", "no_show")}
+        counts = {status: 0 for status in STATUS_KEYS}
         for a in mine:
             counts[a["status"]] += 1
         summary = day_rows.get(doctor_id, {})
@@ -193,7 +209,8 @@ def _recent(appointments, size=10):
     """The last changes, worked out from the fetched rows."""
     events = []
     for a in appointments:
-        for field, action in (("arrived_at", "arrived"), ("called_at", "called"), ("finished_at", "finished"),
+        for field, action in (("arrived_at", "arrived"), ("with_assistant_at", "with_assistant"), ("ready_at", "ready"),
+                              ("called_at", "called"), ("finished_at", "finished"),
                               ("cancelled_at", "cancelled")):
             if a[field]:
                 events.append((a[field], action, a))
@@ -266,7 +283,7 @@ def future_bookings(ctx, doctor_id, weekdays, today, page=500):
             keyset, params = " AND (day, queue_no) > (%s, %s)", [*params, *after]
         rows = sql.dicts(ctx, f"""
             SELECT id, day, queue_no, starts_at, ends_at, section_id FROM "scheduling_appointment"
-             WHERE clinic_id = %s AND doctor_id = %s AND day >= %s AND status IN ('booked', 'waiting', 'in_room')
+             WHERE clinic_id = %s AND doctor_id = %s AND day >= %s AND status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')
                AND (EXTRACT(ISODOW FROM day)::int - 1) = ANY(%s){keyset}
              ORDER BY day, queue_no LIMIT %s""", [*params, page])
         found += rows

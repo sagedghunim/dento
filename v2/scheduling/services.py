@@ -21,17 +21,25 @@ from summaries.services import Deltas
 from . import rules
 from .models import Appointment
 
-# action: (from, to, timestamp column)
+# action: (the statuses it starts from, to, timestamp column). The stages (design E3):
+# booked -> waiting -> with_assistant (optional) -> ready -> in_room -> done.
 TRANSITIONS = {
-    "arrive": ("booked", "waiting", "arrived_at"),
-    "call": ("waiting", "in_room", "called_at"),
-    "finish": ("in_room", "done", "finished_at"),
-    "cancel": ("booked", "cancelled", "cancelled_at"),
+    "arrive": (("booked",), "waiting", "arrived_at"),
+    "assist": (("waiting",), "with_assistant", "with_assistant_at"),
+    "ready": (("waiting", "with_assistant"), "ready", "ready_at"),
+    "call": (("waiting", "ready"), "in_room", "called_at"),
+    "finish": (("in_room",), "done", "finished_at"),
+    "cancel": (("booked",), "cancelled", "cancelled_at"),
 }
-# Undo on the desk (design D4, requirements 7.8): only from the status right after the step, clearing its time.
+# Undo on the desk (design D4, E3): one step back from each stage, clearing its time. The step back is
+# worked out from the times still set, so "ready" goes back to with_assistant only if the visit was there.
 UNDO = {
-    "undo_arrive": ("waiting", "booked", "arrived_at"),
-    "undo_call": ("in_room", "waiting", "called_at"),
+    "undo_arrive": ("waiting", "arrived_at", "'booked'", ("booked",)),
+    "undo_assist": ("with_assistant", "with_assistant_at", "'waiting'", ("waiting",)),
+    "undo_ready": ("ready", "ready_at", "CASE WHEN with_assistant_at IS NULL THEN 'waiting' ELSE 'with_assistant' END",
+                   ("waiting", "with_assistant")),
+    "undo_call": ("in_room", "called_at", "CASE WHEN ready_at IS NULL THEN 'waiting' ELSE 'ready' END",
+                  ("waiting", "ready")),
 }
 
 
@@ -48,11 +56,14 @@ def _constraint(error):
     return getattr(diag, "constraint_name", None)
 
 
-def book(ctx, request):
+def book(ctx, request, deltas=None):
     """POST /appointments (design 5.1). `request` is the validated body (see views.book_view).
 
-    Returns (appointment payload, version of the appointment's day).
+    Returns (appointment payload, version of the appointment's day). With `deltas` (the finish dialog's "book
+    the next visit", design E3) the summary changes join the caller's: this writes the doctor-days in the one
+    statement that also takes the turn, and the caller writes the clinic-days; the version is then None.
     """
+    own = deltas is None
     clinic = ctx.clinic
     day = request["day"]
     today = rules.check_day(clinic, day)
@@ -95,7 +106,7 @@ def book(ctx, request):
     if fields is not None:
         patient = patients.create(ctx, fields)  # counter patient_file
     invoice_number = take_numbers(ctx, "invoice")[0] if payment is not None else None  # kept for ensure_invoice
-    deltas = Deltas().take_turn(day, doctor.doctor_id, doctor.cap)
+    deltas = (Deltas() if own else deltas).take_turn(day, doctor.doctor_id, doctor.cap)
     deltas.clinic_day(day)
     if payment is not None:
         deltas.doctor_day(today, doctor.doctor_id, collected=payment["amount"])
@@ -124,7 +135,7 @@ def book(ctx, request):
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
                                             invoice_number=invoice_number, today=today)
-    version = deltas.write_clinics(ctx)[day]
+    version = deltas.write_clinics(ctx)[day] if own else None
 
     from .selectors import payload
 
@@ -146,16 +157,18 @@ def _not_today():
     return ApiError("not_today", _("A visit can be marked arrived only on its own day."), 409, fields={"day": "not_today"})
 
 
-def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None):
+def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None, earlier=None, next_visit=None,
+                  outcome=None):
     """arrive, call, finish (optionally with a payment) and cancel (design 5.2).
 
     The client sends the status it saw. One conditional UPDATE decides; a repeat of a change
     that already happened is a harmless 200. Returns the version of the appointment's day.
     """
-    source, target, column = TRANSITIONS[action]
-    if seen != source:
+    sources, target, column = TRANSITIONS[action]
+    if seen not in sources:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
+    source = seen
     clinic = ctx.clinic
     today = business_day(clinic)
     now = timezone.now()
@@ -173,7 +186,8 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None)
                            '(SELECT name FROM "clinics_service" s WHERE s.clinic_id = "scheduling_appointment".clinic_id '
                            'AND s.id = "scheduling_appointment".service_id)', params)
     if changed is None:
-        return _unchanged(ctx, appointment_id, action, target, today, with_payment=payment is not None)
+        return _unchanged(ctx, appointment_id, action, target, today,
+                          with_payment=payment is not None or earlier is not None or next_visit is not None)
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
                             "service_name"), changed))
     day, doctor_id = appointment["day"], appointment["doctor_id"]
@@ -182,37 +196,51 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None)
         _recheck_follow_up(ctx, appointment)
     elif action == "finish":
         deltas.doctor_day(day, doctor_id, done=1).clinic_day(day, done=1)
+        if earlier is not None:
+            # The visit's invoice and the patient's older unpaid ones, in one statement in id order (design 5.0).
+            ctx.require("billing.collect")
+            invoices = billing.lock_patient_invoices(ctx, appointment["patient_id"], appointment_id)
         if payment is not None:
             ctx.require("billing.collect")
             billing.collect(ctx, appointment, payment["amount"], payment["method"], deltas, today=today)
         else:
             billing.ensure_invoice(ctx, appointment)  # design 5.3: finish ensures the invoice, paid or owed
+        if earlier is not None:
+            billing.collect_earlier(ctx, invoices, appointment_id, earlier["amount"], earlier["method"], deltas, today)
+        if next_visit is not None:
+            # "Book the next visit" (design E3), in this transaction; its turn goes into the one doctor-day write.
+            ctx.require("appointments.book")
+            body, _version = book(ctx, {**next_visit, "patient_id": appointment["patient_id"], "new_patient": None,
+                                        "arrive": False, "payment": None, "source": "clinic"}, deltas=deltas)
+            if outcome is not None:
+                outcome["next_appointment"] = body
     elif action == "cancel":
         billing.cancel_invoice(ctx, appointment_id)
         deltas.doctor_day(day, doctor_id, booked=-1)
-    deltas.write_doctors(ctx)
+    if not (action == "finish" and next_visit is not None):
+        deltas.write_doctors(ctx)  # a next visit's booking already wrote them all, with its turn, in one statement
     return deltas.write_clinics(ctx)[day]
 
 
 def undo(ctx, appointment_id, action, seen):
-    """undo_arrive (waiting -> booked) and undo_call (in_room -> waiting), design D4.
+    """One step back from a stage (design D4, E3): undo_arrive, undo_assist, undo_ready and undo_call.
 
-    One conditional UPDATE decides, so an undo racing a call or a finish takes effect only if it
-    gets there first; the loser sees 409 status_changed. The turn number stays. Only Today's version
-    changes (design 5.3: arrive, undo and call change no counter). Each undo goes to the change log.
+    One conditional UPDATE decides, so an undo racing the next step takes effect only if it gets there
+    first; the loser sees 409 status_changed. The turn number stays. Only Today's version changes
+    (design 5.3: the stages and their undo change no counter). Each undo goes to the change log.
     Returns the version of the appointment's day, or None for a harmless repeat.
     """
-    source, target, column = UNDO[action]
+    source, column, target_sql, targets = UNDO[action]
     if seen != source:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
-    changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = %s, {column} = NULL, updated_at = %s, '
+    changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = {target_sql}, {column} = NULL, updated_at = %s, '
                            "updated_by_id = %s WHERE clinic_id = %s AND id = %s AND status = %s "
-                           f"RETURNING day, OLD.{column}",
-                      [target, timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, source])
+                           f"RETURNING day, OLD.{column}, status",
+                      [timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, source])
     if changed is None:
-        return _unchanged(ctx, appointment_id, action, target, None)
-    day, undone_at = changed
+        return _unchanged(ctx, appointment_id, action, targets, None)
+    day, undone_at, target = changed
     record_change(ctx, f"appointment.{action}", "appointment", appointment_id,
                   before={"status": source, column: undone_at.isoformat()}, after={"status": target, column: None})
     return Deltas().clinic_day(day).write_clinics(ctx)[day]
@@ -223,14 +251,15 @@ def _unchanged(ctx, appointment_id, action, target, today, with_payment=False):
     if current is None:
         raise rules.not_found("appointment")
     status, day = current
-    if status == target and action == "finish" and with_payment:
+    targets = target if isinstance(target, tuple) else (target,)
+    if status in targets and action == "finish" and with_payment:
         # Someone else finished it first. This request's cash was never recorded, so it must not look like
         # a success: the desk takes the payment on the done visit instead (chief judge M1, R2; design 5.2).
         from .selectors import appointment as appointment_row
 
         raise ApiError("already_finished", _("The visit was already finished. Nothing was collected."), 409,
                        fields={"status": status}, extra={"appointment": appointment_row(ctx, appointment_id)})
-    if status == target:
+    if status in targets:
         return None  # already done: a harmless repeat, nothing changes
     if action == "arrive" and status == "booked" and day != today:
         raise _not_today()

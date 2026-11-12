@@ -77,7 +77,7 @@ def _sweep(clinic_id, alias, now):
             SELECT a.id, a.status, a.day, a.doctor_id, a.patient_id, a.service_id, a.fee, s.name AS service_name
               FROM "scheduling_appointment" a
               JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
-             WHERE a.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status IN ('booked', 'waiting', 'in_room')
+             WHERE a.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')
              ORDER BY a.id FOR NO KEY UPDATE OF a""", [ctx.clinic_id, first, last])
         if not rows:
             return {}, last, clinic
@@ -87,7 +87,7 @@ def _sweep(clinic_id, alias, now):
                    auto_closed = (status <> 'booked'),
                    finished_at = CASE status WHEN 'in_room' THEN %s ELSE finished_at END,
                    updated_at = %s, updated_by_id = NULL
-             WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND status IN ('booked', 'waiting', 'in_room')""",
+             WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')""",
                 [now, now, ctx.clinic_id, [r["id"] for r in rows]])
         in_room = [r for r in rows if r["status"] == "in_room"]
         if in_room:
@@ -107,7 +107,7 @@ def _sweep(clinic_id, alias, now):
         deltas.write_doctors(ctx)
         deltas.write_clinics(ctx)
         counts = {"no_show": sum(r["status"] == "booked" for r in rows),
-                  "left": sum(r["status"] == "waiting" for r in rows), "auto_done": len(in_room)}
+                  "left": sum(r["status"] in ("waiting", "with_assistant", "ready") for r in rows), "auto_done": len(in_room)}
         log.info("sweep clinic=%s days=%s..%s %s", clinic_id, first, last, counts)
         return counts, last, clinic
 
