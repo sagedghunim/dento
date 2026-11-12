@@ -158,8 +158,15 @@ def totp_setup(user):
     secret = crypto.decrypt(user.totp_secret)
     uri = totp.provisioning_uri(secret, user.username)
     buffer = io.BytesIO()
-    segno.make(uri, error="m").save(buffer, kind="svg", scale=5, border=2, xmldecl=False, svgns=True)
-    return {"secret": secret, "qr_svg": buffer.getvalue().decode()}
+    # A full 4-module quiet zone on an opaque white background: phone scanners
+    # fail on a thin margin or a transparent background in dark mode.
+    qr = segno.make(uri, error="m")
+    qr.save(buffer, kind="svg", scale=6, border=4, dark="#000", light="#fff", xmldecl=False, svgns=True)
+    # segno writes width and height but no viewBox, so CSS sizing crops the code
+    # instead of scaling it. A viewBox makes it scale to any size.
+    size = qr.symbol_size(scale=6, border=4)[0]
+    svg = buffer.getvalue().decode().replace("<svg ", f'<svg viewBox="0 0 {size} {size}" ', 1)
+    return {"secret": secret, "qr_svg": svg}
 
 
 def totp_confirm(request, user, code):
