@@ -1,0 +1,78 @@
+{% extends "web/base.html" %}{% load i18n hamada %}
+{% block title %}{% translate "Overview" %}{% endblock %}
+{% block content %}
+<div class="page-head head-row wide-head">
+  <div>
+    <h1>{% translate "Overview" %}</h1>
+    <p>{% if period == "today" %}{{ today|longday }}{% else %}{{ first|shortday }} – {{ today|shortday }}{% endif %}</p>
+  </div>
+</div>
+
+<nav class="fin-tabs" aria-label="{% translate "Period" %}">
+  {% for key, label in periods %}<a class="fin-tab" href="?period={{ key }}"{% if key == period %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+
+<section aria-labelledby="clinic-title">
+  <h2 id="clinic-title" class="ov-title">{% translate "The clinic" %}</h2>
+  <div class="stats fin-stats">
+    <div class="stat"><div class="num" data-ov="visits">{{ clinic.visits|digits }}</div><div class="lbl">{% translate "Visits" %}</div>{% if clinic.procedures %}<div class="stat-sub">{% translate "Procedures:" %} {{ clinic.procedures|digits }}</div>{% endif %}</div>
+    <div class="stat"><div class="num">{{ clinic.new|digits }} <span class="num-of">/ {{ clinic.returning|digits }}</span></div><div class="lbl">{% translate "New / returning patients" %}</div></div>
+    <div class="stat"><div class="num">{{ clinic.no_shows|digits }}</div><div class="lbl">{% translate "No-shows" %}</div>{% if clinic.no_show_pct %}<div class="stat-sub"><bdi class="ltr num">{{ clinic.no_show_pct }}%</bdi> {% translate "of bookings" %}</div>{% endif %}</div>
+    <div class="stat"><div class="num">{% if clinic.avg_wait is not None %}{{ clinic.avg_wait }} {% translate "min" %}{% else %}–{% endif %}</div><div class="lbl">{% translate "Average wait" %}</div>{% if clinic.avg_room is not None %}<div class="stat-sub">{% translate "With the doctor:" %} {{ clinic.avg_room }} {% translate "min" %}</div>{% endif %}</div>
+  </div>
+  {% if money %}
+  <div class="stats fin-stats ov-money">
+    <div class="stat"><div class="num" data-ov="revenue">{{ clinic.revenue|money }}</div><div class="lbl">{% translate "Collected" %}</div>{% if clinic.refunded %}<div class="stat-sub">{% translate "after refunds" %}</div>{% endif %}</div>
+    <div class="stat{% if clinic.profit < 0 %} is-loss{% endif %}"><div class="num">{{ clinic.profit|money }}</div><div class="lbl">{% if clinic.profit < 0 %}{% translate "Loss this month" %}{% else %}{% translate "Profit this month" %}{% endif %}</div></div>
+    <div class="stat"><div class="num">{{ clinic.owed.owed|money }}</div><div class="lbl">{% translate "Patients owe" %}</div><div class="stat-sub"><a href="/finances?tab=owed">{% translate "See who owes" %}</a></div></div>
+  </div>
+  {% endif %}
+</section>
+
+<div class="grid-2 ov-grid">
+  <section class="card" aria-labelledby="team-title">
+    <h2 id="team-title">{% translate "The team" %} · {{ period_label }}</h2>
+    {% if team %}
+    <div class="table-scroll">
+      <table class="table ov-team">
+        <thead><tr><th>{% translate "Name" %}</th><th class="num">{% translate "Visits" %}</th><th class="num">{% translate "Procedures" %}</th>{% if money %}<th class="num">{% translate "Revenue" %}</th>{% endif %}<th class="num">{% translate "Avg. time" %}</th></tr></thead>
+        <tbody>
+          {% for m in team %}
+          <tr>
+            <td><bdi dir="auto">{{ m.name }}</bdi><progress class="fin-bar" max="{{ m.bar_max }}" value="{{ m.bar }}" aria-hidden="true"></progress></td>
+            <td class="num">{{ m.visits|num }}</td>
+            <td class="num">{{ m.procedures|num }}</td>
+            {% if money %}<td class="num">{{ m.revenue|money }}</td>{% endif %}
+            <td class="num">{% if m.avg_room is not None %}{{ m.avg_room }} {% translate "min" %}{% else %}–{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-note">{% translate "No visits in this period yet." %}</p>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="ins-title">
+    <h2 id="ins-title">{% translate "Patients" %}</h2>
+    <dl class="money-sum report-sum">
+      <div><dt>{% translate "Active (6 months)" %}</dt><dd>{{ insights.counts.active|digits }}</dd></div>
+      <div><dt>{% translate "Going quiet" %}</dt><dd>{{ insights.counts.at_risk|digits }}</dd></div>
+      <div><dt>{% translate "Come back again" %}</dt><dd><bdi class="ltr num">{{ insights.repeat_pct }}%</bdi></dd></div>
+    </dl>
+    {% with l=insights.lists.going_quiet %}
+    <h3 class="sub-title">{% translate "Going quiet" %}</h3>
+    <p class="card-sub">{% translate "Came at least twice, nothing in the last 3 months." %}</p>
+    {% include "web/_ov_patients.html" with rows=l.items more=l.more %}
+    {% endwith %}
+    {% with l=insights.lists.never_came_back %}
+    <h3 class="sub-title">{% translate "Never came back" %}</h3>
+    <p class="card-sub">{% translate "One visit, and nothing for a month since." %}</p>
+    {% include "web/_ov_patients.html" with rows=l.items more=l.more %}
+    {% endwith %}
+    <h3 class="sub-title">{% translate "Top tags" %}</h3>
+    {% if insights.tags %}
+    <ul class="chips ov-tags">{% for tag in insights.tags %}<li class="pill grey"><bdi dir="auto">{{ tag.name }}</bdi> · {{ tag.count|digits }}</li>{% endfor %}</ul>
+    {% else %}<p class="empty-note">{% translate "No tagged patients yet." %}</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

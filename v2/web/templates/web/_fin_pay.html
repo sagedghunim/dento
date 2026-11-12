@@ -1,0 +1,26 @@
+{% load i18n hamada %}
+<section class="card" aria-labelledby="pay-title">
+  <h2 id="pay-title">{% translate "Staff pay" %} · {{ month.label }}</h2>
+  <p class="card-sub">{% translate "Each person's pay rule, what they earned this month and what was paid out. Revenue counts for the doctor of the visit." %}</p>
+  {% if members %}
+  <ul class="pay-list">
+    {% for m in members %}
+    <li class="pay-row" data-member="{{ m.json }}">
+      <div class="pay-main">
+        <strong><bdi dir="auto">{{ m.name }}</bdi></strong> <span class="muted">· {{ m.role|role_label }}</span>{% if not m.is_active %} <span class="pill grey">{% translate "Left" %}</span>{% endif %}
+        <p class="muted">{% if m.rule_text %}{{ m.rule_text }}{% else %}{% translate "No pay rule yet" %}{% endif %}</p>
+      </div>
+      <dl class="pay-nums">
+        <div><dt>{% translate "Earned" %}</dt><dd>{{ m.earned|money }}</dd></div>
+        <div><dt>{% translate "Paid" %}</dt><dd>{{ m.paid|money }}</dd></div>
+        <div><dt>{% translate "Still owed" %}</dt><dd>{{ m.balance|money }}</dd></div>
+      </dl>
+      <div class="row-actions">
+        <button type="button" class="btn ghost" data-statement>{% translate "Statement" %}</button>
+        {% if perms.pay %}<button type="button" class="btn ghost" data-edit-rule>{% translate "Edit pay" %}</button>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty-note">{% translate "No team members yet." %}</p>{% endif %}
+</section>

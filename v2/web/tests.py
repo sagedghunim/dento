@@ -112,7 +112,7 @@ class TodayTests(M1TestCase):
     def test_navigation_follows_permissions_and_marks_unbuilt_sections(self):
         desk = self.desk.get("/").content.decode()
         owner = self.owner.get("/").content.decode()
-        self.assertNotIn("الحسابات", desk)  # finances: owner-only codes
+        self.assertIn("الحسابات", desk)  # finances: the desk sees the register (cash.collect, M3)
         self.assertIn("الحسابات", owner)
         self.assertIn("قريباً", owner)      # not built in M1
         self.assertIn('href="/patients"', desk)

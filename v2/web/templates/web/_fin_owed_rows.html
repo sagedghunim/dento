@@ -1,0 +1,9 @@
+{% load i18n hamada %}{% for r in rows %}
+<li class="owed-row">
+  <div class="row-main">
+    {% if perms.patients %}<a class="who" href="/patients/{{ r.patient_id }}"><bdi dir="auto">{{ r.name }}</bdi></a>{% else %}<strong class="who"><bdi dir="auto">{{ r.name }}</bdi></strong>{% endif %}
+    <p class="muted">{% translate "File" %} {{ r.file_no|num }}{% if r.phone %} · {{ r.phone|phone }}{% endif %} · {% translate "Days owed:" %} {{ r.age_text }}{% if r.last_text %} · {% translate "last visit" %} {{ r.last_text }}{% endif %}</p>
+  </div>
+  <span class="amt">{{ r.owed|money }}</span>
+</li>
+{% endfor %}

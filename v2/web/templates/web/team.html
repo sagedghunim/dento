@@ -1,0 +1,225 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Team & settings" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Team & settings" %}</h1>
+  <p>{% translate "Who is on the team, exactly what each person can see and do, and the clinic's names. Changes apply at once." %}</p>
+</div>
+
+<div class="pending-bar" data-pending-bar hidden></div>
+
+{% if can_team %}
+<section class="card" aria-labelledby="overview-title">
+  <div class="card-head">
+    <div>
+      <h2 id="overview-title">{% translate "Who works where" %}</h2>
+      <p class="card-sub">{% translate "Each person, the places they work in, their role there and what they can do. Tap a person to change it." %}</p>
+    </div>
+  </div>
+  <ul class="people" data-overview></ul>
+</section>
+
+<section class="card" id="matrix-card" aria-labelledby="matrix-title" data-matrix-card>
+  <div class="card-head">
+    <div>
+      <h2 id="matrix-title">{% translate "Who can do what" %}</h2>
+      <p class="card-sub">{% translate "Tap a switch to open or close a permission. Tap a row's name to see its details." %}</p>
+    </div>
+  </div>
+  <label class="field matrix-pick" data-pick hidden>{% translate "Show" %}
+    <select data-columns></select>
+  </label>
+  <div class="person-bar" data-person-bar hidden>
+    <button type="button" class="btn ghost" data-bar-edit>{% translate "Names, role and sign-in" %}</button>
+    <button type="button" class="btn ghost" data-bar-places hidden>{% translate "Places" %}</button>
+  </div>
+  <form novalidate data-matrix-form>
+    <div class="matrix-wrap" data-matrix aria-live="polite"></div>
+    <div class="matrix-foot">
+      <p class="form-error" data-error role="alert"></p>
+      <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+      <button type="submit" class="btn" data-submit data-try hidden>{% translate "Try again" %}</button>
+    </div>
+  </form>
+  <p class="muted matrix-note">{% translate "The owner always has full access, and only the owner gives or removes the owner's permissions." %}</p>
+</section>
+
+<section class="card" aria-labelledby="members-title">
+  <div class="card-head">
+    <div>
+      <h2 id="members-title">{% translate "The team" %}</h2>
+      <p class="card-sub">{% translate "Names, roles and who can sign in." %}</p>
+    </div>
+    <button type="button" class="btn" data-add-member><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a member" %}</button>
+  </div>
+  <ul class="lines med-list" data-members></ul>
+</section>
+{% endif %}
+
+{% if can_settings %}
+<section class="card" aria-labelledby="settings-title" data-profile-card>
+  <h2 id="settings-title">{% translate "Settings" %}</h2>
+  <p class="card-sub">{% translate "The clinic's name and contact details, as patients see them on receipts and prescriptions." %}</p>
+  <form novalidate data-profile-form>
+    <div class="grid-form">
+      <label class="field">{% translate "Clinic name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required></label>
+      <label class="field">{% translate "Name in English" %}<input name="name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+      <label class="field">{% translate "City" %}<input name="city" maxlength="60" dir="auto" autocomplete="off"></label>
+      <label class="field">{% translate "Phone" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off"></label>
+    </div>
+    <div class="form-actions">
+      <p class="form-error" data-error role="alert"></p>
+      <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+      <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+    </div>
+  </form>
+  {% if sections %}
+  <h3 class="sub-title">{% translate "Sections" %}</h3>
+  <ul class="lines med-list" data-section-list>
+    {% for s in sections %}
+    <li data-section-row="{{ s.id }}">
+      <div class="med-main"><strong><bdi dir="auto" data-section-name>{{ s.name }}</bdi></strong>
+        <p class="muted"><bdi dir="auto" data-section-pair>{{ s.name_ar }}{% if s.name_en %} · {{ s.name_en }}{% endif %}</bdi></p></div>
+      <div class="row-actions"><button type="button" class="btn ghost" data-edit-section="{{ s.id }}">{% translate "Edit" %}</button></div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{{ profile|json_script:"profile-data" }}
+{{ sections|json_script:"sections-data" }}
+
+<dialog class="sheet small" id="section-dialog" aria-labelledby="section-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="section-title">{% translate "Section name" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Name in Arabic" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+    <label class="field">{% translate "Name in English" %}<input name="name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+
+{% if can_team %}
+{{ team|json_script:"team-data" }}
+
+<dialog class="sheet" id="member-dialog" aria-labelledby="member-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="member-title"><bdi dir="auto" data-member-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div class="grid-form">
+      <label class="field">{% translate "Name shown in the clinic" %}<input name="display_name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+      <label class="field">{% translate "Name in English" %}<input name="display_name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+      <label class="field">{% translate "Title (optional)" %}<input name="title" maxlength="120" dir="auto" autocomplete="off" placeholder="{% translate "Orthodontist, front desk…" %}"></label>
+    </div>
+    <fieldset class="group" data-role-box>
+      <legend>{% translate "Role" %}</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="role" value="doctor"><span>{% translate "Doctor" %}</span></label>
+        <label class="chip"><input type="radio" name="role" value="assistant"><span>{% translate "Assistant" %}</span></label>
+      </div>
+      <p class="muted">{% translate "Changing the role sets the permissions back to that role's usual ones." %}</p>
+    </fieldset>
+    <fieldset class="group" data-sections-box hidden>
+      <legend>{% translate "Sections this assistant works in" %}</legend>
+      <div class="chips" data-section-checks></div>
+      <p class="muted">{% translate "None ticked means every section." %}</p>
+    </fieldset>
+    <label class="check" data-active-box><input type="checkbox" name="is_active"> {% translate "Can sign in to this place" %}</label>
+    <div class="row-actions wrap" data-extra-actions>
+      <button type="button" class="btn ghost" data-temp-password>{% translate "New temporary password" %}</button>
+      <button type="button" class="btn ghost" data-open-places hidden>{% translate "Places" %}</button>
+    </div>
+    <div class="password-box" data-password-box hidden role="status"></div>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="add-dialog" aria-labelledby="add-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="add-title">{% translate "Add a member" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div data-add-fields>
+      <fieldset class="group">
+        <legend>{% translate "Account" %}</legend>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="mode" value="new" checked><span>{% translate "A new account" %}</span></label>
+          <label class="chip"><input type="radio" name="mode" value="invite"><span>{% translate "They already have an account" %}</span></label>
+        </div>
+      </fieldset>
+      <div class="grid-form">
+        <label class="field" data-new-only>{% translate "Full name" %}<input name="full_name" maxlength="120" dir="auto" autocomplete="off" data-autofocus></label>
+        <label class="field">{% translate "Username" %}<input name="username" maxlength="30" dir="ltr" lang="en" autocomplete="off" autocapitalize="none" spellcheck="false"><span class="hint">{% translate "English letters and digits, for signing in." %}</span></label>
+        <label class="field" data-new-only>{% translate "Mobile (optional)" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off"></label>
+        <label class="field">{% translate "Name shown in the clinic" %}<input name="display_name" maxlength="120" dir="auto" autocomplete="off"><span class="hint" data-new-only>{% translate "Leave empty to use the full name." %}</span></label>
+        <label class="field">{% translate "Name in English" %}<input name="display_name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+        <label class="field">{% translate "Title (optional)" %}<input name="title" maxlength="120" dir="auto" autocomplete="off"></label>
+      </div>
+      <fieldset class="group">
+        <legend>{% translate "Role" %}</legend>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="role" value="assistant" checked><span>{% translate "Assistant" %}</span></label>
+          <label class="chip"><input type="radio" name="role" value="doctor"><span>{% translate "Doctor" %}</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="group" data-sections-box hidden>
+        <legend>{% translate "Sections this assistant works in" %}</legend>
+        <div class="chips" data-section-checks></div>
+        <p class="muted">{% translate "None ticked means every section." %}</p>
+      </fieldset>
+    </div>
+    <div class="password-box" data-password-box hidden role="status"></div>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Add" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="places-dialog" aria-labelledby="places-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="places-title">{% translate "Places" %} · <bdi dir="auto" data-member-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted">{% translate "Tick every place this person works in. They sign in once and pick the place." %}</p>
+    <div data-place-checks><p class="muted">{% translate "Loading…" %}</p></div>
+    <label class="check"><input type="checkbox" name="copy" checked> {% translate "Same permissions in all places" %}</label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% endblock %}

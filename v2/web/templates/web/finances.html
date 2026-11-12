@@ -1,0 +1,41 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Finances" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head head-row wide-head">
+  <div>
+    <h1>{% translate "Finances" %}</h1>
+    <p>{% translate "The clinic's money in one place: what came in, where it went, the cash in the drawer and what each person earned." %}</p>
+  </div>
+</div>
+
+{% if tabs|length > 1 %}
+<nav class="fin-tabs" aria-label="{% translate "Finances" %}">
+  {% for key, label in tabs %}<a class="fin-tab" href="?tab={{ key }}{% if key in month_tabs and tab in month_tabs %}&amp;month={{ month.value }}{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+{% endif %}
+
+{% if tab in month_tabs %}
+<form class="month-nav" method="get" action="/finances" data-month-form>
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <a class="icon-btn" href="?tab={{ tab }}&amp;month={{ month.prev }}" aria-label="{% translate "Previous month" %}" title="{% translate "Previous month" %}"><svg class="icon chev-start"><use href="#i-chev"/></svg></a>
+  <label class="visually-hidden" for="month-pick">{% translate "Month" %}</label>
+  <select id="month-pick" name="month" data-month-pick>
+    {% for value, label in month.choices %}<option value="{{ value }}"{% if value == month.value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  {% if month.next %}<a class="icon-btn" href="?tab={{ tab }}&amp;month={{ month.next }}" aria-label="{% translate "Next month" %}" title="{% translate "Next month" %}"><svg class="icon chev-end"><use href="#i-chev"/></svg></a>{% else %}<span class="icon-btn is-spacer" aria-hidden="true"></span>{% endif %}
+  <noscript><button type="submit" class="btn ghost">{% translate "Show" %}</button></noscript>
+</form>
+{% endif %}
+
+<div data-tab-body data-tab="{{ tab }}" data-month="{{ month.value }}">
+  {% if tab == "month" %}{% include "web/_fin_month.html" %}
+  {% elif tab == "register" %}{% include "web/_fin_register.html" %}
+  {% elif tab == "expenses" %}{% include "web/_fin_expenses.html" %}
+  {% elif tab == "pay" %}{% include "web/_fin_pay.html" %}
+  {% elif tab == "owed" %}{% include "web/_fin_owed.html" %}{% endif %}
+</div>
+
+{% include "web/_fin_dialogs.html" %}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/finances.js' %}"></script>{% endblock %}

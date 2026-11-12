@@ -1,0 +1,9 @@
+{% load i18n hamada %}
+<section class="card" aria-labelledby="owed-title">
+  <h2 id="owed-title">{% translate "Patients who owe" %}</h2>
+  <p class="card-sub">{% translate "Total owed:" %} <strong>{{ owed_total.owed|money }}</strong> · {% translate "Patients:" %} {{ owed_total.patients|digits }}. {% translate "Oldest debt first." %}</p>
+  {% if owed_rows %}
+  <ul class="lines owed-list" data-rows="owed">{% include "web/_fin_owed_rows.html" with rows=owed_rows %}</ul>
+  {% if owed_next %}<div class="list-foot"><button type="button" class="btn ghost" data-more="owed" data-next="{{ owed_next }}">{% translate "Load more" %}</button></div>{% endif %}
+  {% else %}<p class="empty-note">{% translate "No patient owes the clinic anything." %}</p>{% endif %}
+</section>

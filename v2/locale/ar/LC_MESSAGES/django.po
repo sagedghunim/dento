@@ -2396,3 +2396,787 @@ msgstr "أصناف"
 
 msgid "Show them"
 msgstr "اعرضها"
+
+msgid "(this place)"
+msgstr "(هذا المكان)"
+
+msgid "A new account"
+msgstr "حساب جديد"
+
+msgid "Account"
+msgstr "الحساب"
+
+msgid "Add a member"
+msgstr "إضافة عضو"
+
+msgid "Add to the queue"
+msgstr "أضِف للدور"
+
+msgid "Adding a member: {name}"
+msgstr "إضافة عضو: {name}"
+
+msgid "All assistants"
+msgstr "كل المساعدين"
+
+msgid "Can sign in to this place"
+msgstr "يقدر يدخل على هذا المكان"
+
+msgid "Can't sign in"
+msgstr "لا يقدر يدخل"
+
+msgid "Changing the role sets the permissions back to that role's usual ones."
+msgstr "تغيير الدور يرجّع الصلاحيات للصلاحيات المعتادة لهذا الدور."
+
+msgid "English letters and digits, for signing in."
+msgstr "حروف إنجليزية وأرقام، للدخول."
+
+msgid "Enter a username."
+msgstr "اكتب اسم المستخدم."
+
+msgid "Enter the name."
+msgstr "اكتب الاسم."
+
+msgid "Every section"
+msgstr "كل الأقسام"
+
+msgid ""
+"If {username} has an account, they get the invitation. It lasts 7 days."
+msgstr "لو {username} عنده حساب، هتوصله الدعوة. صالحة 7 أيام."
+
+msgid "Leave empty to use the full name."
+msgstr "اتركه فارغًا لاستخدام الاسم الكامل."
+
+msgid "Mobile (optional)"
+msgstr "الموبايل (اختياري)"
+
+msgid "Name in Arabic"
+msgstr "الاسم بالعربية"
+
+msgid "Name shown in the clinic"
+msgstr "الاسم الظاهر في العيادة"
+
+msgid "Names, roles and who can sign in."
+msgstr "الأسماء والأدوار ومن يقدر يدخل."
+
+msgid "New temporary password"
+msgstr "كلمة مرور مؤقتة جديدة"
+
+msgid "New temporary password: {name}"
+msgstr "كلمة مرور مؤقتة جديدة: {name}"
+
+msgid "No one else on the team yet. Add a member."
+msgstr "لا يوجد أحد آخر في الفريق بعد. أضف عضوًا."
+
+msgid "None ticked means every section."
+msgstr "عدم اختيار أي قسم يعني كل الأقسام."
+
+msgid "Nothing changed."
+msgstr "لم يتغير شيء."
+
+msgid "Off"
+msgstr "مقفول"
+
+msgid "On"
+msgstr "مفتوح"
+
+msgid "Only the owner can change this person."
+msgstr "المالك فقط يقدر يغيّر صلاحيات هذا الشخص."
+
+msgid "Only the owner gives or removes this."
+msgstr "المالك فقط يدّي أو يشيل هذه الصلاحية."
+
+msgid "Orthodontist, front desk…"
+msgstr "أخصائي تقويم، استقبال…"
+
+msgid "Owner only"
+msgstr "للمالك فقط"
+
+msgid "Permission"
+msgstr "الصلاحية"
+
+msgid "Phone"
+msgstr "التليفون"
+
+msgid "Places"
+msgstr "الأماكن"
+
+msgid "Places saved: {name}"
+msgstr "تم حفظ الأماكن: {name}"
+
+msgid "Role"
+msgstr "الدور"
+
+msgid "Same permissions in all places"
+msgstr "نفس الصلاحيات في كل الأماكن"
+
+msgid "Section name"
+msgstr "اسم القسم"
+
+msgid "Sections this assistant works in"
+msgstr "الأقسام اللي يشتغل فيها المساعد"
+
+msgid "Send the invitation"
+msgstr "إرسال الدعوة"
+
+msgid "Settings saved."
+msgstr "تم حفظ الإعدادات."
+
+msgid "Show"
+msgstr "عرض"
+
+msgid ""
+"Shown once. Give it to them now; they choose their own password when they "
+"first sign in."
+msgstr "تظهر مرة واحدة. أعطها له الآن؛ وهو يختار كلمة مروره عند أول دخول."
+
+msgid "Some"
+msgstr "جزئي"
+
+msgid ""
+"Tap a switch to open or close a permission. Tap a row's name to see its "
+"details."
+msgstr ""
+"اضغط على المفتاح لفتح الصلاحية أو قفلها. اضغط على اسم الصف لرؤية تفاصيله."
+
+msgid "Temporary password"
+msgstr "كلمة المرور المؤقتة"
+
+msgid ""
+"The clinic's name and contact details, as patients see them on receipts and "
+"prescriptions."
+msgstr "اسم العيادة وبيانات التواصل، كما يراها المرضى في الإيصالات والروشتات."
+
+msgid ""
+"The owner always has full access, and only the owner gives or removes the "
+"owner's permissions."
+msgstr ""
+"المالك له كل الصلاحيات دائمًا، والمالك فقط يدّي أو يشيل صلاحيات المالك."
+
+msgid "The team"
+msgstr "الفريق"
+
+msgid "The usual consultation"
+msgstr "الكشف المعتاد"
+
+msgid "They already have an account"
+msgstr "عنده حساب بالفعل"
+
+msgid ""
+"This account was already made. Open the member and give a new temporary "
+"password."
+msgstr "هذا الحساب اتعمل بالفعل. افتح العضو وأعطه كلمة مرور مؤقتة جديدة."
+
+msgid ""
+"Tick every place this person works in. They sign in once and pick the place."
+msgstr "اختر كل مكان يشتغل فيه هذا الشخص. يدخل مرة واحدة ويختار المكان."
+
+msgid "Title (optional)"
+msgstr "اللقب (اختياري)"
+
+msgid "Walk-in"
+msgstr "دخول فوري"
+
+msgid "Walk-in now"
+msgstr "دخول فوري"
+
+msgid "Who can do what"
+msgstr "مين يقدر يعمل إيه"
+
+msgid ""
+"Who is on the team, exactly what each person can see and do, and the "
+"clinic's names. Changes apply at once."
+msgstr ""
+"مين في الفريق، وبالضبط كل شخص يشوف ويعمل إيه، وأسماء العيادة. التغييرات تطبق"
+" فورًا."
+
+msgid "Whoever is free first"
+msgstr "أول طبيب يفضى"
+
+msgid "You"
+msgstr "أنت"
+
+msgid "You can't change your own permissions."
+msgstr "لا يمكنك تغيير صلاحياتك بنفسك."
+
+msgid "{name}: turn {n} · {ahead} waiting before"
+msgstr "{name}: الدور {n} · قبله {ahead} في الانتظار"
+
+msgid "{what} for {name}: {state}"
+msgstr "{what} لـ {name}: {state}"
+
+#, python-format
+msgid "%(amount)s per procedure"
+msgstr "%(amount)s لكل إجراء"
+
+#, python-format
+msgid "%(amount)s per visit"
+msgstr "%(amount)s لكل زيارة"
+
+#, python-format
+msgid "%(percent)s%% of their revenue"
+msgstr "%(percent)s٪ من إيراده"
+
+#, python-format
+msgid "salary %(amount)s a month"
+msgstr "مرتب %(amount)s في الشهر"
+
+msgid "Add the expense"
+msgstr "أضف المصروف"
+
+msgid "Bank transfer"
+msgstr "تحويل بنكي"
+
+msgid "By doctor"
+msgstr "حسب الطبيب"
+
+msgid "By payment method"
+msgstr "حسب طريقة الدفع"
+
+msgid "By section"
+msgstr "حسب القسم"
+
+msgid "Cash comes out of the register's drawer."
+msgstr "النقدية تُخصم من درج الخزنة."
+
+msgid "Cash in"
+msgstr "إيداع نقدية"
+
+msgid "Cash in and out"
+msgstr "الإيداع والسحب"
+
+msgid "Cash in and out in this shift"
+msgstr "الإيداع والسحب في هذه الوردية"
+
+msgid "Cash in the drawer now (EGP)"
+msgstr "النقدية في الدرج الآن (ج.م)"
+
+msgid "Cash in: {amount}"
+msgstr "إيداع نقدية: {amount}"
+
+msgid "Cash out"
+msgstr "سحب نقدية"
+
+msgid "Cash out: {amount}"
+msgstr "سحب نقدية: {amount}"
+
+msgid "Cash payments"
+msgstr "مدفوعات نقدية"
+
+msgid "Cash refunds"
+msgstr "مردودات نقدية"
+
+msgid "Cash register"
+msgstr "الخزنة"
+
+msgid "Cash that should be in the drawer"
+msgstr "النقدية المفروض تكون في الدرج"
+
+msgid "Cash you counted (EGP)"
+msgstr "النقدية اللي عددتها (ج.م)"
+
+msgid "Categories"
+msgstr "الفئات"
+
+msgid "Change from the bank, a bank deposit…"
+msgstr "فكة من البنك، إيداع في البنك…"
+
+msgid "Close and count"
+msgstr "اقفل واعدّ"
+
+msgid "Close the shift"
+msgstr "اقفل الوردية"
+
+#, python-format
+msgid "Closed by %(name)s"
+msgstr "قفلها %(name)s"
+
+msgid ""
+"Collected is after refunds in the splits. Profit is what was collected, "
+"minus refunds, expenses and the staff pay earned this month."
+msgstr ""
+"المحصَّل في التقسيمات بعد خصم المردودات. الربح هو المحصَّل ناقص المردودات "
+"والمصروفات وأجور الفريق المستحقة عن الشهر."
+
+msgid "Counted"
+msgstr "المعدود"
+
+msgid "Day by day"
+msgstr "يومًا بيوم"
+
+msgid "Difference"
+msgstr "الفرق"
+
+msgid ""
+"Each person's pay rule, what they earned this month and what was paid out. "
+"Revenue counts for the doctor of the visit."
+msgstr ""
+"طريقة أجر كل شخص، وما استحقه هذا الشهر، وما صُرف له. الإيراد يُحسب لطبيب "
+"الزيارة."
+
+msgid "Earned"
+msgstr "المستحق"
+
+msgid "Edit pay"
+msgstr "تعديل الأجر"
+
+msgid "Electricity bill, lab of patient…"
+msgstr "فاتورة كهرباء، معمل مريض…"
+
+msgid "Expected in the drawer"
+msgstr "المفروض في الدرج"
+
+msgid "Expense"
+msgstr "مصروف"
+
+msgid "Expense added"
+msgstr "تمت إضافة المصروف"
+
+msgid "Expense added to its own month"
+msgstr "تمت إضافة المصروف إلى شهره"
+
+msgid "Expense: {name}, {amount}"
+msgstr "مصروف: {name}، {amount}"
+
+msgid "Expenses"
+msgstr "المصروفات"
+
+msgid "Expenses paid from the drawer"
+msgstr "مصروفات من الدرج"
+
+msgid "For"
+msgstr "عن"
+
+msgid "From the drawer"
+msgstr "من الدرج"
+
+msgid "In"
+msgstr "إيداع"
+
+msgid "Into the drawer"
+msgstr "إيداع في الدرج"
+
+msgid "It stays in the list marked as voided, and leaves the month's total."
+msgstr "سيبقى في القائمة مكتوبًا عليه ملغى، ويخرج من إجمالي الشهر."
+
+msgid "Its old expenses stay as they are. You can restore it later."
+msgstr "مصروفاتها القديمة تبقى كما هي. يمكنك استرجاعها لاحقًا."
+
+msgid "Left"
+msgstr "ترك العمل"
+
+msgid "Loss"
+msgstr "خسارة"
+
+msgid "Matched"
+msgstr "مطابق"
+
+msgid "Month"
+msgstr "الشهر"
+
+msgid "Monthly salary"
+msgstr "المرتب الشهري"
+
+msgid "Monthly salary (EGP)"
+msgstr "المرتب الشهري (ج.م)"
+
+msgid "Monthly statement"
+msgstr "كشف الشهر"
+
+msgid "New category"
+msgstr "فئة جديدة"
+
+msgid "New expense"
+msgstr "مصروف جديد"
+
+msgid "Next month"
+msgstr "الشهر التالي"
+
+msgid "No doctor"
+msgstr "بدون طبيب"
+
+msgid "No expenses in this month yet."
+msgstr "لا توجد مصروفات في هذا الشهر بعد."
+
+msgid "No open shift"
+msgstr "لا توجد وردية مفتوحة"
+
+msgid "No patient owes the clinic anything."
+msgstr "لا يوجد مريض عليه فلوس للعيادة."
+
+msgid "No pay rule yet"
+msgstr "لم تُحدد طريقة الأجر بعد"
+
+msgid "No section"
+msgstr "بدون قسم"
+
+msgid "No shifts yet."
+msgstr "لا توجد ورديات بعد."
+
+msgid "No team members yet."
+msgstr "لا يوجد أعضاء في الفريق بعد."
+
+msgid "No work recorded in this month."
+msgstr "لا يوجد شغل مسجَّل في هذا الشهر."
+
+msgid "Not cash, so not in the drawer:"
+msgstr "غير نقدي، فليس في الدرج:"
+
+msgid "Note:"
+msgstr "ملاحظة:"
+
+msgid "Nothing collected in this month yet."
+msgstr "لم يُحصَّل شيء في هذا الشهر بعد."
+
+msgid "Nothing paid out for this month yet."
+msgstr "لم يُصرف شيء عن هذا الشهر بعد."
+
+msgid "Oldest debt first."
+msgstr "الأقدم أولًا."
+
+msgid "Open"
+msgstr "مفتوحة"
+
+msgid "Open the register"
+msgstr "افتح الخزنة"
+
+msgid "Open the register with a count"
+msgstr "افتح الخزنة بعدّ النقدية"
+
+msgid "Open with a count"
+msgstr "افتح بعدّ النقدية"
+
+#, python-format
+msgid "Opened and counted by %(name)s"
+msgstr "فتحها وعدّها %(name)s"
+
+#, python-format
+msgid "Opened by %(name)s"
+msgstr "فتحها %(name)s"
+
+#, python-format
+msgid "Opened by itself on the first cash entry, by %(name)s"
+msgstr "فُتحت تلقائيًا مع أول حركة نقدية، من %(name)s"
+
+msgid "Opening float"
+msgstr "رصيد البداية"
+
+msgid ""
+"Optional. Without it the register opens by itself, at zero, on the first "
+"cash payment."
+msgstr "اختياري. بدونه تُفتح الخزنة تلقائيًا من صفر مع أول دفعة نقدية."
+
+msgid "Other payment methods"
+msgstr "طرق دفع أخرى"
+
+msgid "Out"
+msgstr "سحب"
+
+msgid "Out of the drawer"
+msgstr "سحب من الدرج"
+
+msgid "Over"
+msgstr "زيادة"
+
+msgid "Paid by"
+msgstr "طريقة الصرف"
+
+msgid "Paid from the register's cash"
+msgstr "مدفوع من نقدية الخزنة"
+
+msgid "Paid out:"
+msgstr "المصروف له:"
+
+msgid "Past shifts"
+msgstr "الورديات السابقة"
+
+msgid "Patients owe the clinic"
+msgstr "مستحقات على المرضى"
+
+msgid "Patients who owe"
+msgstr "مستحقات المرضى"
+
+msgid "Pay rule"
+msgstr "طريقة الأجر"
+
+msgid "Pay rule saved: {name}"
+msgstr "تم حفظ طريقة الأجر: {name}"
+
+msgid "Payout"
+msgstr "صرف"
+
+msgid "Payout recorded: {name}, {amount}"
+msgstr "تم تسجيل الصرف: {name}، {amount}"
+
+msgid "Payouts"
+msgstr "المصروف للعضو"
+
+msgid "Per procedure"
+msgstr "لكل إجراء"
+
+msgid "Per procedure (EGP)"
+msgstr "لكل إجراء (ج.م)"
+
+msgid "Per visit"
+msgstr "لكل زيارة"
+
+msgid "Per visit (EGP)"
+msgstr "لكل زيارة (ج.م)"
+
+msgid "Pick the category."
+msgstr "اختر الفئة."
+
+msgid "Previous month"
+msgstr "الشهر السابق"
+
+msgid "Procedures"
+msgstr "الإجراءات"
+
+msgid "Profit"
+msgstr "الربح"
+
+msgid "Record the payout"
+msgstr "سجّل الصرف"
+
+msgid "Refunded:"
+msgstr "المردود:"
+
+msgid "Remove this category?"
+msgstr "حذف هذه الفئة؟"
+
+msgid "Removed categories"
+msgstr "الفئات المحذوفة"
+
+msgid "Rename"
+msgstr "تغيير الاسم"
+
+msgid "Rename the category"
+msgstr "تغيير اسم الفئة"
+
+msgid "Report"
+msgstr "التقرير"
+
+msgid "Revenue"
+msgstr "الإيراد"
+
+msgid "Saved. The drawer should now hold {expected}"
+msgstr "تم الحفظ. المفروض في الدرج الآن {expected}"
+
+msgid "See who owes"
+msgstr "عرض المستحقات"
+
+msgid "Share of revenue"
+msgstr "نسبة من الإيراد"
+
+msgid "Share of their revenue (%)"
+msgstr "نسبة من إيراده (٪)"
+
+msgid "Shift closed. The count matched."
+msgstr "تم قفل الوردية. العدّ مطابق."
+
+msgid "Shift closed. The drawer is over by {amount}."
+msgstr "تم قفل الوردية. في الدرج زيادة {amount}."
+
+msgid "Shift closed. The drawer is short by {amount}."
+msgstr "تم قفل الوردية. في الدرج عجز {amount}."
+
+msgid "Shift report"
+msgstr "تقرير الوردية"
+
+msgid "Short"
+msgstr "عجز"
+
+msgid "Should be in the drawer:"
+msgstr "المفروض في الدرج:"
+
+msgid "Staff pay"
+msgstr "أجور الفريق"
+
+msgid "Staff pay (earned)"
+msgstr "أجور الفريق (المستحقة)"
+
+msgid "Staff pay in cash"
+msgstr "أجور مصروفة نقدًا"
+
+msgid "Statement"
+msgstr "الكشف"
+
+msgid "Still owed"
+msgstr "الباقي له"
+
+msgid "Still owed:"
+msgstr "الباقي له:"
+
+msgid "Stock purchase"
+msgstr "شراء مخزون"
+
+msgid ""
+"The clinic's money in one place: what came in, where it went, the cash in "
+"the drawer and what each person earned."
+msgstr ""
+"فلوس العيادة في مكان واحد: ما دخل، وأين ذهب، والنقدية في الدرج، وما استحقه "
+"كل شخص."
+
+msgid "The next cash payment opens a new shift by itself."
+msgstr "أول دفعة نقدية بعد كده تفتح وردية جديدة تلقائيًا."
+
+msgid "The register is open"
+msgstr "الخزنة مفتوحة"
+
+msgid "The register now"
+msgstr "الخزنة الآن"
+
+msgid ""
+"The register opens by itself on the first cash payment. Counting it at the "
+"start or the end is optional."
+msgstr ""
+"الخزنة تُفتح تلقائيًا مع أول دفعة نقدية. عدّ النقدية في البداية أو النهاية "
+"اختياري."
+
+msgid "This month"
+msgstr "هذا الشهر"
+
+msgid "Total owed:"
+msgstr "إجمالي المستحق:"
+
+msgid "Total:"
+msgstr "الإجمالي:"
+
+msgid "Use one or mix them. Leave a box at 0 to skip it."
+msgstr "استخدم طريقة واحدة أو أكثر. اترك الخانة صفرًا لتجاهلها."
+
+msgid "Void this expense?"
+msgstr "إلغاء هذا المصروف؟"
+
+msgid "Voided"
+msgstr "ملغى"
+
+msgid "Voided: {name}"
+msgstr "تم الإلغاء: {name}"
+
+msgid "Which way"
+msgstr "النوع"
+
+msgid "Write the share as a percentage from 0 to 100, for example 30 or 12.5."
+msgstr "اكتب النسبة من 0 إلى 100، مثلًا 30 أو 12.5."
+
+msgid "closed"
+msgstr "قُفلت"
+
+msgid "counted"
+msgstr "المعدود"
+
+msgid "last visit"
+msgstr "آخر زيارة"
+
+msgid "opened by itself"
+msgstr "فُتحت تلقائيًا"
+
+msgctxt "action"
+msgid "Void"
+msgstr "إلغاء"
+
+msgid "Everyone"
+msgstr "الكل"
+
+msgid "Only these sections: {list}"
+msgstr "هذه الأقسام فقط: {list}"
+
+msgid "can't be read now. Reload in a moment."
+msgstr "لا يمكن قراءته الآن. أعد التحميل بعد قليل."
+
+msgid "Who works where"
+msgstr "مين بيشتغل فين"
+
+msgid ""
+"Each person, the places they work in, their role there and what they can do."
+" Tap a person to change it."
+msgstr ""
+"كل شخص، والأماكن اللي بيشتغل فيها، ودوره فيها، وإيه اللي يقدر يعمله. اضغط "
+"على الشخص لتغيير ذلك."
+
+msgid "Names, role and sign-in"
+msgstr "الاسم والدور والدخول"
+
+msgid "Active (6 months)"
+msgstr "نشطون (6 شهور)"
+
+msgid "And more."
+msgstr "وغيرهم."
+
+msgid "Average wait"
+msgstr "متوسط الانتظار"
+
+msgid "Avg. time"
+msgstr "متوسط الوقت"
+
+msgid "Came at least twice, nothing in the last 3 months."
+msgstr "جاءوا مرتين على الأقل، ولم يأتوا آخر 3 شهور."
+
+msgid "Come back again"
+msgstr "يرجعون مرة أخرى"
+
+msgid "Going quiet"
+msgstr "بدأوا يغيبون"
+
+msgid "Loss this month"
+msgstr "خسارة هذا الشهر"
+
+msgid "Never came back"
+msgstr "لم يرجعوا"
+
+msgid "New / returning patients"
+msgstr "مرضى جدد / عائدون"
+
+msgid "No tagged patients yet."
+msgstr "لا يوجد مرضى عليهم وسوم بعد."
+
+msgid "No visits in this period yet."
+msgstr "لا توجد زيارات في هذه الفترة بعد."
+
+msgid "No-shows"
+msgstr "لم يحضروا"
+
+msgid "None. Good."
+msgstr "لا أحد. ممتاز."
+
+msgid "One visit, and nothing for a month since."
+msgstr "زيارة واحدة، ولا شيء منذ شهر."
+
+msgid "Overview"
+msgstr "نظرة عامة"
+
+msgid "Patients owe"
+msgstr "مستحقات على المرضى"
+
+msgid "Period"
+msgstr "الفترة"
+
+msgid "Procedures:"
+msgstr "الإجراءات:"
+
+msgid "Profit this month"
+msgstr "ربح هذا الشهر"
+
+msgid "The clinic"
+msgstr "العيادة"
+
+msgid "This week"
+msgstr "هذا الأسبوع"
+
+msgid "Top tags"
+msgstr "أكثر الوسوم"
+
+msgid "after refunds"
+msgstr "بعد المردودات"
+
+msgid "Patients:"
+msgstr "المرضى:"
+
+msgid "Days owed:"
+msgstr "أيام التأخير:"
+
+msgid "of bookings"
+msgstr "من الحجوزات"
+
+msgid "min"
+msgstr "دقيقة"

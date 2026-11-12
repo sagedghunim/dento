@@ -1,0 +1,44 @@
+{% load i18n hamada %}
+<div class="grid-2 fin-exp">
+  <section class="card" aria-labelledby="exp-title">
+    <div class="card-head">
+      <div>
+        <h2 id="exp-title">{% translate "Expenses" %} · {{ month.label }}</h2>
+        <p class="card-sub">{% translate "Total:" %} <strong data-expenses-total="{{ expenses_total }}">{{ expenses_total|money }}</strong></p>
+      </div>
+      <button type="button" class="btn" data-new-expense><svg class="icon"><use href="#i-plus"/></svg>{% translate "Expense" %}</button>
+    </div>
+    {% if expenses %}
+    <ul class="lines exp-list" data-rows="expenses">{% include "web/_fin_expense_rows.html" with rows=expenses %}</ul>
+    {% if expenses_next %}<div class="list-foot"><button type="button" class="btn ghost" data-more="expenses" data-next="{{ expenses_next }}">{% translate "Load more" %}</button></div>{% endif %}
+    {% else %}<p class="empty-note">{% translate "No expenses in this month yet." %}</p>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="cat-title">
+    <div class="card-head">
+      <h2 id="cat-title">{% translate "Categories" %}</h2>
+      <button type="button" class="btn ghost" data-new-category><svg class="icon"><use href="#i-plus"/></svg>{% translate "Category" %}</button>
+    </div>
+    <ul class="lines cat-list">
+      {% for c in active_categories %}
+      <li data-category="{{ c.json }}">
+        <bdi dir="auto" class="cat-name">{{ c.name }}</bdi>
+        <span class="row-actions">
+          <button type="button" class="btn ghost" data-rename-category>{% translate "Rename" %}</button>
+          <button type="button" class="icon-btn danger-icon" data-remove-category aria-label="{% translate "Remove" %}: {{ c.name }}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if removed_categories %}
+    <details class="more-fields removed-cats">
+      <summary>{% translate "Removed categories" %}</summary>
+      <ul class="lines">
+        {% for c in removed_categories %}
+        <li data-category="{{ c.json }}"><bdi dir="auto" class="muted">{{ c.name }}</bdi><button type="button" class="btn ghost" data-restore-category>{% translate "Restore" %}</button></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </section>
+</div>

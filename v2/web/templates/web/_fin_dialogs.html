@@ -1,0 +1,228 @@
+{% load i18n hamada %}
+{% if tab == "register" %}
+{% if perms.cash_moves %}
+<dialog class="sheet small" id="cash-dialog" aria-labelledby="cash-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="cash-title"><span data-title-in>{% translate "Cash in" %}</span><span data-title-out hidden>{% translate "Cash out" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <fieldset class="group"><legend>{% translate "Which way" %}</legend><div class="chips">
+      <label class="chip"><input type="radio" name="kind" value="in" checked><span>{% translate "Into the drawer" %}</span></label>
+      <label class="chip"><input type="radio" name="kind" value="out"><span>{% translate "Out of the drawer" %}</span></label>
+    </div></fieldset>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+    <label class="field">{% translate "Reason" %}<input name="reason" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "Change from the bank, a bank deposit…" %}"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+{% if perms.shift %}
+<dialog class="sheet small" id="open-dialog" aria-labelledby="open-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="open-title">{% translate "Open the register with a count" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted">{% translate "Optional. Without it the register opens by itself, at zero, on the first cash payment." %}</p>
+    <label class="field">{% translate "Cash in the drawer now (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" value="0" data-autofocus></label>
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Open the register" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="close-dialog" aria-labelledby="close-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="close-title">{% translate "Close and count" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p>{% translate "Should be in the drawer:" %} <strong data-expected-text></strong></p>
+    <label class="field">{% translate "Cash you counted (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+    <p class="muted">{% translate "The next cash payment opens a new shift by itself." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Close the shift" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="report-dialog" aria-labelledby="report-title">
+  <div class="sheet-inner">
+  <header class="dialog-head">
+    <h2 id="report-title">{% translate "Shift report" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight" data-report-body></div>
+  </div>
+</dialog>
+{% endif %}
+{% endif %}
+
+{% if tab == "expenses" and perms.expenses %}
+<dialog class="sheet small" id="expense-dialog" aria-labelledby="expense-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="expense-title">{% translate "New expense" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Category" %}<select name="category_id" data-category-select>
+      {% for c in active_categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+    </select></label>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+    <label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr" max="{{ today }}" value="{{ today }}" data-today="{{ today }}"></label>
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "Electricity bill, lab of patient…" %}"></label>
+    {% if perms.collect %}<label class="check"><input type="checkbox" name="from_shift"> <span>{% translate "Paid from the register's cash" %}</span></label>{% endif %}
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Add the expense" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="void-dialog" aria-labelledby="void-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="void-title">{% translate "Void this expense?" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong data-name></strong> · <span data-amount></span></p>
+    <p class="muted">{% translate "It stays in the list marked as voided, and leaves the month's total." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Keep it" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Void" context "action" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="category-dialog" aria-labelledby="category-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="category-title"><span data-title-new>{% translate "New category" %}</span><span data-title-edit hidden>{% translate "Rename the category" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Name" %}<input name="name" maxlength="60" dir="auto" autocomplete="off" data-autofocus></label>
+    <label class="field">{% translate "Name in English (optional)" %}<input name="name_en" maxlength="60" dir="ltr" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="category-remove-dialog" aria-labelledby="category-remove-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="category-remove-title">{% translate "Remove this category?" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong data-name></strong></p>
+    <p class="muted">{% translate "Its old expenses stay as they are. You can restore it later." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Keep it" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Remove" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+
+{% if tab == "pay" %}
+<dialog class="sheet" id="statement-dialog" aria-labelledby="statement-title">
+  <div class="sheet-inner">
+  <header class="dialog-head">
+    <h2 id="statement-title">{% translate "Monthly statement" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight" data-statement-holder></div>
+  {% if perms.pay %}
+  <footer class="dialog-foot">
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="button" class="btn" data-new-payout><svg class="icon"><use href="#i-plus"/></svg>{% translate "Payout" %}</button>
+  </footer>
+  {% endif %}
+  </div>
+</dialog>
+
+{% if perms.pay %}
+<dialog class="sheet small" id="rule-dialog" aria-labelledby="rule-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="rule-title">{% translate "Pay rule" %} · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted">{% translate "Use one or mix them. Leave a box at 0 to skip it." %}</p>
+    <div class="grid-form">
+      <label class="field">{% translate "Share of their revenue (%)" %}<input name="percent" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="6" data-autofocus></label>
+      <label class="field">{% translate "Monthly salary (EGP)" %}<input name="monthly_salary" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+      <label class="field">{% translate "Per visit (EGP)" %}<input name="per_visit" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+      <label class="field">{% translate "Per procedure (EGP)" %}<input name="per_procedure" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    </div>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="payout-dialog" aria-labelledby="payout-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="payout-title">{% translate "Payout" %} · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted">{% translate "For" %} <span data-month-text>{{ month.label }}</span> · {% translate "Still owed:" %} <span data-balance-text></span></p>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+    <fieldset class="group"><legend>{% translate "Paid by" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+    <p class="muted">{% translate "Cash comes out of the register's drawer." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Record the payout" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+{% endif %}

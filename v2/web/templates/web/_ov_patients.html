@@ -1,0 +1,12 @@
+{% load i18n hamada %}{% if rows %}
+<ul class="lines">
+  {% for r in rows %}
+  <li>
+    <span class="row-main">{% if patients_link %}<a href="/patients/{{ r.patient.id }}"><bdi dir="auto">{{ r.patient.name }}</bdi></a>{% else %}<bdi dir="auto">{{ r.patient.name }}</bdi>{% endif %}
+      {% if r.patient.phone %} <span class="muted">· {{ r.patient.phone|phone }}</span>{% endif %}</span>
+    <span class="muted">{% if r.last_text %}{% translate "last visit" %} {{ r.last_text }}{% endif %}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% if more %}<p class="muted">{% translate "And more." %}</p>{% endif %}
+{% else %}<p class="empty-note">{% translate "None. Good." %}</p>{% endif %}

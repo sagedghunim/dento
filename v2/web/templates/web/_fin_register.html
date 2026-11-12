@@ -1,0 +1,57 @@
+{% load i18n hamada %}
+<section class="card" aria-labelledby="shift-title" data-register{% if current %} data-shift-id="{{ current.shift.id }}"{% endif %}>
+  <div class="card-head">
+    <h2 id="shift-title">{% translate "The register now" %}</h2>
+    {% if current %}<span class="pill teal">{% translate "Open" %}</span>{% else %}<span class="pill grey">{% translate "No open shift" %}</span>{% endif %}
+  </div>
+  <p class="card-sub">{% translate "The register opens by itself on the first cash payment. Counting it at the start or the end is optional." %}</p>
+
+  {% if current %}
+  <p class="shift-who">
+    {{ current.shift.opened_line }}
+    · <span class="nowrap">{{ current.shift.opened.day }}</span> {{ current.shift.opened.time }}
+  </p>
+  <div class="expected">
+    <span class="lbl">{% translate "Cash that should be in the drawer" %}</span>
+    <strong class="expected-num" data-expected>{{ current.expected|money }}</strong>
+  </div>
+  <ul class="lines cash-lines">
+    {% for line in current.lines %}<li><span>{{ line.label }}</span><span class="amt">{{ line.amount|money }}</span></li>{% endfor %}
+  </ul>
+  {% if current.other %}
+  <p class="muted other-methods">{% translate "Not cash, so not in the drawer:" %} {% for m in current.other %}{{ m.label }} {{ m.net|money }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  {% endif %}
+  {% endif %}
+
+  {% if perms.cash_moves or perms.shift %}
+  <div class="shift-actions">
+    {% if perms.cash_moves %}
+    <button type="button" class="btn" data-cash="in"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Cash in" %}</button>
+    <button type="button" class="btn" data-cash="out"><svg class="icon"><use href="#i-minus"/></svg>{% translate "Cash out" %}</button>
+    {% endif %}
+    {% if perms.shift %}
+      {% if current %}<button type="button" class="btn ghost" data-close-shift data-expected-amount="{{ current.expected }}">{% translate "Close and count" %}</button>
+      {% else %}<button type="button" class="btn ghost" data-open-shift>{% translate "Open with a count" %}</button>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if current and current.movements %}
+  <h3 class="sub-title">{% translate "Cash in and out in this shift" %}</h3>
+  <ul class="lines">
+    {% for m in current.movements %}
+    <li><span><span class="pill {% if m.kind == 'in' %}teal{% else %}amber{% endif %}">{% if m.kind == "in" %}{% translate "In" %}{% else %}{% translate "Out" %}{% endif %}</span> <bdi dir="auto">{{ m.reason }}</bdi> <span class="muted">· {{ m.when.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}</span></span><span class="amt">{{ m.amount|money }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% if perms.shift %}
+<section class="card" aria-labelledby="shifts-title">
+  <h2 id="shifts-title">{% translate "Past shifts" %}</h2>
+  {% if shifts %}
+  <ul class="lines shift-list" data-rows="shifts">{% include "web/_fin_shift_rows.html" with rows=shifts %}</ul>
+  {% if shifts_next %}<div class="list-foot"><button type="button" class="btn ghost" data-more="shifts" data-next="{{ shifts_next }}">{% translate "Load more" %}</button></div>{% endif %}
+  {% else %}<p class="empty-note">{% translate "No shifts yet." %}</p>{% endif %}
+</section>
+{% endif %}

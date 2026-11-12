@@ -42,7 +42,8 @@ class InventoryPageTests(BackOfficeCase):
                        'id="materials-dialog"'):
             self.assertIn(marker, html, marker)
         self.assertIn(f'&quot;id&quot;: {item["id"]}', html)  # the card's values, escaped in the attribute
-        self.assertIn('href="/inventory" aria-current="page"', html)
+        # An owner with no sessions manages: Inventory leaves their side bar (Saged, 2026-11-12); a doctor keeps it.
+        self.assertIn('href="/inventory" aria-current="page"', self.doctor.get("/inventory").content.decode())
 
     def test_someone_with_use_only_sees_the_list_and_records_use(self):
         self.item()

@@ -1,0 +1,14 @@
+{% load i18n hamada %}{% for e in rows %}{% ifchanged e.day %}
+<li class="day-head" data-day="{{ e.day.isoformat }}">{{ e.day_text }}</li>{% endifchanged %}
+<li class="exp-row{% if e.voided %} is-void{% endif %}" data-expense="{{ e.json }}">
+  <div class="row-main">
+    <strong><bdi dir="auto">{{ e.category }}</bdi></strong>
+    {% if e.voided %} <span class="pill red">{% translate "Voided" %}</span>{% endif %}
+    {% if e.purchase %} <span class="pill grey">{% translate "Stock purchase" %}</span>{% endif %}
+    {% if e.shift_id %} <span class="pill grey">{% translate "From the drawer" %}</span>{% endif %}
+    {% if e.note or e.by %}<p class="muted">{% if e.note %}<bdi dir="auto">{{ e.note }}</bdi>{% endif %}{% if e.note and e.by %} · {% endif %}{% if e.by %}<bdi dir="auto">{{ e.by }}</bdi>{% endif %}</p>{% endif %}
+  </div>
+  <span class="amt">{% if e.voided %}<s>{{ e.amount|money }}</s>{% else %}{{ e.amount|money }}{% endif %}</span>
+  {% if not e.voided and not e.purchase %}<button type="button" class="btn ghost" data-void-expense>{% translate "Void" context "action" %}</button>{% endif %}
+</li>
+{% endfor %}

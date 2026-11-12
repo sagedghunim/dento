@@ -1,0 +1,28 @@
+{% load i18n hamada %}{% with s=report.shift %}
+<p class="shift-who">{{ s.opened_by_line }} · <span class="nowrap">{{ s.opened.day }}</span> {{ s.opened.time }}{% if s.auto_opened %} · {% translate "opened by itself" %}{% endif %}</p>
+{% if s.status == "closed" %}<p class="shift-who">{{ s.closed_by_line }} · <span class="nowrap">{{ s.closed.day }}</span> {{ s.closed.time }}</p>{% endif %}
+<dl class="money-sum report-sum">
+  <div><dt>{% translate "Expected in the drawer" %}</dt><dd>{% if s.status == "closed" %}{{ s.expected|money }}{% else %}{{ report.expected|money }}{% endif %}</dd></div>
+  {% if s.status == "closed" %}
+  <div><dt>{% translate "Counted" %}</dt><dd>{{ s.counted|money }}</dd></div>
+  <div><dt>{% translate "Difference" %}</dt><dd>{{ s.difference|money }} {% if s.difference < 0 %}<span class="pill red">{% translate "Short" %}</span>{% elif s.difference > 0 %}<span class="pill amber">{% translate "Over" %}</span>{% else %}<span class="pill grey">{% translate "Matched" %}</span>{% endif %}</dd></div>
+  {% endif %}
+</dl>
+<h3 class="sub-title">{% translate "Cash" %}</h3>
+<ul class="lines cash-lines">
+  {% for line in report.lines %}<li><span>{{ line.label }}</span><span class="amt">{{ line.amount|money }}</span></li>{% endfor %}
+</ul>
+{% if report.other %}
+<h3 class="sub-title">{% translate "Other payment methods" %}</h3>
+<ul class="lines">{% for m in report.other %}<li><span>{{ m.label }}</span><span class="amt">{{ m.net|money }}</span></li>{% endfor %}</ul>
+{% endif %}
+{% if report.movements %}
+<h3 class="sub-title">{% translate "Cash in and out" %}</h3>
+<ul class="lines">
+  {% for m in report.movements %}
+  <li><span><span class="pill {% if m.kind == 'in' %}teal{% else %}amber{% endif %}">{% if m.kind == "in" %}{% translate "In" %}{% else %}{% translate "Out" %}{% endif %}</span> <bdi dir="auto">{{ m.reason }}</bdi> <span class="muted">· {{ m.when.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}</span></span><span class="amt">{{ m.amount|money }}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if s.note %}<p class="muted">{% translate "Note:" %} <bdi dir="auto">{{ s.note }}</bdi></p>{% endif %}
+{% endwith %}

@@ -1,0 +1,149 @@
+"""The Finances screen (design F1, F3, F4, F5): who sees which tab, and that money stays with finances.view."""
+
+from clinics.models import Membership
+from core.routing import clinic_transaction
+from core.testing import ShardTestCase, call
+
+MONEY_MARKERS = ('data-stat="collected"', 'data-stat="profit"', 'data-stat="staff"', "المحصَّل", "الربح",
+                 "مستحقات المرضى", "أجور الفريق", "?tab=month", "?tab=pay", "?tab=owed")
+
+
+def fragment(client, url):
+    return client.get(url, headers={"X-Membership": str(client.membership_id)})
+
+
+class FinancesCase(ShardTestCase):
+    def setUp(self):
+        super().setUp()
+        self.a = self.clinic("a")
+        self.owner = self.a.client("owner")      # every code
+        self.desk = self.a.client("assistant")   # cash.collect and cash.shift
+
+    def codes(self, role, granted=(), revoked=()):
+        with clinic_transaction(self.a.id, self.a.shard):
+            Membership.objects.filter(clinic_id=self.a.id, id=self.a.membership(role).id).update(
+                granted=list(granted), revoked=list(revoked))
+        return self.a.client(role)
+
+    def expense(self, client, amount=12345, note="فاتورة كهرباء"):
+        categories = call(client, "GET", "/api/v1/expense-categories").json()["items"]
+        r = call(client, "POST", "/api/v1/expenses", {"category_id": categories[0]["id"], "amount": amount, "note": note})
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["expense"]
+
+
+class FinancesPageTests(FinancesCase):
+    def test_the_owner_sees_every_tab(self):
+        self.expense(self.owner)
+        r = self.owner.get("/finances")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('lang="ar" dir="rtl"', html)
+        self.assertIn('href="/finances" aria-current="page"', html)
+        for key in ("month", "register", "expenses", "pay", "owed"):
+            self.assertIn(f'href="?tab={key}', html, key)
+        self.assertIn('data-stat="collected"', html)
+        self.assertIn("123.45", html)  # the month's expenses
+        for tab in ("register", "expenses", "pay", "owed"):
+            r = self.owner.get(f"/finances?tab={tab}")
+            self.assertEqual(r.status_code, 200, tab)
+            self.assertIn(f'data-tab="{tab}"', r.content.decode(), tab)
+
+    def test_each_tab_offers_its_actions(self):
+        expenses = self.owner.get("/finances?tab=expenses").content.decode()
+        for marker in ("data-new-expense", "data-new-category", "data-rename-category", "data-remove-category",
+                       'id="expense-dialog"', 'id="void-dialog"'):
+            self.assertIn(marker, expenses, marker)
+        register = self.owner.get("/finances?tab=register").content.decode()
+        for marker in ('data-cash="in"', 'data-cash="out"', 'id="cash-dialog"', 'id="close-dialog"'):
+            self.assertIn(marker, register, marker)
+        self.assertTrue("data-open-shift" in register or "data-close-shift" in register)  # one, by the shift's state
+        self.assertIn("تُفتح تلقائيًا مع أول دفعة نقدية", register)  # says plainly that it opens by itself
+        pay = self.owner.get("/finances?tab=pay").content.decode()
+        for marker in ("data-statement", "data-edit-rule", 'id="rule-dialog"', 'id="payout-dialog"'):
+            self.assertIn(marker, pay, marker)
+
+    def test_the_register_shows_the_open_shift_after_cash_in(self):
+        r = call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": 5000, "reason": "فكة"})
+        self.assertEqual(r.status_code, 201, r.content)
+        html = self.desk.get("/finances").content.decode()
+        self.assertIn("data-expected", html)
+        self.assertIn("data-close-shift", html)
+        self.assertIn("فكة", html)
+        r = fragment(self.desk, "/finances/part?tab=register")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("data-shift-id", r.content.decode())
+        shift = r.content.decode().split('data-shift-id="')[1].split('"')[0]
+        r = fragment(self.desk, f"/finances/shifts/{shift}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("فكة", r.content.decode())
+        self.assertEqual(fragment(self.desk, "/finances/shifts").status_code, 200)
+
+    def test_the_front_desk_sees_the_register_only(self):
+        r = self.desk.get("/finances")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-tab="register"', html)
+        for marker in MONEY_MARKERS + ("?tab=expenses",):
+            self.assertNotIn(marker, html, marker)
+        self.assertIn('data-tab="register"', self.desk.get("/finances?tab=month").content.decode())  # no way in
+        self.assertIn('href="/finances"', self.desk.get("/patients").content.decode())
+        for url in ("/finances/part?tab=month", "/finances/part?tab=pay", "/finances/part?tab=expenses", "/finances/owed",
+                    f"/finances/pay/{self.a.membership('doctor').id}", "/finances/expenses"):
+            self.assertEqual(fragment(self.desk, url).status_code, 403, url)
+
+    def test_the_expenses_only_member_sees_no_money_totals(self):
+        clerk = self.codes("assistant", granted=["expenses.manage"], revoked=["cash.collect", "cash.shift"])
+        self.expense(self.owner, note="Bt rent")
+        r = clerk.get("/finances")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-tab="expenses"', html)
+        self.assertIn("Bt rent", html)
+        self.assertNotIn("data-new-payout", html)
+        for marker in MONEY_MARKERS + ("?tab=register", "data-cash=", 'name="from_shift"'):
+            self.assertNotIn(marker, html, marker)
+        for url in ("/finances/part?tab=month", "/finances/part?tab=register", "/finances/shifts", "/finances/owed"):
+            self.assertEqual(fragment(clerk, url).status_code, 403, url)
+        self.assertEqual(fragment(clerk, "/finances/part?tab=expenses").status_code, 200)
+        self.assertEqual(fragment(clerk, "/finances/expenses").status_code, 200)
+
+    def test_without_a_money_code_the_page_is_refused(self):
+        desk = self.codes("assistant", revoked=["cash.collect", "cash.shift"])
+        self.assertEqual(desk.get("/finances").status_code, 403)
+        self.assertEqual(fragment(desk, "/finances/part?tab=register").status_code, 403)
+        self.assertNotIn('href="/finances"', desk.get("/patients").content.decode())
+
+    def test_view_without_pay_reads_but_cannot_edit_pay(self):
+        doctor = self.codes("doctor", granted=["finances.view"])
+        r = doctor.get("/finances?tab=pay")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("data-statement", html)
+        for marker in ("data-edit-rule", 'id="rule-dialog"', 'id="payout-dialog"', "data-new-payout"):
+            self.assertNotIn(marker, html, marker)
+        member = self.a.membership("assistant").id
+        r = fragment(doctor, f"/finances/pay/{member}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(f'data-member-id="{member}"', r.content.decode())
+
+    def test_typed_text_is_escaped(self):
+        self.expense(self.owner, note='<img src=x onerror="alert(1)">')
+        html = self.owner.get("/finances?tab=expenses").content.decode()
+        self.assertNotIn('<img src=x onerror="alert(1)">', html)
+        self.assertIn("&lt;img src=x", html)
+
+    def test_another_clinics_shift_is_not_found(self):
+        other = self.clinic("b", "shard_2")
+        r = call(other.client("owner"), "POST", "/api/v1/register/movements", {"kind": "in", "amount": 100, "reason": "x"})
+        theirs = r.json()["shift"]["id"]
+        self.assertEqual(fragment(self.desk, f"/finances/shifts/{theirs}").status_code, 404)
+
+    def test_english_mode_and_a_past_month(self):
+        self.owner.cookies["django_language"] = "en"
+        r = self.owner.get("/finances?tab=month&month=2026-01")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('value="2026-01" selected', html)
+        r = self.owner.get("/finances?tab=month&month=nonsense")
+        self.assertEqual(r.status_code, 200)

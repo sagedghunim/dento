@@ -1,0 +1,58 @@
+{% load i18n hamada %}
+<dialog class="sheet small" id="walkin-dialog" aria-labelledby="walkin-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="walkin-title">{% translate "Walk-in now" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <fieldset class="group">
+      <legend>{% translate "Patient" %}</legend>
+      <div class="picked" data-picked hidden>
+        <div><div class="who" data-picked-name></div><div class="muted" data-picked-meta></div></div>
+        <button type="button" class="btn ghost" data-change-patient>{% translate "Change" %}</button>
+      </div>
+      <div data-finder>
+        <label class="field">{% translate "Search by name, mobile or file number" %}
+          <input name="q" type="search" autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search" data-autofocus>
+        </label>
+        <p class="muted" data-search-status role="status"></p>
+        <div data-results></div>
+        {% if config.perms.edit_patients %}<button type="button" class="btn ghost" data-new-patient><svg class="icon"><use href="#i-plus"/></svg>{% translate "New patient" %}</button>{% endif %}
+      </div>
+      {% if config.perms.edit_patients %}
+      <div class="grid-form" data-new hidden>
+        <label class="field">{% translate "Full name" %}<input name="full_name" maxlength="120" dir="auto" autocomplete="off"></label>
+        <label class="field">{% translate "Mobile" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off"></label>
+        <button type="button" class="link-btn" data-back-to-search>{% translate "Search instead" %}</button>
+      </div>
+      {% endif %}
+    </fieldset>
+    <div class="grid-form">
+      <label class="field">{% translate "Doctor" %}<select name="doctor">
+        <option value="">{% translate "Whoever is free first" %}</option>
+        {% for g in groups %}{% if g.sessions %}<option value="{{ g.id }}" data-sections="{{ g.section_ids|join:',' }}">{{ g.name }}</option>{% endif %}{% endfor %}
+      </select></label>
+      <label class="field">{% translate "Service" %}<select name="service">
+        <option value="">{% translate "The usual consultation" %}</option>
+        {% for s in config.services %}<option value="{{ s.id }}" data-section="{{ s.section_id|default_if_none:'' }}">{{ s.name }}</option>{% endfor %}
+      </select></label>
+    </div>
+    <p class="muted" data-defaults-note role="status" hidden></p>
+    {% if config.perms.collect %}
+    <label class="check"><input type="checkbox" name="collect"> {% translate "Collect now" %}</label>
+    <div class="grid-form" data-collect-fields hidden>
+      <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+      <fieldset class="group"><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
+    </div>
+    {% endif %}
+    <p class="fee-line" data-fee role="status"></p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Add to the queue" %}</button>
+  </footer>
+</form>
+</dialog>

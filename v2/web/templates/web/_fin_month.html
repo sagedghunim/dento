@@ -1,0 +1,36 @@
+{% load i18n hamada %}
+<h2 class="visually-hidden">{% translate "This month" %} · {{ month.label }}</h2>
+<div class="stats fin-stats">
+  <div class="stat"><div class="num" data-stat="collected">{{ profit.collected|money }}</div><div class="lbl">{% translate "Collected" %}</div>{% if profit.refunded %}<div class="stat-sub">{% translate "Refunded:" %} {{ profit.refunded|money }}</div>{% endif %}</div>
+  <div class="stat"><div class="num" data-stat="expenses">{{ profit.expenses|money }}</div><div class="lbl">{% translate "Expenses" %}</div></div>
+  <div class="stat"><div class="num" data-stat="staff">{{ profit.staff_pay|money }}</div><div class="lbl">{% translate "Staff pay (earned)" %}</div><div class="stat-sub">{% translate "Paid out:" %} {{ profit.staff_paid_out|money }}</div></div>
+  <div class="stat{% if profit.profit < 0 %} is-loss{% endif %}"><div class="num" data-stat="profit">{{ profit.profit|money }}</div><div class="lbl">{% if profit.profit < 0 %}{% translate "Loss" %}{% else %}{% translate "Profit" %}{% endif %}</div></div>
+</div>
+
+<section class="card owed-card" aria-labelledby="owed-sum-title">
+  <div>
+    <h2 id="owed-sum-title">{% translate "Patients owe the clinic" %}</h2>
+    <p class="owed-sum"><strong>{{ owed.owed|money }}</strong> <span class="muted">· {% translate "Patients:" %} {{ owed.patients|digits }}</span></p>
+  </div>
+  {% if owed.patients %}<a class="btn ghost" href="?tab=owed">{% translate "See who owes" %}</a>{% endif %}
+</section>
+
+<div class="fin-splits">
+  {% for split in splits %}
+  <section class="card" aria-labelledby="split-{{ split.key }}">
+    <h2 id="split-{{ split.key }}">{{ split.title }}</h2>
+    {% if split.rows %}
+    <ul class="bar-list">
+      {% for row in split.rows %}
+      <li class="bar-row">
+        <span class="bar-label"><bdi dir="auto">{{ row.label }}</bdi></span>
+        <progress class="fin-bar" max="{{ row.max }}" value="{{ row.value }}" aria-hidden="true"></progress>
+        <span class="bar-amt">{{ row.amount|money }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty-note">{% translate "Nothing collected in this month yet." %}</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+<p class="muted fin-note">{% translate "Collected is after refunds in the splits. Profit is what was collected, minus refunds, expenses and the staff pay earned this month." %}</p>

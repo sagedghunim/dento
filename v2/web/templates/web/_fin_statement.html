@@ -1,0 +1,33 @@
+{% load i18n hamada %}
+<div data-statement-body data-member-id="{{ s.member.id }}" data-balance="{{ s.balance }}" data-month="{{ s.month_value }}">
+<p><strong><bdi dir="auto">{{ s.name }}</bdi></strong> · {{ s.month_label }}</p>
+<p class="muted">{% if s.rule_text %}{{ s.rule_text }}{% else %}{% translate "No pay rule yet" %}{% endif %}</p>
+<dl class="money-sum report-sum">
+  <div><dt>{% translate "Earned" %}</dt><dd>{{ s.earned|money }}</dd></div>
+  <div><dt>{% translate "Paid" %}</dt><dd>{{ s.paid|money }}</dd></div>
+  <div><dt>{% translate "Still owed" %}</dt><dd data-balance-text>{{ s.balance|money }}</dd></div>
+</dl>
+{% if s.part_rows %}
+<ul class="lines cash-lines">{% for label, amount in s.part_rows %}<li><span>{{ label }}</span><span class="amt">{{ amount|money }}</span></li>{% endfor %}</ul>
+{% endif %}
+
+<h3 class="sub-title">{% translate "Day by day" %}</h3>
+{% if s.days %}
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th>{% translate "Day" %}</th><th class="num">{% translate "Visits" %}</th><th class="num">{% translate "Procedures" %}</th><th class="num">{% translate "Revenue" %}</th></tr></thead>
+    <tbody>
+      {% for d in s.days %}<tr><td>{{ d.day_text }}</td><td class="num">{{ d.done|num }}</td><td class="num">{{ d.procedures|num }}</td><td class="num">{{ d.net|money }}</td></tr>{% endfor %}
+    </tbody>
+    <tfoot><tr><th>{% translate "Total" %}</th><th class="num">{{ s.visits|num }}</th><th class="num">{{ s.procedures|num }}</th><th class="num">{{ s.revenue|money }}</th></tr></tfoot>
+  </table>
+</div>
+{% else %}<p class="empty-note">{% translate "No work recorded in this month." %}</p>{% endif %}
+
+<h3 class="sub-title">{% translate "Payouts" %}</h3>
+{% if s.payouts %}
+<ul class="lines">
+  {% for p in s.payouts %}<li><span>{{ p.day_text }} · {{ p.method_label }}{% if p.note %} · <bdi dir="auto">{{ p.note }}</bdi>{% endif %}</span><span class="amt">{{ p.amount|money }}</span></li>{% endfor %}
+</ul>
+{% else %}<p class="empty-note">{% translate "Nothing paid out for this month yet." %}</p>{% endif %}
+</div>

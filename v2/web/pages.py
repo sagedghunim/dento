@@ -23,9 +23,10 @@ from core import paging
 from core.api import page
 from core.days import business_day, local_iso
 from core.errors import ApiError
+from core.i18n import pick
 
 from . import format as fmt
-from . import places, teeth
+from . import nav, places, teeth
 from .http import clinic_page, fragment, route_exists
 
 QUEUE_CODES = ("appointments.book", "appointments.queue")
@@ -38,7 +39,7 @@ SOURCES = ("clinic", "phone", "online", "whatsapp")
 def _perms(ctx):
     """What the screens offer this person; the server checks every action again."""
     return {
-        "book": ctx.can("appointments.book"), "queue": ctx.can("appointments.queue"),
+        "book": ctx.can("appointments.book") and not nav.is_manager(ctx), "queue": ctx.can("appointments.queue"),
         "view_patients": ctx.can("patients.view"), "edit_patients": ctx.can("patients.edit"),
         "collect": ctx.can("billing.collect"), "discount": ctx.can("billing.discount"),
         "refund": ctx.can("billing.refund"), "finances": ctx.can("finances.view"),
@@ -76,7 +77,7 @@ def clinic_config(ctx, today):
     from clinics.models import Membership, Schedule, Service
 
     with_section = _has_field(Service, "section")
-    services = [{"id": s.id, "name": s.name, "kind": s.kind, "price": s.price,
+    services = [{"id": s.id, "name": pick(s.name, s.name_en), "kind": s.kind, "price": s.price,
                  "section_id": getattr(s, "section_id", None) if with_section else None}
                 for s in Service.objects.filter(clinic_id=ctx.clinic_id, is_active=True).order_by("sort", "id")]
     doctor_sections = {}
@@ -84,7 +85,7 @@ def clinic_config(ctx, today):
         for doctor_id, section_id in (Schedule.objects.filter(clinic_id=ctx.clinic_id)
                                       .values_list("doctor_id", "section_id").distinct()):
             doctor_sections.setdefault(doctor_id, []).append(section_id)
-    doctors = [{"id": m.id, "name": m.display_name, "sections": doctor_sections.get(m.id, [])}
+    doctors = [{"id": m.id, "name": pick(m.display_name, m.display_name_en), "sections": doctor_sections.get(m.id, [])}
                for m in Membership.objects.filter(clinic_id=ctx.clinic_id, is_active=True,
                                                    role__in=["owner", "doctor"]).order_by("id")]
     from clinics import settings as clinic_settings
@@ -204,6 +205,11 @@ def today_queue(request, ctx):
 @page()
 @clinic_page
 def today_page(request, ctx):
+    # The home page: an owner who manages (no sessions of their own) and anyone with reports but no queue get the
+    # Overview instead (Saged, 2026-11-12). /today itself still opens for an owner who asks for it.
+    if request.path == "/" and (nav.is_manager(ctx) or (ctx.can("reports.view") and not any(
+            ctx.can(code) for code in QUEUE_CODES))):
+        return redirect("/overview")
     if not any(ctx.can(code) for code in QUEUE_CODES):
         if ctx.can("patients.view"):
             return redirect("/patients")
@@ -222,6 +228,29 @@ def today_page(request, ctx):
         "poll_after": settings.POLL_AFTER_SECONDS, **_dialog_context(ctx, today),
     }
     return render(request, "web/today.html", context)
+
+
+@fragment(perm=QUEUE_CODES)
+def walk_in_defaults(request, ctx):
+    """GET /today/walk-in: the doctor and service a walk-in gets now when the desk picks none (design G5).
+
+    The same rule POST /appointments/walk-in applies, read only, so the dialog opens on what the server would
+    choose; the desk may change both. {doctor_id, service_id, message}: ids are null when the rule finds none.
+    """
+    from django.http import JsonResponse
+
+    from scheduling import services
+
+    today = business_day(ctx.clinic)
+    body = {"doctor_id": None, "service_id": None, "message": ""}
+    try:
+        body["doctor_id"], sections = services._walk_in_doctor(ctx, today)
+        body["service_id"] = services._walk_in_service(ctx, body["doctor_id"], today, sections)
+    except ApiError as error:
+        body["message"] = str(error.message)
+    response = JsonResponse(body)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 # --- Patients --------------------------------------------------------------------------------------------------

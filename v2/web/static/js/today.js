@@ -8,6 +8,7 @@ import { initPay } from "./pay.js";
 import { alertMessage, renderPending, toast } from "./shell.js";
 import { t } from "./strings.js";
 import { initVisitDialogs } from "./visit.js";
+import { initWalkIn } from "./walkin.js";
 
 const card = document.querySelector("[data-queue-card]");
 const list = document.querySelector('[data-slot="groups"]');
@@ -532,7 +533,11 @@ if (quickForm && book) {
 document.addEventListener("click", (event) => {
   const opener = event.target.closest("[data-open-book]");
   if (opener && book) book.open({ opener });
+  const walkOpener = event.target.closest("[data-open-walkin]");
+  if (walkOpener && walkIn) walkIn.open({ opener: walkOpener });
 });
+
+const walkIn = initWalkIn({ onBooked: changed });
 
 // --- start ---
 

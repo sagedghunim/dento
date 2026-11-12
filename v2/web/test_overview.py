@@ -1,0 +1,93 @@
+"""Overview, the owner's home (Saged, 2026-11-12), and the side bar of an owner who manages or also treats."""
+
+import datetime as dt
+import re
+
+from clinics.models import Membership, Schedule, Section
+from core.routing import clinic_transaction
+from core.testing import ShardTestCase
+
+
+def nav_links(html):
+    side = html.split('class="main-nav"', 1)[1].split("</nav>", 1)[0]
+    return re.findall(r'<a class="nav-btn" href="([^"]+)"', side)
+
+
+class OverviewCase(ShardTestCase):
+    def setUp(self):
+        super().setUp()
+        self.a = self.clinic("a")
+        self.owner_id = self.a.membership("owner").id
+
+    def sessions(self, keep):
+        """The owner works as a doctor (keep=True: a session of theirs exists) or only manages."""
+        with clinic_transaction(self.a.id, self.a.shard):
+            mine = Schedule.objects.filter(clinic_id=self.a.id, doctor_id=self.owner_id)
+            if not keep:
+                mine.delete()
+            elif not mine.exists():
+                section = Section.objects.filter(clinic_id=self.a.id).values_list("id", flat=True).first()
+                Schedule.objects.create(clinic_id=self.a.id, doctor_id=self.owner_id, section_id=section, weekday=0,
+                                        starts=dt.time(9), ends=dt.time(17), mode="queue")
+        return self.a.client("owner")
+
+    def codes(self, role, granted=(), revoked=()):
+        with clinic_transaction(self.a.id, self.a.shard):
+            Membership.objects.filter(clinic_id=self.a.id, id=self.a.membership(role).id).update(
+                granted=list(granted), revoked=list(revoked))
+        return self.a.client(role)
+
+
+class OwnerNavTests(OverviewCase):
+    def test_an_owner_who_only_manages_lands_on_the_overview(self):
+        owner = self.sessions(keep=False)
+        r = owner.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/overview")
+        html = owner.get("/overview").content.decode()
+        self.assertEqual(nav_links(html), ["/overview", "/finances", "/team", "/patients"])
+        self.assertNotIn("data-book-patient", owner.get("/patients").content.decode())  # lookup only
+        self.assertEqual(owner.get("/today").status_code, 200)  # still reachable when asked for
+
+    def test_an_owner_who_also_treats_keeps_today_first(self):
+        owner = self.sessions(keep=True)
+        self.assertEqual(owner.get("/").status_code, 200)
+        links = nav_links(owner.get("/overview").content.decode())
+        self.assertEqual(links[:2], ["/", "/overview"])
+        self.assertIn("/inventory", links)
+
+    def test_others_are_unchanged(self):
+        desk = self.a.client("assistant")
+        self.assertEqual(desk.get("/").status_code, 200)
+        self.assertNotIn("/overview", nav_links(desk.get("/patients").content.decode()))
+        self.assertEqual(desk.get("/overview").status_code, 403)
+
+
+class OverviewPageTests(OverviewCase):
+    def test_the_owner_sees_performance_money_and_insights(self):
+        owner = self.sessions(keep=False)
+        for period in ("today", "week", "month"):
+            r = owner.get(f"/overview?period={period}")
+            html = r.content.decode()
+            self.assertEqual(r.status_code, 200, period)
+            self.assertIn(f'href="?period={period}" aria-current="page"', html)
+            self.assertIn('data-ov="visits"', html)
+            self.assertIn('data-ov="revenue"', html)
+            self.assertIn("/finances?tab=owed", html)
+        self.assertEqual(owner.get("/overview?period=nonsense").status_code, 200)
+
+    def test_reports_without_finances_shows_no_money(self):
+        doctor = self.codes("doctor", granted=["reports.view"])
+        r = doctor.get("/overview")
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-ov="visits"', html)
+        for marker in ('data-ov="revenue"', "/finances?tab=owed", "الربح", "الإيراد"):
+            self.assertNotIn(marker, html, marker)
+        self.assertEqual(nav_links(html)[:2], ["/", "/overview"])
+
+    def test_reports_without_a_queue_goes_home_to_the_overview(self):
+        viewer = self.codes("assistant", granted=["reports.view"], revoked=["appointments.book", "appointments.queue"])
+        r = viewer.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/overview")
