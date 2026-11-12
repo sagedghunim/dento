@@ -1074,3 +1074,50 @@ Request: `sections: [{specialty, count, name?}]` plus `layout: "one_place" | "br
 - Dental has about 60 procedures and 30 medicines. Each other specialty has about 15–30 of each.
 - A doctor must review them before real patients.
 - They live in `clinics/specialties.py`, or split per specialty if it grows.
+
+## Appendix F: M3, the back office
+
+Saged's scope of 2026-11-12, taken from the TabeebHub screens he sent. Only the data, rules and API are built now; the screens come with his UI plan. Every list is editable by the clinic, with "+", edit and remove. Each action takes its own permission code.
+
+### F1. Cash register (per place)
+- **Shifts.** A shift opens with a counted opening float, carries every cash payment and refund taken in it, and closes with a counted amount. Closing records the difference from what the shift expected.
+- **One open shift per place.** One person opens it, and anyone with `cash.collect` can use it.
+- **Cash needs an open shift.** A cash payment or refund made while no shift is open answers 409 `register_closed`. Card, transfer and wallet are always allowed.
+- **Linked to the shift.** Payments record `shift_id`.
+- **Cash movements.** Cash in and cash out, such as petty expenses or a bank deposit, each with a reason.
+- **Report.** The shift report shows totals by method and the movements.
+
+### F2. Inventory and materials
+- **Items.** Each item has a name, a category, an optional SKU, a unit, the quantity on hand, a minimum-quantity alert, a purchase cost (the average cost per unit), notes and `is_active`. Items belong to a section, or are shared across the place.
+- **Movements.** Purchase, use, adjustment and waste. A movement changes stock only through a conditional update; stock never goes below 0 unless the place allows it.
+- **Materials.** A procedure carries a list of items and quantities. Recording the procedure deducts those quantities and sets the procedure line's internal cost from the average cost.
+- **Low stock.** Items below their minimum appear on Today's `low_stock` list, replacing the M1 stub.
+
+### F3. Expenses
+- An expense has a category, an amount, a date, a note, and optionally the shift it was paid from.
+- Categories are editable. The defaults are rent, salaries, materials, lab, utilities and other.
+
+### F4. Staff pay
+- **Pay rules per member.** A rule is a percentage of the revenue they produce, a fixed amount per visit or procedure, a monthly salary, or a mix of these.
+- **Monthly statement per member.** The statement lists the visits and procedures that member did, the revenue and refunds attributed to them, what they earned, the payouts already made, and the balance still owed. Revenue is attributed to the doctor of the visit.
+- **Payouts.** Payouts are recorded against the statement. Paying out cash requires an open shift.
+
+### F5. Receivables and money reports
+- **Receivables.** Each patient with an unpaid balance, how old the balance is, and their last visit.
+- **Revenue.** Revenue by day, by month, by doctor, by section, and by payment method.
+- **Profit.** Monthly profit is revenue minus refunds minus expenses minus staff pay. The summaries tables from design 4.4 are extended for this.
+
+### F6. Patient insights and tags
+- **Counts.** Active patients (seen in the last 6 months), new this month, at risk (they used to return but have gone quiet), reactivated this month, the repeat rate, and revenue per patient.
+- **Lists.** Never came back, going quiet, unfinished treatment, unused prepaid sessions (once F7 exists), and outstanding balance. Lists are filterable, paged and exportable to CSV, and each export writes an access event.
+- **Tags.** Patient tags are editable per place, such as VIP, insurance or a referral source. A patient can carry several tags, and the lists and search can filter by tag.
+
+### F7. Session packages
+- **A package** is a procedure or service, a number of sessions and a price. Selling one to a patient creates an invoice line and a remaining count of sessions.
+- **Using a session.** Recording that procedure on a later visit uses up one session at no charge.
+- **Unused sessions** show on the patient and in the insights lists. Physiotherapy, dermatology and dental all use this.
+
+### F8. Reports
+- **Clinic performance.** Visits, no-shows, average wait and doctor time, and revenue per day and per month.
+- **Staff performance.** Visits, revenue and average doctor time per member.
+- All of these read from the summaries, never from a scan of visits.
