@@ -87,11 +87,13 @@ function initTeam() {
     return "";
   }
 
-  function switchButton(state, label, reason, data) {
-    const button = el("button", `toggle ${state}`, t(`team_${state}`));
+  // A group that is partly on shows how much ("3 of 9"), not a vague "Some".
+  function switchButton(state, label, reason, data, count) {
+    const text = state === "some" && count ? t("team_count", count) : t(`team_${state}`);
+    const button = el("button", `toggle ${state}`, text);
     button.type = "button";
     button.setAttribute("aria-pressed", state === "on" ? "true" : state === "some" ? "mixed" : "false");
-    button.setAttribute("aria-label", `${label}: ${t(`team_${state}`)}`);
+    button.setAttribute("aria-label", `${label}: ${text}`);
     Object.assign(button.dataset, data);
     if (reason) { button.disabled = true; button.title = reason; }
     return button;
@@ -132,7 +134,9 @@ function initTeam() {
       for (const m of columns) {
         const state = m.groups[group.key] === "partial" ? "some" : m.groups[group.key];
         const td = el("td");
-        td.append(switchButton(state, `${group.label}, ${m.name}`, blocked(m, codes), { member: m.id, group: group.key }));
+        const held = codes.filter((c) => m.codes.includes(c)).length;
+        td.append(switchButton(state, `${group.label}, ${m.name}`, blocked(m, codes), { member: m.id, group: group.key },
+          { n: held, total: codes.length }));
         row.append(td);
       }
       tbody.append(row);
@@ -180,6 +184,14 @@ function initTeam() {
     let what;
     if (button.dataset.group) {
       const key = button.dataset.group;
+      if (member.groups[key] === "partial") {
+        // Partly on: show the single permissions instead of switching the whole group on (judge, team review).
+        open.add(key);
+        draw();
+        const row = holder.querySelector(`[data-expand="${key}"]`);
+        if (row) row.focus();
+        return;
+      }
       body.groups = { [key]: member.groups[key] !== "on" };
       what = { name: groupLabel.get(key), on: body.groups[key] };
     } else {

@@ -338,6 +338,13 @@ class SectionLimitTests(TeamCase):
         r = call(self.c_desk, "POST", f"/api/v1/appointments/{self.teeth_visit}/arrive", {"status": "booked"})
         self.assertEqual(r.status_code, 200, r.content)
 
+    def test_another_sections_bill_is_404(self):
+        pay = {"amount": 100, "method": "cash"}
+        self.assertEqual(call(self.c_desk, "POST", f"/api/v1/appointments/{self.kid_visit}/payments", pay).status_code,
+                         404)
+        r = call(self.c_desk, "POST", f"/api/v1/appointments/{self.teeth_visit}/payments", pay)
+        self.assertEqual(r.status_code, 201, r.content)
+
     def test_booking_and_lists_follow_the_sections(self):
         r = self.book_c(self.c.membership("doctor").id, self.kids.id, client=self.c_desk, expect=404)
         self.assertEqual(r.json()["error"]["code"], "not_found")

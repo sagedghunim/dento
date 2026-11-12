@@ -47,8 +47,12 @@ def lock_appointment(ctx, appointment_id):
     found = sql.row(ctx, APPOINTMENT_LOCK_SQL, [ctx.clinic_id, appointment_id])
     if found is None:
         raise not_found("appointment")
-    return dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
-                     "service_name", "section_id"), found))
+    appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
+                            "service_name", "section_id"), found))
+    from scheduling.rules import check_scope
+
+    check_scope(ctx, appointment["section_id"], appointment["doctor_id"])  # design G1: another section's visit is 404
+    return appointment
 
 
 def open_invoice(ctx, appointment_id, lock=True):

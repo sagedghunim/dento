@@ -3174,3 +3174,6 @@ msgstr "صافي الشهر"
 
 msgid "Costs are ahead of income so far this month"
 msgstr "المصروفات أكتر من الدخل لحد النهارده"
+
+msgid "{n} of {total}"
+msgstr "{n} من {total}"
