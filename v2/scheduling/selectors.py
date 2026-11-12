@@ -131,16 +131,20 @@ def etag_matches(header, etag):
     return etag in candidates or f"W/{etag}" in candidates or "*" in candidates
 
 
+LOW_STOCK_LIMIT = 20  # as inventory.services.low_stock
+
+
 def today_data(ctx, day, state, section_id=None):
     """Everything Today shows, in four statements whatever the clinic's size.
 
-    The place's sections come with the doctors, in one statement. `section_id` filters the rows in
+    The place's sections and its low-stock items (F2, for those with inventory.use) come with the doctors, in
+    one statement. `section_id` filters the rows in
     memory (design D1: a large center has a few hundred rows a day); an unknown section is 404.
     Money totals and the doctor-day counts stay the whole place's.
     """
     clinic = ctx.clinic
     now = timezone.now()
-    doctors, sections = {}, []
+    doctors, sections, low_stock = {}, [], []
     for kind, row_id, name, starts, ends, mode, minutes, cap, session_section, sort, specialty in sql.rows(ctx, """
             SELECT 'doctor' AS row_kind, m.id, m.display_name, s.starts, s.ends, s.mode, s.slot_minutes, s.max_bookings,
                    s.section_id, 0 AS sort, NULL::varchar AS specialty_code
@@ -151,7 +155,16 @@ def today_data(ctx, day, state, section_id=None):
             SELECT 'section', c.id, c.name, NULL, NULL, NULL, NULL, NULL, NULL, c.sort, c.specialty_code
               FROM "clinics_section" c
              WHERE c.clinic_id = %s AND c.is_active
-             ORDER BY 1, 10, 2, 4""", [day.weekday(), ctx.clinic_id, ctx.clinic_id]):
+            UNION ALL
+            (SELECT 'low', i.id, i.name, NULL, NULL, i.unit, i.quantity, i.threshold, NULL, i.quantity - i.threshold, NULL
+               FROM "inventory_item" i
+              WHERE i.clinic_id = %s AND %s AND i.is_active AND i.quantity <= i.threshold
+              ORDER BY i.quantity - i.threshold, i.name LIMIT %s)
+             ORDER BY 1, 10, 2, 4""", [day.weekday(), ctx.clinic_id, ctx.clinic_id, ctx.clinic_id,
+                                       ctx.can("inventory.use"), LOW_STOCK_LIMIT]):
+        if kind == "low":
+            low_stock.append({"id": row_id, "name": name, "unit": mode, "quantity": minutes, "threshold": cap})
+            continue
         if kind == "section":
             sections.append({"id": row_id, "name": name, "specialty": specialty})
             continue
@@ -196,7 +209,7 @@ def today_data(ctx, day, state, section_id=None):
         "day": day.isoformat(), "version": state["version"], "server_time": local_iso(clinic, now),
         "business_day": business_day(clinic, now).isoformat(), "next_rollover": local_iso(clinic, next_rollover(clinic, now)),
         "kind": clinic.kind, "sections": sections, "section_id": section_id,
-        "queues": queues, "recent": _recent(appointments), "low_stock": [],  # items arrive in M3
+        "queues": queues, "recent": _recent(appointments), "low_stock": low_stock,
         "truncated": truncated,
     }
     if show_money:
@@ -298,8 +311,22 @@ def has_bookings(ctx):
 
 
 def day_counts(ctx, day):
-    """For the recompute: per doctor, active bookings, visits done and the highest turn (no locks)."""
-    return {r[0]: {"booked": r[1], "done": r[2], "max_queue_no": r[3]} for r in sql.rows(ctx, """
+    """For the recompute: per doctor, active bookings, visits done, the highest turn, and the report counters
+    (F8): no-shows, the timed visits' wait and doctor seconds, and the procedures recorded on the day's visits."""
+    found = {r[0]: {"booked": r[1], "done": r[2], "max_queue_no": r[3], "no_shows": r[4], "timed": r[5],
+                    "wait_secs": r[6], "room_secs": r[7], "procedures": 0} for r in sql.rows(ctx, """
         SELECT doctor_id, count(*) FILTER (WHERE status <> 'cancelled'), count(*) FILTER (WHERE status = 'done'),
-               max(queue_no)
-          FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s GROUP BY doctor_id""", [ctx.clinic_id, day])}
+               max(queue_no), count(*) FILTER (WHERE status = 'no_show'), count(*) FILTER (WHERE t),
+               coalesce(sum(floor(GREATEST(0, extract(epoch FROM called_at - arrived_at)))) FILTER (WHERE t), 0)::bigint,
+               coalesce(sum(floor(GREATEST(0, extract(epoch FROM finished_at - called_at)))) FILTER (WHERE t), 0)::bigint
+          FROM (SELECT *, status = 'done' AND NOT auto_closed AND arrived_at IS NOT NULL AND called_at IS NOT NULL
+                          AND finished_at IS NOT NULL AS t
+                  FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s) a
+         GROUP BY doctor_id""", [ctx.clinic_id, day])}
+    for doctor_id, count in sql.rows(ctx, """
+            SELECT a.doctor_id, count(*) FROM "clinical_visit_procedure" v
+              JOIN "scheduling_appointment" a ON a.clinic_id = v.clinic_id AND a.id = v.appointment_id
+             WHERE v.clinic_id = %s AND a.day = %s GROUP BY a.doctor_id""", [ctx.clinic_id, day]):
+        found.setdefault(doctor_id, {"booked": 0, "done": 0, "max_queue_no": 0, "no_shows": 0, "timed": 0,
+                                     "wait_secs": 0, "room_secs": 0})["procedures"] = count
+    return found

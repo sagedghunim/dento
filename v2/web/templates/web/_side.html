@@ -1,10 +1,11 @@
-{% load i18n hamada %}{% place ctx as where %}{% nav_sections ctx as sections %}
+{% load i18n hamada %}{% get_current_language as LANG %}{% place ctx as where %}{% nav_sections ctx as sections %}
 <aside class="side">
   <div class="side-top">
     <div>
       <a class="brand" href="/">{% translate "Dento" %}</a>
       <p class="tagline">{% translate "Clinic management, made simple" %}</p>
     </div>
+    <button type="button" class="btn ghost lang-btn" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}" lang="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
   </div>
   <div class="place">
     <p class="side-label">{{ where.kind }}</p>

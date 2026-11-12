@@ -4,7 +4,8 @@ Lock order (design 5.0, rows added for M2):
 - visit note: key -> the note row (conditional on its version);
 - vitals: key -> the vitals row (conditional on its version);
 - prescription: key -> [medicines added from it, inserted] -> counter prescription;
-- recording a procedure: key -> appointment -> plan item -> invoice (or counter invoice) -> tooth row -> clinic_day;
+- recording a procedure: key -> appointment -> plan item -> patient package (F7) -> invoice (or counter invoice)
+  -> inventory items (its materials, F2) -> tooth row -> doctor_day -> clinic_day;
 - a tooth's state: key -> tooth row;
 - treatment plan: key -> plan row -> its items;
 - library rows (medicines, templates, procedures): key -> the row.
@@ -768,10 +769,8 @@ def record_procedure(ctx, appointment_id, request):
     status = appointment["status"]
     if status in ("booked", "cancelled", "no_show"):
         raise ApiError("visit_closed", _("Record procedures on a visit that has arrived."), 409, fields={"status": status})
-    section_id = sql.row(ctx, 'SELECT section_id FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
-                         [ctx.clinic_id, appointment_id])[0]
     procedure = _procedure(ctx, request["procedure_id"])
-    if procedure["section_id"] != section_id:
+    if procedure["section_id"] != appointment["section_id"]:
         raise ApiError("invalid", _("This procedure belongs to another section."), fields={"procedure_id": "section"})
     tooth, surfaces = request["tooth"], request["surfaces"]
     list_price = procedure["price"]
@@ -799,22 +798,42 @@ def record_procedure(ctx, appointment_id, request):
         raise ApiError("invalid", _("Pick the tooth."), fields={"tooth": "required"})
     if surfaces and procedure["condition"] and procedure["condition"] not in SURFACE_CONDITIONS:
         raise ApiError("invalid", _("Only caries and fillings take surfaces."), fields={"surfaces": "not_allowed"})
-    unit_price = list_price if request["unit_price"] is None else request["unit_price"]
-    from_list = unit_price == list_price
+    qty = request["qty"]
+    package = None
+    if qty == 1 and request.get("use_package", True) and request["unit_price"] is None:
+        # A prepaid session of this procedure (F7): the oldest package with sessions left, used at no charge.
+        package = billing.use_session(ctx, appointment["patient_id"], procedure["id"])
+    if package is not None:
+        unit_price, from_list = 0, True
+    else:
+        unit_price = list_price if request["unit_price"] is None else request["unit_price"]
+        from_list = unit_price == list_price
     if not from_list:
         ctx.require("billing.discount")
-    qty = request["qty"]
     description = procedure["name_ar"] + (f" - {tooth}" if tooth else "") + (f" ({''.join(surfaces)})" if surfaces else "")
+    if package is not None:
+        description = f"{description} - {package['name']}"
     line_id, invoice = billing.add_visit_line(ctx, appointment, "procedure", description, qty, unit_price, from_list)
     now = timezone.now()
     record_id = sql.row(ctx, """
         INSERT INTO "clinical_visit_procedure" (clinic_id, appointment_id, patient_id, procedure_id, plan_item_id, tooth,
                                                 surfaces, area, qty, unit_price, amount, invoice_line_id, note, created_at,
-                                                created_by_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+                                                created_by_id, patient_package_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
         ctx.clinic_id, appointment_id, appointment["patient_id"], procedure["id"], plan_item["id"] if plan_item else None,
         tooth, surfaces, request["area"], qty, unit_price, qty * unit_price, line_id, request["note"], now,
-        ctx.membership_id])[0]
+        ctx.membership_id, package["id"] if package else None])[0]
+    # Its materials come out of stock, and their average cost becomes the line's internal cost (F2).
+    from inventory.services import deduct_materials
+
+    deltas = Deltas()
+    internal_cost = deduct_materials(ctx, procedure["id"], qty, patient_id=appointment["patient_id"],
+                                     appointment_id=appointment_id, visit_procedure_id=record_id, deltas=deltas)
+    if internal_cost:  # both rows in one statement (rows this flow just wrote: no new lock)
+        sql.run(ctx, """
+            WITH line AS (UPDATE "billing_invoice_line" SET internal_cost = %s WHERE clinic_id = %s AND id = %s)
+            UPDATE "clinical_visit_procedure" SET internal_cost = %s WHERE clinic_id = %s AND id = %s""",
+                [internal_cost, ctx.clinic_id, line_id, internal_cost, ctx.clinic_id, record_id])
     if plan_item is not None:
         sql.run(ctx, "UPDATE \"clinical_plan_item\" SET status = 'done', done_appointment_id = %s, updated_at = %s "
                      "WHERE clinic_id = %s AND id = %s", [appointment_id, now, ctx.clinic_id, plan_item["id"]])
@@ -834,8 +853,11 @@ def record_procedure(ctx, appointment_id, request):
             ctx.clinic_id, appointment["patient_id"], tooth, current[0] if current else "healthy",
             list(current[1]) if current else [], appointment_id, procedure["id"], record_id, request["note"][:500], now,
             ctx.membership_id])
-    version = Deltas().clinic_day(appointment["day"]).write_clinics(ctx)[appointment["day"]]
+    deltas.doctor_day(appointment["day"], appointment["doctor_id"], procedures=1).clinic_day(appointment["day"])
+    deltas.write_doctors(ctx)
+    version = deltas.write_clinics(ctx)[appointment["day"]]
     record = {"id": record_id, "appointment_id": appointment_id, "procedure_id": procedure["id"],
+              "internal_cost": internal_cost, "patient_package_id": package["id"] if package else None,
               "name_ar": procedure["name_ar"], "name_en": procedure["name_en"], "tooth": tooth, "surfaces": surfaces,
               "area": request["area"], "qty": qty, "unit_price": unit_price, "amount": qty * unit_price,
               "invoice_line_id": line_id, "plan_item_id": plan_item["id"] if plan_item else None, "note": request["note"]}

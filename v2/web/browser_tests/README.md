@@ -8,6 +8,7 @@ They cover what Django's test client can't: the M1 decisions R2, R7 and R8.
 | `e1_rows_stay.mjs` | R8: at 390 px with touch, a row under a resting finger stays put when a booking lands above it; a tap within 700 ms of a row's redraw is ignored |
 | `e2_no_double_booking.mjs` | R7: a booking whose answer is lost can't be closed away, "Try again" books once, and a page change lists it instead of resending it |
 | `e3_finish_collect.mjs` | R2: "Finish and collect" after another screen finished the visit says nothing was collected, and "Collect now" takes the payment once |
+| `e4_dental_chart.mjs` | The dental chart, as a doctor (`HAMADA_BT_USER=ahmed`): a double-clicked finding and procedure save once, a dropped connection keeps the save for "Try again", Add to plan marks the tooth in progress, an expired session goes to sign-in. Not in `run.mjs` (it needs a doctor). `HAMADA_BT_SHOTS=<folder>` takes the 1280 and 390 px screenshots |
 
 ## Run
 

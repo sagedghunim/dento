@@ -8,9 +8,9 @@ from core import paging
 from core.api import Result, api
 from core.days import business_day
 from core.errors import ApiError
-from core.validate import path_id
+from core.validate import boolean, ident, path_id, text
 
-from . import selectors, services
+from . import selectors, services, tags
 
 
 def _not_found():
@@ -19,10 +19,23 @@ def _not_found():
 
 @api("GET", perm="patients.view")
 def search_view(request, ctx, data):
+    """?q= (name, phone or file number) and/or ?tag=<id> (F6). With a tag alone, ?after=<patient id> pages."""
     query = request.GET.get("q", "")
     if len(query) > 60:
         raise ApiError("invalid", "q is too long", fields={"q": "too_long"})
-    return {"items": selectors.search(ctx, query, business_day(ctx.clinic))}
+    today = business_day(ctx.clinic)
+    tag = request.GET.get("tag")
+    if not tag:
+        return {"items": selectors.search(ctx, query, today)}
+    tag_id = ident(tag, "tag")
+    if query.strip():
+        items = selectors.search(ctx, query, today)
+        keep = tags.keep_tagged(ctx, [i["id"] for i in items], tag_id)
+        return {"items": [i for i in items if i["id"] in keep]}
+    after = request.GET.get("after")
+    ids = tags.patients_with_tag(ctx, tag_id, ident(after, "after") if after else None)
+    items = selectors.by_ids(ctx, ids, today)
+    return {"items": items, "next": str(ids[-1]) if len(ids) == tags.BY_TAG_LIMIT else None}
 
 
 @api("GET", perm="patients.view")
@@ -88,3 +101,67 @@ def payments_view(request, ctx, data, patient_id):
     record_access(ctx, patient_id, AuditAccess.Action.HISTORY)
     return patient_payments(ctx, patient_id, paging.limit(request), paging.time_cursor(request))
 
+
+
+# --- Tags (F6) -------------------------------------------------------------------------------------------------
+
+
+def _tag_id(value):
+    return path_id(value, tags.not_found())
+
+
+def _replay_tag(ctx, stored):
+    return {"tag": tags.get_tag(ctx, stored["target_id"])}
+
+
+@api("GET", perm="patients.view")
+def tags_view(request, ctx, data):
+    return {"items": tags.tags(ctx, include_inactive=request.GET.get("all") == "1")}
+
+
+@api("POST", perm="patients.tags", replay=_replay_tag)
+def create_tag_view(request, ctx, data):
+    """POST {name, color?}."""
+    tag = tags.create_tag(ctx, text(data, "name", 40), tags.check_color(data.get("color", "") or ""))
+    return Result({"tag": tag}, status=201, target_type="tag", target_id=tag["id"])
+
+
+@api("PATCH", perm="patients.tags", replay=_replay_tag)
+def update_tag_view(request, ctx, data, tag_id):
+    """PATCH {name?, color?, is_active?, sort?}."""
+    from core.numbers import parse_int
+
+    tag_id = _tag_id(tag_id)
+    values = {}
+    if "name" in data:
+        values["name"] = text(data, "name", 40)
+    if "color" in data:
+        values["color"] = tags.check_color(data.get("color") or "")
+    if "is_active" in data:
+        values["is_active"] = boolean(data, "is_active")
+    if "sort" in data:
+        values["sort"] = parse_int(data.get("sort"), "sort", 0, 32767)
+    tag = tags.update_tag(ctx, tag_id, values)
+    return Result({"tag": tag}, target_type="tag", target_id=tag_id)
+
+
+def _replay_patient_tags(ctx, stored):
+    return {"tags": tags.patient_tags(ctx, stored["target_id"])}
+
+
+@api("GET", perm="patients.view")
+def patient_tags_view(request, ctx, data, patient_id):
+    patient_id = path_id(patient_id, _not_found())
+    selectors.exists(ctx, patient_id)
+    return {"tags": tags.patient_tags(ctx, patient_id)}
+
+
+@api("PUT", perm="patients.edit", replay=_replay_patient_tags)
+def set_patient_tags_view(request, ctx, data, patient_id):
+    """PUT {tag_ids: [...]}: the patient's tags, absolute."""
+    patient_id = path_id(patient_id, _not_found())
+    raw = data.get("tag_ids")
+    if not isinstance(raw, list):
+        raise ApiError("invalid", "tag_ids must be a list", fields={"tag_ids": "list"})
+    return Result({"tags": tags.set_patient_tags(ctx, patient_id, [ident(t, "tag_ids") for t in raw])},
+                  target_type="patient", target_id=patient_id)

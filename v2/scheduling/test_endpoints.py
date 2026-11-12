@@ -174,7 +174,8 @@ class EndpointMatrixTests(M1TestCase):
                         declared[str(route.pattern)] = meta["access"]
         self.assertEqual(declared, {
             "api/v1/patients/<int:patient_id>": "open", "api/v1/patients/<int:patient_id>/visits": "history",
-            "api/v1/patients/<int:patient_id>/payments": "history", "api/v1/invoices/<int:invoice_id>": "invoice"})
+            "api/v1/patients/<int:patient_id>/payments": "history", "api/v1/invoices/<int:invoice_id>": "invoice",
+            "api/v1/patients/<int:patient_id>/packages": "history"})  # M3 (F7); billing.test_packages reads it
         o = objects(self, self.a)
         for name, (method, path, codes, access) in reads(self, o).items():
             with clinic_transaction(self.a.id, self.a.shard):

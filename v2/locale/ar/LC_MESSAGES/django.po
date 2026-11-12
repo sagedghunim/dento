@@ -1580,3 +1580,276 @@ msgstr "كتابة الروشتات"
 
 msgid "Write the complaint and the visit notes"
 msgstr "كتابة الشكوى وملاحظات الزيارة"
+
+msgid "Healthy"
+msgstr "سليم"
+
+msgid "Caries"
+msgstr "تسوس"
+
+msgid "Pulp caries"
+msgstr "تسوس واصل للعصب"
+
+msgid "Planned"
+msgstr "مخطط له"
+
+msgid "Filling"
+msgstr "حشو"
+
+msgid "Crown"
+msgstr "تاج"
+
+msgid "Root canal"
+msgstr "علاج عصب"
+
+msgid "Open root canal"
+msgstr "علاج عصب مفتوح"
+
+msgid "Extracted"
+msgstr "مخلوع"
+
+msgid "Missing"
+msgstr "مفقود"
+
+msgid "Implant"
+msgstr "زرعة"
+
+msgid "Bridge"
+msgstr "جسر"
+
+msgid "Fractured"
+msgstr "مكسور"
+
+msgid "Impacted"
+msgstr "مدفون"
+
+msgid "Dental chart"
+msgstr "مخطط الأسنان"
+
+msgid "Tooth {n}"
+msgstr "سن {n}"
+
+msgid "In progress"
+msgstr "قيد العلاج"
+
+msgid "Has procedures"
+msgstr "عليه إجراءات"
+
+msgid "Finding"
+msgstr "تسجيل فحص"
+
+msgid "Saved: tooth {n}, {condition}"
+msgstr "تم الحفظ: سن {n}، {condition}"
+
+msgid "Record a procedure"
+msgstr "تسجيل إجراء"
+
+msgid "Recorded on tooth {n}: {name}. Added to the bill."
+msgstr "تم تسجيل {name} على سن {n} وإضافته للفاتورة."
+
+msgid "From the plan: {name} · {amount}"
+msgstr "من الخطة: {name} · {amount}"
+
+msgid "Pick the procedure"
+msgstr "اختر الإجراء"
+
+msgid "Add to plan"
+msgstr "أضف للخطة"
+
+msgid "Added to the plan: {name}, tooth {n}"
+msgstr "أضيف للخطة: {name}، سن {n}"
+
+msgid "Finish or discard the unconfirmed save first."
+msgstr "أكمل الحفظ غير المؤكد أو تجاهله أولًا."
+
+msgid "The history didn't load. Try again."
+msgstr "لم يتم تحميل السجل. حاول مرة أخرى."
+
+msgid "Nothing recorded on this tooth yet."
+msgstr "لا يوجد شيء مسجل على هذا السن بعد."
+
+msgid "Surfaces"
+msgstr "الأسطح"
+
+msgid "Mesial"
+msgstr "إنسي"
+
+msgid "Occlusal"
+msgstr "إطباقي"
+
+msgid "Distal"
+msgstr "وحشي"
+
+msgid "Buccal"
+msgstr "شدقي"
+
+msgid "Lingual"
+msgstr "لساني"
+
+msgid "Tooth"
+msgstr "سن"
+
+msgid "Teeth"
+msgstr "الأسنان"
+
+msgid "Teeth set"
+msgstr "نوع الأسنان"
+
+msgid "Permanent"
+msgstr "دائمة"
+
+msgid "Primary"
+msgstr "لبنية"
+
+msgid "Tap a tooth to view its history and record findings."
+msgstr "اضغط على أي سن لعرض سجله وتسجيل الفحص."
+
+msgid "Key"
+msgstr "دليل الألوان"
+
+msgid "Findings"
+msgstr "الفحص"
+
+msgid "Condition"
+msgstr "الحالة"
+
+msgid "Note (optional)"
+msgstr "ملاحظة (اختياري)"
+
+msgid "Save the finding"
+msgstr "حفظ الفحص"
+
+msgid "It is added to this visit's bill."
+msgstr "يضاف إلى فاتورة هذه الزيارة."
+
+msgid "Procedure"
+msgstr "الإجراء"
+
+msgid "This section's list has no tooth procedures yet."
+msgstr "قائمة هذا القسم ليس فيها إجراءات على الأسنان بعد."
+
+msgid "Record and add to the bill"
+msgstr "تسجيل وإضافة للفاتورة"
+
+msgid "Procedures are recorded once the patient has arrived."
+msgstr "تُسجل الإجراءات بعد وصول المريض."
+
+msgid "Add to the treatment plan"
+msgstr "إضافة لخطة العلاج"
+
+msgid "History"
+msgstr "السجل"
+
+msgid "A shift is already open."
+msgstr "فيه وردية مفتوحة بالفعل."
+
+msgid "An expense can't be dated after today."
+msgstr "مينفعش تاريخ المصروف يكون بعد النهارده."
+
+msgid "Count the stock back to zero or more first."
+msgstr "اجرد المخزون الأول لحد ما يبقى صفر أو أكتر."
+
+msgid "Edit session packages"
+msgstr "تعديل باقات الجلسات"
+
+msgid "Edit the patient tags list"
+msgstr "تعديل قائمة تصنيفات المرضى"
+
+msgid "Export patient lists"
+msgstr "تصدير قوائم المرضى"
+
+msgid "Not enough stock."
+msgstr "المخزون مش كفاية."
+
+msgid "Open and close the register and record cash in and out"
+msgstr "فتح وقفل الخزنة وتسجيل الفلوس الداخلة والخارجة"
+
+msgid "Open the cash register first."
+msgstr "افتح الخزنة الأول."
+
+msgid "Opening stock"
+msgstr "رصيد أول المدة"
+
+msgid "See clinic and staff performance and patient insights"
+msgstr "مشاهدة أداء العيادة والموظفين وتحليلات المرضى"
+
+msgid "Take cash into the register"
+msgstr "استلام فلوس في الخزنة"
+
+msgid "The pay rule changed meanwhile. Reload and try again."
+msgstr "نظام المرتب اتغير في الوقت ده. حدّث الصفحة وجرّب تاني."
+
+msgid "The quantity can't be below zero."
+msgstr "الكمية مينفعش تقل عن صفر."
+
+msgid "The quantity changed meanwhile. Reload and try again."
+msgstr "الكمية اتغيرت في الوقت ده. حدّث الصفحة وجرّب تاني."
+
+msgid "This category is already in the list."
+msgstr "البند ده موجود في القائمة بالفعل."
+
+msgid "This category isn't used any more."
+msgstr "البند ده مبقاش مستخدم."
+
+msgid "This category wasn't found."
+msgstr "البند ده مش موجود."
+
+msgid "This expense came from a stock purchase. Adjust the stock instead."
+msgstr "المصروف ده جاي من شراء خامات. عدّل المخزون بدل كده."
+
+msgid "This expense wasn't found."
+msgstr "المصروف ده مش موجود."
+
+msgid "This item is already in the list."
+msgstr "الصنف ده موجود في القائمة بالفعل."
+
+msgid "This item isn't used any more."
+msgstr "الصنف ده مبقاش مستخدم."
+
+msgid "This item wasn't found."
+msgstr "الصنف ده مش موجود."
+
+msgid "This member wasn't found."
+msgstr "الموظف ده مش موجود."
+
+msgid "This shift is already closed."
+msgstr "الوردية دي اتقفلت بالفعل."
+
+msgid "This shift wasn't found."
+msgstr "الوردية دي مش موجودة."
+
+msgid "This visit belongs to another patient."
+msgstr "الزيارة دي تبع مريض تاني."
+
+msgid "This package wasn't found."
+msgstr "الباقة دي مش موجودة."
+
+msgid "This package is already in the list."
+msgstr "الباقة دي موجودة في القائمة بالفعل."
+
+msgid "This procedure isn't used any more."
+msgstr "الإجراء ده مبقاش مستخدم."
+
+msgid "This package isn't sold any more."
+msgstr "الباقة دي مبقتش بتتباع."
+
+msgid "This package belongs to another section."
+msgstr "الباقة دي تبع قسم تاني."
+
+msgid "Sessions of this package were already used."
+msgstr "جلسات من الباقة دي اتستخدمت بالفعل."
+
+msgid "The end date is before the start date."
+msgstr "تاريخ النهاية قبل تاريخ البداية."
+
+msgid "Pick a shorter period."
+msgstr "اختار فترة أقصر."
+
+msgid "This tag wasn't found."
+msgstr "التصنيف ده مش موجود."
+
+msgid "This tag is already in the list."
+msgstr "التصنيف ده موجود في القائمة بالفعل."
+
+msgid "This list wasn't found."
+msgstr "القائمة دي مش موجودة."

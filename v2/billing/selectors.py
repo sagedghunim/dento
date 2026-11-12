@@ -127,6 +127,14 @@ def day_sums(ctx, day):
           FROM "billing_payment" WHERE clinic_id = %s AND day = %s GROUP BY doctor_id""", [ctx.clinic_id, day])}
 
 
+def day_money(ctx, day):
+    """For the recompute: money in and refunded that day by (section, method), section 0 for none (no locks)."""
+    return {(r[0], r[1]): {"collected": r[2], "refunded": r[3]} for r in sql.rows(ctx, """
+        SELECT coalesce(section_id, 0), method, coalesce(sum(amount) FILTER (WHERE kind = 'payment'), 0),
+               coalesce(sum(amount) FILTER (WHERE kind = 'refund'), 0)
+          FROM "billing_payment" WHERE clinic_id = %s AND day = %s GROUP BY 1, 2""", [ctx.clinic_id, day])}
+
+
 BALANCE_LIMIT = 50  # invoices listed; the total covers them all
 
 
@@ -153,3 +161,37 @@ def visit_invoice(ctx, appointment_id):
     body = invoice(ctx, found[0])
     body["remaining"] = body["total"] - body["paid"]
     return body
+
+
+# --- Session packages (F7) -------------------------------------------------------------------------------------
+
+PATIENT_PACKAGES_LIMIT = 50
+
+
+def patient_package_payload(clinic, p):
+    return {"id": p["id"], "patient_id": p["patient_id"], "package_id": p["package_id"],
+            "procedure_id": p["procedure_id"], "name": p["name"], "sessions": p["sessions"], "used": p["used"],
+            "left": p["sessions"] - p["used"] if p["voided_at"] is None else 0, "price": p["price"],
+            "invoice_id": p["invoice_id"], "appointment_id": p["appointment_id"],
+            "sold_at": local_iso(clinic, p["sold_at"]), "voided": p["voided_at"] is not None}
+
+
+def patient_package(ctx, patient_package_id):
+    from .services import PATIENT_PACKAGE_COLUMNS, _patient_package
+
+    found = sql.row(ctx, f'SELECT {PATIENT_PACKAGE_COLUMNS} FROM "billing_patient_package" WHERE clinic_id = %s '
+                         "AND id = %s", [ctx.clinic_id, patient_package_id])
+    if found is None:
+        raise ApiError("not_found", _("This package wasn't found."), 404)
+    return patient_package_payload(ctx.clinic, _patient_package(found))
+
+
+def patient_packages(ctx, patient_id):
+    """A patient's packages, those with sessions left first, then newest (one statement, at most 50)."""
+    from .services import PATIENT_PACKAGE_COLUMNS, _patient_package
+
+    return [patient_package_payload(ctx.clinic, _patient_package(r)) for r in sql.rows(ctx, f"""
+        SELECT {PATIENT_PACKAGE_COLUMNS} FROM "billing_patient_package" WHERE clinic_id = %s AND patient_id = %s
+         ORDER BY (used < sessions AND voided_at IS NULL) DESC, sold_at DESC, id DESC LIMIT %s""",
+                                                                            [ctx.clinic_id, patient_id,
+                                                                             PATIENT_PACKAGES_LIMIT])]

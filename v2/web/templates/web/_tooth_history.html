@@ -1,0 +1,8 @@
+{% load i18n hamada %}{% for h in items %}
+<li class="history-item">
+  <div class="history-top"><span class="key" data-condition="{{ h.condition }}" aria-hidden="true"></span><strong>{{ h.label }}</strong>{% if h.surfaces %} <bdi class="ltr">{{ h.surfaces|join:" " }}</bdi>{% endif %}</div>
+  {% if h.procedure %}<div><bdi dir="auto">{{ h.procedure }}</bdi></div>{% endif %}
+  {% if h.note %}<div class="muted"><bdi dir="auto">{{ h.note }}</bdi></div>{% endif %}
+  <div class="muted"><span class="nowrap">{% if h.day %}{{ h.day|shortday }}{% else %}{{ h.at|shortday }}{% endif %}</span> · {{ h.at|clock }}{% if h.by_id %} · <bdi dir="auto">{{ names|get_item:h.by_id }}</bdi>{% endif %}</div>
+</li>
+{% endfor %}

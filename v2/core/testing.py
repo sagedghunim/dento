@@ -72,10 +72,12 @@ class ShardTestCase(TestCase):
             enable_totp(user)
         return user
 
-    def clinic(self, prefix, shard="shard_1", specialty="dental", sections=None):
+    def clinic(self, prefix, shard="shard_1", specialty="dental", sections=None, register=True):
         """A clinic with an owner (two-step sign-in on), a doctor and an assistant.
 
         With `sections` ([{"specialty": ..., "name": ...}, ...]) it is a center with those sections.
+        With `register` (the default) its cash register has an open shift, so cash payments work as before
+        M3; the register tests pass register=False (design F1).
         """
         owner = self.user(f"{prefix}_owner", with_totp=True)
         entry = create_clinic(name=f"{prefix} clinic", specialty_code=specialty, owner=owner, shard=shard,
@@ -89,6 +91,10 @@ class ShardTestCase(TestCase):
         add_member(entry, assistant, "assistant", "Assistant")
         with clinic_transaction(entry.id, entry.shard):
             members = {m.user_id: m for m in Membership.objects.filter(clinic_id=entry.id)}
+            if register:
+                from finance.models import Shift
+
+                Shift.objects.create(clinic_id=entry.id, opened_by_id=members[owner.id].id)
         return Fixture(entry, {"owner": (owner, members[owner.id]), "doctor": (doctor, members[doctor.id]),
                                "assistant": (assistant, members[assistant.id])})
 

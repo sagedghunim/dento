@@ -12,7 +12,7 @@ from django.utils import timezone
 from core.constraints import CompositeForeignKey
 
 METHODS = ["cash", "card", "transfer", "wallet", "instapay", "other"]  # transfer: design E3
-LINE_KINDS = ["service", "procedure", "material", "other"]
+LINE_KINDS = ["service", "procedure", "material", "package", "other"]  # package: F7
 
 
 class Invoice(models.Model):
@@ -58,6 +58,10 @@ class Invoice(models.Model):
         ]
         indexes = [
             models.Index("clinic", "patient", F("created_at").desc(), F("id").desc(), name="invoice_patient_hist"),
+            # Receivables (F5): only invoices with something owed. Its predicate reads paid, so a payment's update
+            # of the invoice is no longer HOT; payments are far rarer than the status changes that must stay HOT.
+            models.Index(fields=["clinic", "patient", "created_at"], condition=Q(status="open", paid__lt=F("total")),
+                         name="invoice_unpaid"),
         ]
 
 
@@ -69,8 +73,8 @@ class InvoiceLine(models.Model):
     kind = models.CharField(max_length=10)
     service = models.ForeignKey("clinics.Service", null=True, blank=True, on_delete=models.PROTECT,
                                 db_constraint=False, db_index=False, related_name="+")
-    # inventory_item arrives in M3, which adds the composite foreign key on (clinic_id, item_id).
-    item_id = models.BigIntegerField(null=True, blank=True)
+    item_id = models.BigIntegerField(null=True, blank=True)  # a material line's stock item (F2)
+    internal_cost = models.BigIntegerField(db_default=0)  # what the line's materials cost the place (F2), piastres
     description = models.CharField(max_length=200)
     qty = models.IntegerField(default=1)
     unit_price = models.BigIntegerField()
@@ -90,6 +94,9 @@ class InvoiceLine(models.Model):
                                 name="invoice_line_invoice_fk"),
             CompositeForeignKey(fields=["clinic", "service"], to="clinics.Service", to_fields=["clinic", "id"],
                                 name="invoice_line_service_fk"),
+            CompositeForeignKey(fields=["clinic", "item_id"], to="inventory.Item", to_fields=["clinic", "id"],
+                                name="invoice_line_item_fk"),
+            models.CheckConstraint(condition=Q(internal_cost__gte=0), name="invoice_line_cost_not_negative"),
         ]
         indexes = [models.Index(fields=["clinic", "invoice", "id"], name="invoice_line_invoice")]
 
@@ -118,6 +125,12 @@ class Payment(models.Model):
     day = models.DateField()  # the business day the money moved
     received_by_id = models.BigIntegerField(null=True, blank=True)
     note = models.CharField(max_length=200, blank=True, default="")
+    # F1: the register shift open when it was taken (cash needs one; other methods join it when one is open).
+    shift = models.ForeignKey("finance.Shift", null=True, blank=True, on_delete=models.PROTECT, db_constraint=False,
+                              db_index=False, related_name="+")
+    # F5: the visit's section, copied at insert like the doctor, for revenue by section.
+    section = models.ForeignKey("clinics.Section", null=True, blank=True, on_delete=models.PROTECT,
+                                db_constraint=False, db_index=False, related_name="+")
 
     class Meta:
         db_table = "billing_payment"
@@ -139,9 +152,91 @@ class Payment(models.Model):
                                 name="payment_doctor_fk"),
             CompositeForeignKey(fields=["clinic", "refund_of"], to="billing.Payment", to_fields=["clinic", "id"],
                                 name="payment_refund_of_fk"),
+            CompositeForeignKey(fields=["clinic", "shift"], to="finance.Shift", to_fields=["clinic", "id"],
+                                name="payment_shift_fk"),
+            CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
+                                name="payment_section_fk"),
         ]
         indexes = [
             models.Index(fields=["clinic", "invoice", "id"], name="payment_invoice"),
             models.Index("clinic", "patient", F("received_at").desc(), F("id").desc(), name="payment_patient_hist"),
             models.Index(fields=["clinic", "day", "received_by_id"], name="payment_day_closing"),
+            models.Index(fields=["clinic", "shift", "id"], condition=Q(shift__isnull=False), name="payment_shift"),
+        ]
+
+
+class Package(models.Model):
+    """A session package (F7): a procedure, a number of sessions and a price, per section."""
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    section = models.ForeignKey("clinics.Section", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                related_name="+")
+    procedure = models.ForeignKey("clinical.Procedure", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                  related_name="+")
+    name = models.CharField(max_length=120)
+    sessions = models.IntegerField()
+    price = models.BigIntegerField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "billing_package"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="package_clinic_id_uniq"),
+            models.UniqueConstraint(fields=["clinic", "section", "name"], condition=Q(is_active=True),
+                                    name="package_active_name_uniq"),
+            models.CheckConstraint(condition=Q(sessions__gte=1, sessions__lte=500, price__gte=0), name="package_valid"),
+            CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
+                                name="package_section_fk"),
+            CompositeForeignKey(fields=["clinic", "procedure"], to="clinical.Procedure", to_fields=["clinic", "id"],
+                                name="package_procedure_fk"),
+        ]
+
+
+class PatientPackage(models.Model):
+    """A package sold to a patient: its invoice line, and the sessions left (F7)."""
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    patient = models.ForeignKey("patients.Patient", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                related_name="+")
+    package = models.ForeignKey(Package, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
+    procedure = models.ForeignKey("clinical.Procedure", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                  related_name="+")  # copied from the package at sale
+    name = models.CharField(max_length=120)
+    sessions = models.IntegerField()
+    used = models.IntegerField(default=0)
+    price = models.BigIntegerField()
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
+    invoice_line_id = models.BigIntegerField(null=True, blank=True)
+    appointment = models.ForeignKey("scheduling.Appointment", on_delete=models.PROTECT, db_constraint=False,
+                                    db_index=False, related_name="+")
+    sold_at = models.DateTimeField(default=timezone.now)
+    sold_by_id = models.BigIntegerField(null=True, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)  # its line removed or invoice voided before any use
+
+    class Meta:
+        db_table = "billing_patient_package"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="patient_package_clinic_id_uniq"),
+            models.CheckConstraint(condition=Q(used__gte=0, used__lte=F("sessions"), sessions__gte=1, price__gte=0),
+                                   name="patient_package_used_valid"),
+            CompositeForeignKey(fields=["clinic", "patient"], to="patients.Patient", to_fields=["clinic", "id"],
+                                name="patient_package_patient_fk"),
+            CompositeForeignKey(fields=["clinic", "package"], to="billing.Package", to_fields=["clinic", "id"],
+                                name="patient_package_package_fk"),
+            CompositeForeignKey(fields=["clinic", "procedure"], to="clinical.Procedure", to_fields=["clinic", "id"],
+                                name="patient_package_procedure_fk"),
+            CompositeForeignKey(fields=["clinic", "invoice"], to="billing.Invoice", to_fields=["clinic", "id"],
+                                name="patient_package_invoice_fk"),
+            CompositeForeignKey(fields=["clinic", "appointment"], to="scheduling.Appointment",
+                                to_fields=["clinic", "id"], name="patient_package_appointment_fk"),
+        ]
+        indexes = [
+            models.Index(fields=["clinic", "patient", "id"], name="patient_package_patient"),
+            # Unused sessions (F6 lists, the session use in F7). Its predicate reads `used`, so a session use is a
+            # non-HOT update of one small row; fine at a few uses a day.
+            models.Index(fields=["clinic", "patient", "procedure"],
+                         condition=Q(used__lt=F("sessions"), voided_at__isnull=True), name="patient_package_open"),
         ]

@@ -4,6 +4,7 @@
 <header class="plainbar">
   <a class="brand" href="/">{% translate "Dento" %}</a>
   <span class="spacer"></span>
+  {% if mode != "place" %}<button type="button" class="btn ghost" data-action="language" data-signed-out data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}" lang="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>{% endif %}
   {% if mode == "place" %}<a class="btn ghost" href="/clinics">{% translate "Back to your places" %}</a>{% else %}<a class="btn ghost" href="/login">{% translate "Sign in" %}</a>{% endif %}
 </header>
 {% endblock %}

@@ -14,8 +14,9 @@ from django.utils.translation import gettext as _
 from core import sql
 from core.errors import ApiError
 
-DOCTOR_FIELDS = ("booked", "done", "collected", "refunded")
+DOCTOR_FIELDS = ("booked", "done", "collected", "refunded", "procedures", "no_shows", "timed", "wait_secs", "room_secs")
 CLINIC_FIELDS = ("done", "collected", "refunded", "expenses")
+MONEY_FIELDS = ("collected", "refunded")
 
 
 def _day_full():
@@ -28,6 +29,7 @@ class Deltas:
     def __init__(self):
         self.doctor = defaultdict(lambda: dict.fromkeys(DOCTOR_FIELDS, 0))
         self.clinic = defaultdict(lambda: dict.fromkeys(CLINIC_FIELDS, 0))
+        self.money = defaultdict(lambda: dict.fromkeys(MONEY_FIELDS, 0))  # (day, section_id or 0, method)
         self.turn = None  # (day, doctor_id) that takes the next turn
         self.cap = None  # max_bookings of that doctor-day
 
@@ -43,6 +45,21 @@ class Deltas:
         for name, value in changes.items():
             row[name] += value
         return self
+
+    def money_day(self, day, section_id, method, **changes):
+        """Money by payment day, section and method (F5). Written with the clinic-days, just before them."""
+        row = self.money[(day, section_id or 0, method)]
+        for name, value in changes.items():
+            row[name] += value
+        return self
+
+    def timing(self, day, doctor_id, arrived_at, called_at, finished_at):
+        """A finished visit's wait and doctor time (F8), when it has all three stamps; whole seconds, floored."""
+        if arrived_at is None or called_at is None or finished_at is None:
+            return self
+        wait = max(0, int((called_at - arrived_at).total_seconds()))
+        room = max(0, int((finished_at - called_at).total_seconds()))
+        return self.doctor_day(day, doctor_id, timed=1, wait_secs=wait, room_secs=room)
 
     def take_turn(self, day, doctor_id, cap=None):
         """The next turn on this doctor-day and one more active booking (design 5.1 step 4)."""
@@ -71,8 +88,18 @@ class Deltas:
             raise _day_full()
         return returned[self.turn]
 
+    def write_money(self, ctx):
+        """One upsert for the flow's money-day rows, in key order (lock order 12a, design 5.0)."""
+        if not self.money:
+            return
+        keys = sorted(self.money)
+        changes = {key: self.money[key] for key in keys}
+        self.money.clear()
+        _upsert(ctx, "summaries_money_day", "m", ("day", "section_id", "method"), MONEY_FIELDS, keys, changes)
+
     def write_clinics(self, ctx):
-        """One upsert for every clinic-day of the flow. Returns {day: new version}."""
+        """The flow's money-day rows, then one upsert for every clinic-day of the flow. Returns {day: new version}."""
+        self.write_money(ctx)
         if not self.clinic:
             return {}
         keys = sorted(self.clinic)
@@ -85,6 +112,37 @@ class Deltas:
         """Both tables, in the global order. Returns (turn or None, {day: version})."""
         turn = self.write_doctors(ctx)
         return turn, self.write_clinics(ctx)
+
+
+def record_visits(ctx, visits):
+    """Finished visits into the patients' stats rows (F6): one upsert, rows in patient order (lock order 11a).
+
+    `visits` is [(patient_id, day)]. A visit more than REACTIVATION_DAYS after the patient's last one marks them
+    reactivated on that day. SET reads the old row throughout, so the gap is measured from the old last day.
+    """
+    if not visits:
+        return
+    per_patient = {}
+    for patient_id, day in visits:
+        first, last, count = per_patient.get(patient_id, (day, day, 0))
+        per_patient[patient_id] = (min(first, day), max(last, day), count + 1)
+    rows, params = [], []
+    for patient_id in sorted(per_patient):
+        first, last, count = per_patient[patient_id]
+        rows.append("(%s, %s, %s::date, %s::date, %s)")
+        params += [ctx.clinic_id, patient_id, first, last, count]
+    sql.run(ctx, f"""
+        INSERT INTO "summaries_patient" AS s (clinic_id, patient_id, first_day, last_day, visits)
+        VALUES {", ".join(rows)}
+        ON CONFLICT (clinic_id, patient_id) DO UPDATE SET
+            visits = s.visits + EXCLUDED.visits,
+            first_day = LEAST(s.first_day, EXCLUDED.first_day),
+            reactivated_day = CASE WHEN EXCLUDED.last_day - s.last_day > %s THEN EXCLUDED.last_day
+                                   ELSE s.reactivated_day END,
+            last_day = GREATEST(s.last_day, EXCLUDED.last_day)""", [*params, REACTIVATION_DAYS])
+
+
+REACTIVATION_DAYS = 180  # a visit after this long away counts as coming back (F6)
 
 
 def bump(ctx, *days):

@@ -9,7 +9,6 @@
         <a class="menu-item" href="/clinics">{% translate "Switch clinic" %}</a>
         <a class="menu-item" href="/account/password">{% translate "Change password" %}</a>
         <a class="menu-item" href="/account/security">{% translate "Two-step sign-in" %}</a>
-        <button type="button" class="menu-item" data-action="language" data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}" lang="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button>
         <hr>
         <button type="button" class="menu-item danger" data-action="logout">{% translate "Sign out" %}</button>
       </div>

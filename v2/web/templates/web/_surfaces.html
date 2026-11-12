@@ -1,0 +1,10 @@
+{% load i18n %}<fieldset class="surfaces" data-surfaces hidden>
+  <legend>{% translate "Surfaces" %}</legend>
+  <div class="chips" dir="ltr">
+    <label class="chip" title="{% translate "Mesial" %}"><input type="checkbox" name="surface" value="M"><span>M<span class="visually-hidden"> {% translate "Mesial" %}</span></span></label>
+    <label class="chip" title="{% translate "Occlusal" %}"><input type="checkbox" name="surface" value="O"><span>O<span class="visually-hidden"> {% translate "Occlusal" %}</span></span></label>
+    <label class="chip" title="{% translate "Distal" %}"><input type="checkbox" name="surface" value="D"><span>D<span class="visually-hidden"> {% translate "Distal" %}</span></span></label>
+    <label class="chip" title="{% translate "Buccal" %}"><input type="checkbox" name="surface" value="B"><span>B<span class="visually-hidden"> {% translate "Buccal" %}</span></span></label>
+    <label class="chip" title="{% translate "Lingual" %}"><input type="checkbox" name="surface" value="L"><span>L<span class="visually-hidden"> {% translate "Lingual" %}</span></span></label>
+  </div>
+</fieldset>

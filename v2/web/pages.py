@@ -25,7 +25,7 @@ from core.days import business_day, local_iso
 from core.errors import ApiError
 
 from . import format as fmt
-from . import places
+from . import places, teeth
 from .http import clinic_page, fragment, route_exists
 
 QUEUE_CODES = ("appointments.book", "appointments.queue")
@@ -42,6 +42,7 @@ def _perms(ctx):
         "view_patients": ctx.can("patients.view"), "edit_patients": ctx.can("patients.edit"),
         "collect": ctx.can("billing.collect"), "discount": ctx.can("billing.discount"),
         "refund": ctx.can("billing.refund"), "finances": ctx.can("finances.view"),
+        "chart": ctx.can("clinical.view"), "record": ctx.can("procedures.record"),
     }
 
 
@@ -127,17 +128,28 @@ def _section_of(appointment):
     return appointment.get("section_id") or (appointment.get("service") or {}).get("section_id")
 
 
+def _dental_rows(ctx):
+    """Which rows link to the dental chart: a visit in a dental section (design E3), for those who read it."""
+    if not ctx.can("clinical.view"):
+        return lambda section_id: False
+    ids = {s["id"] for s in places.sections(ctx) if s["specialty"] == "dental"}
+    whole = ctx.clinic.specialty_code == "dental"
+    return lambda section_id: section_id in ids if section_id else whole
+
+
 def queue_context(ctx, day, today, data):
     """Today's groups, rows and recent changes, from scheduling.selectors.today_data."""
     names = {}
     groups = []
     stats = {"total": 0, "waiting": 0, "in_room": 0, "done": 0}
+    dental = _dental_rows(ctx)
     for queue in data["queues"]:
         doctor = queue["doctor"]
         names[doctor["id"]] = doctor["name"]
         rows = []
         for appointment in queue["appointments"]:
             appointment = {**appointment, "section_id": _section_of(appointment)}
+            appointment["dental"] = dental(appointment["section_id"])
             rows.append(appointment)
             status = appointment["status"]
             if status != "cancelled":
@@ -281,7 +293,7 @@ def patient_page(request, ctx, patient_id):
     return render(request, "web/patient.html", {
         "ctx": ctx, "nav_active": "patients", "patient": selectors.file_payload(patient, today),
         "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
-        "features": _features(), **_dialog_context(ctx, today)})
+        "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
 
 
 def _more(request, ctx, patient_id, kind):

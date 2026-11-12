@@ -9,6 +9,7 @@
   </div>
   <div class="appt-actions">
     {% if perms.book %}<button type="button" class="btn" data-book-patient data-id="{{ patient.id }}" data-name="{{ patient.full_name }}" data-file="{{ patient.file_no }}" data-phone="{{ patient.phone }}"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button>{% endif %}
+    {% if dental %}<a class="btn ghost" href="/patients/{{ patient.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
     {% if perms.edit_patients %}<button type="button" class="btn ghost" data-edit-patient>{% translate "Edit" %}</button>{% endif %}
   </div>
 </div>

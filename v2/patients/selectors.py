@@ -120,6 +120,15 @@ def _with_details(ctx, hits, today):
     return items
 
 
+def by_ids(ctx, patient_ids, today):
+    """Search results for known ids, in that order (the tag filter, F6): two statements."""
+    if not patient_ids:
+        return []
+    found = {r[0]: r for r in sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s '
+                                            "AND id = ANY(%s::bigint[])", [ctx.clinic_id, list(patient_ids)])}
+    return _with_details(ctx, [found[i] for i in patient_ids if i in found], today)
+
+
 def by_phone(ctx, phone):
     """This clinic's files with this phone, for the Book dialog's duplicate step (R4.2). Never blocks."""
     phone_norm = normalize_phone(phone)

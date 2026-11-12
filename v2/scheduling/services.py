@@ -16,7 +16,7 @@ from core.days import business_day
 from core.errors import ApiError
 from patients import services as patients
 from summaries import selectors as summaries_read
-from summaries.services import Deltas
+from summaries.services import Deltas, record_visits
 
 from . import rules
 from .models import Appointment
@@ -110,6 +110,7 @@ def book(ctx, request, deltas=None):
     deltas.clinic_day(day)
     if payment is not None:
         deltas.doctor_day(today, doctor.doctor_id, collected=payment["amount"])
+        deltas.money_day(today, service.section_id, payment["method"], collected=payment["amount"])
         deltas.clinic_day(today, collected=payment["amount"])
     queue_no = deltas.write_doctors(ctx)
 
@@ -131,7 +132,8 @@ def book(ctx, request, deltas=None):
     invoice = None
     if payment is not None:
         locked = {"id": appointment.id, "status": appointment.status, "day": day, "doctor_id": doctor.doctor_id,
-                  "patient_id": patient["id"], "service_id": service.id, "fee": fee, "service_name": service.name}
+                  "patient_id": patient["id"], "service_id": service.id, "fee": fee, "service_name": service.name,
+                  "section_id": service.section_id}
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
                                             invoice_number=invoice_number, today=today)
@@ -184,18 +186,20 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
                            f"updated_by_id = %s{extra_set} WHERE clinic_id = %s AND id = %s AND status = %s{extra_where} "
                            "RETURNING id, status, day, doctor_id, patient_id, service_id, fee, is_follow_up, "
                            '(SELECT name FROM "clinics_service" s WHERE s.clinic_id = "scheduling_appointment".clinic_id '
-                           'AND s.id = "scheduling_appointment".service_id)', params)
+                           'AND s.id = "scheduling_appointment".service_id), section_id, arrived_at, called_at, '
+                           "finished_at", params)
     if changed is None:
         return _unchanged(ctx, appointment_id, action, target, today,
                           with_payment=payment is not None or earlier is not None or next_visit is not None)
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
-                            "service_name"), changed))
+                            "service_name", "section_id", "arrived_at", "called_at", "finished_at"), changed))
     day, doctor_id = appointment["day"], appointment["doctor_id"]
     deltas = Deltas().clinic_day(day)
     if action == "arrive":
         _recheck_follow_up(ctx, appointment)
     elif action == "finish":
         deltas.doctor_day(day, doctor_id, done=1).clinic_day(day, done=1)
+        deltas.timing(day, doctor_id, appointment["arrived_at"], appointment["called_at"], appointment["finished_at"])
         if earlier is not None:
             # The visit's invoice and the patient's older unpaid ones, in one statement in id order (design 5.0).
             ctx.require("billing.collect")
@@ -207,6 +211,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
             billing.ensure_invoice(ctx, appointment)  # design 5.3: finish ensures the invoice, paid or owed
         if earlier is not None:
             billing.collect_earlier(ctx, invoices, appointment_id, earlier["amount"], earlier["method"], deltas, today)
+        record_visits(ctx, [(appointment["patient_id"], day)])  # the patient's stats row (F6, lock order 11a)
         if next_visit is not None:
             # "Book the next visit" (design E3), in this transaction; its turn goes into the one doctor-day write.
             ctx.require("appointments.book")

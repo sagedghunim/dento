@@ -18,11 +18,17 @@ CODES = {
     "billing.collect": _("Take payments and add list-price lines"),
     "billing.discount": _("Give discounts and prices not from the list"),
     "billing.refund": _("Refund payments and void invoices"),
+    "cash.collect": _("Take cash into the register"),
+    "cash.shift": _("Open and close the register and record cash in and out"),
     "inventory.use": _("Record stock use"),
     "inventory.manage": _("Manage items, purchases and stock counts"),
     "finances.view": _("See the month's money and staff pay"),
     "finances.pay": _("Edit staff pay"),
     "expenses.manage": _("Add and void expenses"),
+    "packages.manage": _("Edit session packages"),
+    "patients.tags": _("Edit the patient tags list"),
+    "patients.export": _("Export patient lists"),
+    "reports.view": _("See clinic and staff performance and patient insights"),
     "consults.manage": _("Handle online consultation requests"),
     "settings.manage": _("Change the clinic profile, services, prices, schedules and medicines"),
     "team.manage": _("Manage members and permissions"),
@@ -31,18 +37,19 @@ CODES = {
 ALL = frozenset(CODES)
 
 # Only the owner gives or removes these (design 4.2).
-OWNER_ONLY = frozenset({"team.manage", "billing.refund", "finances.view", "finances.pay", "audit.view"})
+OWNER_ONLY = frozenset({"team.manage", "billing.refund", "finances.view", "finances.pay", "audit.view",
+                        "patients.export"})
 
 TEMPLATES = {
     "owner": ALL,
     "doctor": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "clinical.view",
-        "clinical.write", "billing.collect", "inventory.use", "consults.manage",
+        "clinical.write", "billing.collect", "inventory.use", "consults.manage", "cash.collect", "cash.shift",
         "visits.vitals", "visits.notes", "prescriptions.write", "settings.medicines", "procedures.record",
     }),
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
-        "visits.vitals",
+        "visits.vitals", "cash.collect", "cash.shift",
     }),
 }
 

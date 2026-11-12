@@ -1,0 +1,38 @@
+{% load i18n hamada %}{% spaceless %}
+<button type="button" class="tooth {{ jaw }}" data-tooth="{{ t.n }}" data-shape="{{ t.shape }}" data-condition="{{ t.condition }}"{% if t.in_progress %} data-progress{% endif %}{% if t.done %} data-done{% endif %} aria-pressed="false">
+  <span class="tooth-no"><span class="num">{{ t.n|digits }}</span><span class="t-done" aria-hidden="true"></span></span>
+  <svg class="tooth-svg" viewBox="0 0 40 72" aria-hidden="true" focusable="false">
+    <g{% if jaw == "lower" %} transform="matrix(1 0 0 -1 0 72)"{% endif %}>
+    {% if t.shape == "molar" %}
+      <path class="t-crown" d="M6 42C4 46 3 52 4 58C5 66 10 69 14 68C17 67.5 18 66 20 66C22 66 23 67.5 26 68C30 69 35 66 36 58C37 52 36 46 34 42Z"/>
+      <path class="t-outline" d="M6 42C6 30 8 18 11 6C12 3 15 3 16 6L19 26C19.5 28 20.5 28 21 26L24 6C25 3 28 3 29 6C32 18 34 30 34 42C36 46 37 52 36 58C35 66 30 69 26 68C23 67.5 22 66 20 66C18 66 17 67.5 14 68C10 69 5 66 4 58C3 52 4 46 6 42Z"/>
+      <path class="t-canal" d="M12 40L14 10M28 40L26 10"/>
+      <path class="t-implant" d="M13 12H27M12 18H28M12 24H28M12 30H28M12 36H28"/>
+    {% elif t.shape == "premolar" %}
+      <path class="t-crown" d="M10 42C7 46 6 52 7 58C8 66 14 69 20 69C26 69 32 66 33 58C34 52 33 46 30 42Z"/>
+      <path class="t-outline" d="M10 42C10 30 13 14 17 5C18.5 2 21.5 2 23 5C27 14 30 30 30 42C33 46 34 52 33 58C32 66 26 69 20 69C14 69 8 66 7 58C6 52 7 46 10 42Z"/>
+      <path class="t-canal" d="M20 40L20 8"/>
+      <path class="t-implant" d="M16 12H24M14 18H26M13 24H27M12 30H28M12 36H28"/>
+    {% elif t.shape == "canine" %}
+      <path class="t-crown" d="M11 40C8 46 8 54 11 61C14 67 18 70 20 70C22 70 26 67 29 61C32 54 32 46 29 40Z"/>
+      <path class="t-outline" d="M11 40C11 28 14 12 18 3C19 1 21 1 22 3C26 12 29 28 29 40C32 46 32 54 29 61C26 67 22 70 20 70C18 70 14 67 11 61C8 54 8 46 11 40Z"/>
+      <path class="t-canal" d="M20 38L20 6"/>
+      <path class="t-implant" d="M16 10H24M15 16H25M14 22H26M13 28H27M12 34H28"/>
+    {% else %}
+      <path class="t-crown" d="M11 40C9 48 9 58 10 67C10 69 12 70 14 70L26 70C28 70 30 69 30 67C31 58 31 48 29 40Z"/>
+      <path class="t-outline" d="M11 40C11 28 14 14 18 5C19 3 21 3 22 5C26 14 29 28 29 40C31 48 31 58 30 67C30 69 28 70 26 70L14 70C12 70 10 69 10 67C9 58 9 48 11 40Z"/>
+      <path class="t-canal" d="M20 38L20 8"/>
+      <path class="t-implant" d="M16 12H24M15 18H25M14 24H26M13 30H27M12 36H28"/>
+    {% endif %}
+      <path class="t-cej" d="M9 42Q20 46 31 42"/>
+      <path class="t-bar" d="M1 50H39"/>
+      <path class="t-crack" d="M15 44L21 50L16 56L24 64"/>
+      <path class="t-x" d="M7 8L33 66M33 8L7 66"/>
+      <circle class="t-dot" cx="20" cy="56" r="5"/>
+      <circle class="t-ring" cx="20" cy="55" r="17"/>
+    </g>
+  </svg>
+  <span class="t-rct" aria-hidden="true">RCT</span>
+  <span class="visually-hidden" data-label>{% translate "Tooth" %} {{ t.n|digits }}: {{ t.label }}{% if t.surfaces %} ({{ t.surfaces|join:" " }}){% endif %}{% if t.in_progress %}. {% translate "In progress" %}{% endif %}{% if t.done %}. {% translate "Has procedures" %}{% endif %}</span>
+</button>
+{% endspaceless %}

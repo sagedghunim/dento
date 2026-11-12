@@ -344,6 +344,9 @@ class PlanItem(models.Model):
             _fk("procedure", "clinical.Procedure", "plan_item_procedure_fk"),
             _fk("done_appointment", "scheduling.Appointment", "plan_item_appointment_fk"),
         ]
+        # Unfinished treatment (F6): only the open items, so the list reads them, not every plan.
+        indexes = [models.Index(fields=["clinic", "plan"], condition=Q(status__in=["planned", "in_progress"]),
+                                name="plan_item_open")]
 
 
 class VisitProcedure(models.Model):
@@ -361,6 +364,8 @@ class VisitProcedure(models.Model):
     unit_price = models.BigIntegerField()
     amount = models.BigIntegerField()
     invoice_line_id = models.BigIntegerField(null=True, blank=True)  # the line can be removed; this keeps the record
+    internal_cost = models.BigIntegerField(db_default=0)  # its materials at average cost (F2)
+    patient_package = _ref("billing.PatientPackage", null=True)  # a prepaid session it used (F7)
     note = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(default=timezone.now)
     created_by_id = models.BigIntegerField(null=True, blank=True)
@@ -376,6 +381,8 @@ class VisitProcedure(models.Model):
             _fk("patient", "patients.Patient", "visit_procedure_patient_fk"),
             _fk("procedure", "clinical.Procedure", "visit_procedure_procedure_fk"),
             _fk("plan_item", "clinical.PlanItem", "visit_procedure_plan_item_fk"),
+            _fk("patient_package", "billing.PatientPackage", "visit_procedure_package_fk"),
+            models.CheckConstraint(condition=Q(internal_cost__gte=0), name="visit_procedure_cost_not_negative"),
         ]
         indexes = [models.Index("clinic", "appointment", "id", name="visit_procedure_visit"),
                    models.Index("clinic", "patient", F("created_at").desc(), F("id").desc(), name="visit_procedure_patient")]

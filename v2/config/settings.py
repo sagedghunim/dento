@@ -69,6 +69,9 @@ INSTALLED_APPS = [
     "scheduling",
     "billing",
     "clinical",
+    "inventory",
+    "finance",
+    "reports",
     "audit",
     "web",
 ]

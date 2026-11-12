@@ -37,5 +37,10 @@ urlpatterns = [
     path("", include("scheduling.urls")),
     path("", include("billing.urls")),
     path("", include("clinical.urls")),
+    path("", include("billing.package_urls")),
+    path("", include("patients.tag_urls")),
+    path("", include("inventory.urls")),
+    path("", include("finance.urls")),
+    path("", include("reports.urls")),
     path("", include("web.urls")),  # M1 pages and fragments
 ]

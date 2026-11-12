@@ -553,8 +553,10 @@ class QueryCountTests(M1TestCase):
         # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version.
         self.assertEqual(small[1], 3)
         self.assertLessEqual(small[0], 6)
-        # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4).
-        self.assertLessEqual(small[2], 13)
+        # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4), plus the
+        # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0). The register's
+        # open-shift lock (F1) rides inside the payment INSERT, so it adds none.
+        self.assertLessEqual(small[2], 14)
 
 
 class FinishTests(M1TestCase):

@@ -26,6 +26,7 @@
     <p class="form-error" data-error></p>
   </form>
   <p class="signup-link">{% translate "New clinic or center?" %} <a href="/signup">{% translate "Sign up now" %}</a></p>
+  <p class="signup-link"><button type="button" class="btn ghost" data-action="language" data-signed-out data-language="{% if LANG == 'ar' %}en{% else %}ar{% endif %}" lang="{% if LANG == 'ar' %}en{% else %}ar{% endif %}">{% if LANG == 'ar' %}English{% else %}العربية{% endif %}</button></p>
 </section>
 {% endblock %}
 {% block scripts %}<script type="module" src="{% static 'js/login.js' %}"></script>{% endblock %}

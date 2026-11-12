@@ -4,6 +4,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from core.constraints import CompositeForeignKey
+
 
 class Patient(models.Model):
     class Sex(models.TextChoices):
@@ -48,3 +50,41 @@ class Patient(models.Model):
 
     def __str__(self):
         return f"#{self.file_no}"
+
+
+class Tag(models.Model):
+    """A place's patient tags (F6): VIP, insurance, a referral source. Editable; removing one deactivates it."""
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    name = models.CharField(max_length=40)
+    color = models.CharField(max_length=7, blank=True, default="")  # "#RRGGBB" or empty
+    is_active = models.BooleanField(default=True)
+    sort = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "patients_tag"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="tag_clinic_id_uniq"),
+            models.UniqueConstraint(fields=["clinic", "name"], condition=Q(is_active=True), name="tag_active_name_uniq"),
+        ]
+
+
+class PatientTag(models.Model):
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
+    tag = models.ForeignKey(Tag, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "patients_patient_tag"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "patient", "tag"], name="patient_tag_uniq"),
+            CompositeForeignKey(fields=["clinic", "patient"], to="patients.Patient", to_fields=["clinic", "id"],
+                                name="patient_tag_patient_fk"),
+            CompositeForeignKey(fields=["clinic", "tag"], to="patients.Tag", to_fields=["clinic", "id"],
+                                name="patient_tag_tag_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "tag", "patient"], name="patient_tag_by_tag")]

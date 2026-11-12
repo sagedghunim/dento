@@ -19,10 +19,12 @@
         {% elif a.status == "waiting" %}<button type="button" class="btn" data-act="call">{% translate "Call in" %}</button>
         {% elif a.status == "in_room" %}<button type="button" class="btn" data-act="finish">{% translate "Finish visit" %}</button>{% endif %}
       {% endif %}
+      {% if a.dental and a.status == "in_room" %}<a class="btn ghost" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
       {% if perms.collect and a.due > 0 and a.status != "cancelled" and a.status != "no_show" %}<button type="button" class="btn{% if a.status != 'done' %} ghost{% endif %}" data-act="pay">{% translate "Collect" %}</button>{% endif %}
       <details class="menu more">
         <summary aria-label="{% translate "More actions" %}" title="{% translate "More actions" %}"><svg class="icon"><use href="#i-more"/></svg></summary>
         <div class="menu-panel">
+          {% if a.dental and a.status != "cancelled" %}<a class="menu-item" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
           {% if perms.view_patients %}<a class="menu-item" href="/patients/{{ a.patient.id }}">{% translate "Patient file" %}</a>{% endif %}
           {% if perms.collect and a.status != "cancelled" %}<button type="button" class="menu-item" data-act="invoice">{% translate "Bill and payments" %}</button>{% endif %}
           {% if perms.view_patients and a.invoice and a.invoice.paid > 0 %}<button type="button" class="menu-item" data-act="receipt">{% translate "Print receipt" %}</button>{% endif %}

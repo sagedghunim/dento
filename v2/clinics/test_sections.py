@@ -126,15 +126,22 @@ class SectionModelTests(ShardTestCase):
                     SELECT table_name, is_nullable FROM information_schema.columns
                      WHERE column_name = 'section_id' AND table_schema = current_schema()
                        AND table_name NOT LIKE 'clinical%%' ORDER BY table_name""")
-                self.assertEqual(cursor.fetchall(), [("clinics_schedule", "NO"), ("clinics_service", "NO"),
-                                                     ("scheduling_appointment", "NO")], alias)
+                # M3 adds section_id where it may be empty by design: a payment with no visit, a stock item shared
+                # by the place (F2), and the money-day's 0 for "no section" (F5; a plain key, no foreign key).
+                self.assertEqual(cursor.fetchall(), [("billing_package", "NO"), ("billing_payment", "YES"),
+                                                     ("clinics_schedule", "NO"), ("clinics_service", "NO"),
+                                                     ("inventory_item", "YES"), ("scheduling_appointment", "NO"),
+                                                     ("summaries_money_day", "NO")], alias)
                 cursor.execute("""
                     SELECT conrelid::regclass::text, pg_get_constraintdef(oid) FROM pg_constraint
                      WHERE contype = 'f' AND confrelid = 'clinics_section'::regclass
                        AND conrelid::regclass::text NOT LIKE 'clinical%%' ORDER BY 1""")
                 self.assertEqual(cursor.fetchall(), [
+                    ("billing_package", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
+                    ("billing_payment", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
                     ("clinics_schedule", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
                     ("clinics_service", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
+                    ("inventory_item", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
                     ("scheduling_appointment", "FOREIGN KEY (clinic_id, section_id) REFERENCES clinics_section(clinic_id, id) ON DELETE RESTRICT"),
                 ], alias)
                 cursor.execute("SELECT relforcerowsecurity FROM pg_class WHERE relname = 'clinics_section'")

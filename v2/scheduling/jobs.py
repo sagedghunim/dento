@@ -24,7 +24,7 @@ from core import sql
 from core.context import Ctx
 from core.days import business_day
 from core.routing import clinic_transaction
-from summaries.services import Deltas
+from summaries.services import Deltas, record_visits
 
 from . import selectors
 
@@ -101,9 +101,12 @@ def _sweep(clinic_id, alias, now):
         deltas = Deltas()
         for r in rows:
             deltas.clinic_day(r["day"])
+            if r["status"] != "in_room":
+                deltas.doctor_day(r["day"], r["doctor_id"], no_shows=1)  # F8; an auto-closed visit isn't timed
         for r in in_room:
             deltas.doctor_day(r["day"], r["doctor_id"], done=1)
             deltas.clinic_day(r["day"], done=1)
+        record_visits(ctx, [(r["patient_id"], r["day"]) for r in in_room])
         deltas.write_doctors(ctx)
         deltas.write_clinics(ctx)
         counts = {"no_show": sum(r["status"] == "booked" for r in rows),
@@ -186,6 +189,10 @@ def days_to_recompute(clinic_id, alias, today=None):
                                        [clinic_id, today, RECOMPUTE_BATCH])]
 
 
+REPORT_FIELDS = ("procedures", "no_shows", "timed", "wait_secs", "room_secs")
+DOCTOR_CHECKED = ("booked", "done", "collected", "refunded", *REPORT_FIELDS)
+
+
 def expected_summaries(ctx, day):
     """What the summaries of one clinic-day should hold, from the source rows (the 5.3 formulas)."""
     counts = selectors.day_counts(ctx, day)
@@ -195,7 +202,8 @@ def expected_summaries(ctx, day):
         c, m = counts.get(doctor_id, {}), money.get(doctor_id, {})
         doctors[doctor_id] = {"booked": c.get("booked", 0), "done": c.get("done", 0),
                               "collected": m.get("collected", 0), "refunded": m.get("refunded", 0),
-                              "max_queue_no": c.get("max_queue_no") or 0}
+                              "max_queue_no": c.get("max_queue_no") or 0,
+                              **{name: c.get(name, 0) for name in REPORT_FIELDS}}
     clinic = {"done": sum(c["done"] for c in counts.values()),
               "collected": sum(m["collected"] for m in money.values()),
               "refunded": sum(m["refunded"] for m in money.values())}
@@ -209,14 +217,18 @@ def recompute_day(clinic_id, alias, day):
     """
     differences = []
     unlocked = []
+    money_missing = []
     with clinic_transaction(clinic_id, alias):
         clinic = _clinic(clinic_id)
         if clinic is None:
             return differences
         ctx = system_ctx(clinic, alias)
-        locked = {r[0]: dict(zip(("last_queue_no", "booked", "done", "collected", "refunded"), r[1:])) for r in sql.rows(
-            ctx, 'SELECT doctor_id, last_queue_no, booked, done, collected, refunded FROM "summaries_doctor_day" '
+        locked = {r[0]: dict(zip(("last_queue_no", *DOCTOR_CHECKED), r[1:])) for r in sql.rows(
+            ctx, f'SELECT doctor_id, last_queue_no, {", ".join(DOCTOR_CHECKED)} FROM "summaries_doctor_day" '
                  "WHERE clinic_id = %s AND day = %s ORDER BY doctor_id FOR UPDATE", [clinic_id, day])}
+        money_locked = {(r[0], r[1]): {"collected": r[2], "refunded": r[3]} for r in sql.rows(
+            ctx, 'SELECT section_id, method, collected, refunded FROM "summaries_money_day" WHERE clinic_id = %s '
+                 "AND day = %s ORDER BY section_id, method FOR UPDATE", [clinic_id, day])}
         current = sql.row(ctx, 'SELECT done, collected, refunded FROM "summaries_clinic_day" '
                                "WHERE clinic_id = %s AND day = %s FOR UPDATE", [clinic_id, day])
         if current is None:
@@ -224,27 +236,42 @@ def recompute_day(clinic_id, alias, day):
         doctors, totals = expected_summaries(ctx, day)
         updates = []
         for doctor_id in sorted(set(locked) | set(doctors)):
-            want = doctors.get(doctor_id, {"booked": 0, "done": 0, "collected": 0, "refunded": 0, "max_queue_no": 0})
+            want = doctors.get(doctor_id, {**dict.fromkeys(DOCTOR_CHECKED, 0), "max_queue_no": 0})
             have = locked.get(doctor_id)
             if have is None:
                 # A row created after the lock statement: never lock it now (a flow may hold it while waiting
                 # for this clinic-day). Leave the day flagged; the next run sees it.
                 unlocked.append(doctor_id)
                 continue
-            fixed = {name: want[name] for name in ("booked", "done", "collected", "refunded")}
+            fixed = {name: want[name] for name in DOCTOR_CHECKED}
             fixed["last_queue_no"] = max(have["last_queue_no"], want["max_queue_no"])
             if fixed != have:
                 differences.append({"doctor_id": doctor_id, "day": day.isoformat(), "had": have, "fixed": fixed})
                 updates.append((doctor_id, fixed))
         if updates:
-            values = ", ".join(["(%s::bigint, %s::int, %s::int, %s::int, %s::bigint, %s::bigint)"] * len(updates))
-            params = [p for doctor_id, f in updates
-                      for p in (doctor_id, f["last_queue_no"], f["booked"], f["done"], f["collected"], f["refunded"])]
+            names = ("last_queue_no", *DOCTOR_CHECKED)
+            values = ", ".join(["(%s::bigint, " + ", ".join(["%s::bigint"] * len(names)) + ")"] * len(updates))
+            params = [p for doctor_id, f in updates for p in (doctor_id, *(f[n] for n in names))]
+            sets = ", ".join(f"{n} = v.{n}" for n in names)
             sql.run(ctx, f"""
-                UPDATE "summaries_doctor_day" d SET last_queue_no = v.q, booked = v.b, done = v.n, collected = v.c,
-                       refunded = v.r
-                  FROM (VALUES {values}) AS v(doctor, q, b, n, c, r)
+                UPDATE "summaries_doctor_day" d SET {sets}
+                  FROM (VALUES {values}) AS v(doctor, {", ".join(names)})
                  WHERE d.clinic_id = %s AND d.day = %s AND d.doctor_id = v.doctor""", [*params, clinic_id, day])
+        money_want = billing_read.day_money(ctx, day)
+        money_missing = []
+        for key in sorted(set(money_locked) | set(money_want)):
+            want = money_want.get(key, {"collected": 0, "refunded": 0})
+            have = money_locked.get(key)
+            if have is None:
+                money_missing.append(key)  # created empty after this transaction, like a missing doctor-day
+                continue
+            if want != have:
+                differences.append({"money": list(key), "day": day.isoformat(), "had": have, "fixed": want})
+                sql.run(ctx, 'UPDATE "summaries_money_day" SET collected = %s, refunded = %s WHERE clinic_id = %s '
+                             "AND day = %s AND section_id = %s AND method = %s",
+                        [want["collected"], want["refunded"], clinic_id, day, *key])
+        if money_missing:
+            unlocked.append(None)
         have_totals = dict(zip(("done", "collected", "refunded"), current))
         if have_totals != totals:
             differences.append({"day": day.isoformat(), "had": have_totals, "fixed": totals})
@@ -257,11 +284,15 @@ def recompute_day(clinic_id, alias, day):
         # lock held), so the next run, which finds the day still flagged, fills them in.
         with clinic_transaction(clinic_id, alias):
             ctx = system_ctx(_clinic(clinic_id), alias)
-            for doctor_id in sorted(unlocked):
+            for doctor_id in sorted(d for d in unlocked if d is not None):
                 sql.run(ctx, 'INSERT INTO "summaries_doctor_day" (clinic_id, day, doctor_id, last_queue_no, booked, done, '
                              "collected, refunded) VALUES (%s, %s, %s, 0, 0, 0, 0, 0) ON CONFLICT DO NOTHING",
                         [clinic_id, day, doctor_id])
-        differences.append({"day": day.isoformat(), "missing_rows": sorted(unlocked)})
+            for section_id, method in money_missing:
+                sql.run(ctx, 'INSERT INTO "summaries_money_day" (clinic_id, day, section_id, method, collected, refunded) '
+                             "VALUES (%s, %s, %s, %s, 0, 0) ON CONFLICT DO NOTHING", [clinic_id, day, section_id, method])
+        differences.append({"day": day.isoformat(), "missing_rows": sorted(d for d in unlocked if d is not None),
+                            "missing_money": [list(k) for k in money_missing]})
     for difference in differences:
         log.warning("recompute fixed a summary: clinic=%s %s", clinic_id, difference)
     return differences

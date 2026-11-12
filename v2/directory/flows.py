@@ -175,6 +175,9 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
             copy_catalogues(clinic, section, language)
         for counter in ("patient_file", "invoice", "prescription"):
             Counter.objects.get_or_create(clinic=clinic, name=counter)
+        from finance.services import seed_categories
+
+        seed_categories(clinic.id, language)  # the default expense categories (F3)
         if default_session and not Schedule.objects.filter(clinic_id=clinic.id, doctor=owner_membership).exists():
             Schedule.objects.bulk_create([
                 Schedule(clinic_id=clinic.id, doctor=owner_membership, section=existing[0], weekday=weekday,

@@ -116,6 +116,8 @@ a { color: var(--teal-dark); }
   overflow: auto;
 }
 .brand { font-weight: 800; font-size: 1.2rem; color: var(--ink); text-decoration: none; }
+.side-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.btn.lang-btn { min-height: 36px; padding-inline: 12px; font-size: .8125rem; }
 .tagline, .clinic-sub { color: var(--muted); font-size: .875rem; margin-block-start: 2px; }
 .side-label { font-size: .8rem; font-weight: 700; color: var(--muted); margin-block-end: 4px; }
 :lang(en) .side-label { letter-spacing: .08em; text-transform: uppercase; }
@@ -510,4 +512,158 @@ dialog.sheet[open] { display: flex; flex-direction: column; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .queue { transition: opacity .3s; }
+}
+
+/* ---------- the dental chart (design E3) ----------
+   Every condition has its own mark as well as its colour (a dot, a filled crown, canal lines, a cross, a dashed
+   outline, a screw, a bar or a crack), and its name is in the button's label, its tooltip and the panel. */
+:root {
+  --c-caries: #D32F2F; --c-pulp: #7F1D1D; --c-planned: #D97706; --c-filling: #2563EB; --c-crown: #CA9A04;
+  --c-canal: #7C3AED; --c-extracted: #6B7280; --c-missing: #B8C0C9; --c-implant: #0D9488; --c-bridge: #4338CA;
+  --c-fractured: #C2410C; --c-impacted: #8B5E34; --tooth-line: #3B4A44;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-caries: #F87171; --c-pulp: #DC6B6B; --c-planned: #F5B041; --c-filling: #60A5FA; --c-crown: #FACC15;
+    --c-canal: #A78BFA; --c-extracted: #9CA3AF; --c-missing: #5B6670; --c-implant: #2DD4BF; --c-bridge: #818CF8;
+    --c-fractured: #FB923C; --c-impacted: #C49A6C; --tooth-line: #B9C8C1;
+  }
+}
+.chart-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.chart-card { margin-block-end: 0; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; padding: 3px; background: var(--surface-2); }
+.segmented label { position: relative; display: inline-flex; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span { display: inline-flex; align-items: center; min-height: 40px; padding-inline: 16px; border-radius: 9px; font-weight: 700; color: var(--muted); }
+.segmented input:checked + span { background: var(--surface); color: var(--teal-dark); box-shadow: var(--shadow); }
+.segmented input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 1px; }
+.chart-scroll { overflow-x: auto; margin-block-start: 14px; padding-block: 4px; }
+.dentition {
+  display: grid; grid-template-columns: max-content 13px max-content; grid-template-rows: auto auto;
+  row-gap: 10px; inline-size: max-content; margin-inline: auto;
+}
+.dentition[hidden] { display: none; }
+.q-ur { grid-area: 1 / 1; }
+.q-ul { grid-area: 1 / 3; }
+.q-lr { grid-area: 2 / 1; }
+.q-ll { grid-area: 2 / 3; }
+.midline { grid-area: 1 / 2 / 3 / 3; justify-self: center; inline-size: 1px; background: var(--muted); opacity: .6; }
+.jaw-half { display: flex; }
+.q-ur, .q-lr { justify-content: flex-end; }
+.tooth {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  inline-size: 40px; padding-block: 4px; padding-inline: 0; border: 1px solid transparent; border-radius: 10px;
+  background: none; color: var(--ink); font: inherit; cursor: pointer;
+}
+.tooth.lower { flex-direction: column-reverse; }
+.tooth:hover { background: var(--surface-2); }
+.tooth:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.tooth[aria-pressed="true"] { background: var(--teal-tint); border-color: var(--teal); }
+.tooth-no { display: inline-flex; align-items: center; gap: 2px; font-size: .78rem; font-weight: 700; line-height: 1.2; color: var(--muted); min-block-size: 16px; }
+.tooth[aria-pressed="true"] .tooth-no { color: var(--teal-dark); }
+.t-done { display: none; inline-size: 6px; block-size: 6px; border-radius: 99px; background: var(--ink); }
+.tooth[data-done] .t-done { display: inline-block; }
+.tooth-svg { inline-size: 34px; block-size: 61px; overflow: visible; }
+.tooth-svg path, .tooth-svg circle { fill: none; stroke: none; }
+.tooth-svg .t-outline { stroke: var(--tooth-line); stroke-width: 1.4; }
+.tooth-svg .t-cej { stroke: var(--tooth-line); stroke-width: .8; opacity: .45; }
+.tooth[data-condition="caries"] .t-dot { fill: var(--c-caries); }
+.tooth[data-condition="pulp_caries"] .t-dot { fill: var(--c-pulp); r: 7px; }
+.tooth[data-condition="pulp_caries"] .t-canal { stroke: var(--c-pulp); stroke-width: 2; }
+.tooth[data-condition="planned"] .t-crown { fill: var(--c-planned); fill-opacity: .35; stroke: var(--c-planned); stroke-width: 1.6; stroke-dasharray: 3 2; }
+.tooth[data-condition="filling"] .t-crown { fill: var(--c-filling); fill-opacity: .75; }
+.tooth[data-condition="crown"] .t-crown { fill: var(--c-crown); fill-opacity: .8; stroke: var(--c-crown); stroke-width: 2.4; }
+.tooth[data-condition="root_canal"] .t-canal, .tooth[data-condition="open_root_canal"] .t-canal { stroke: var(--c-canal); stroke-width: 3; stroke-linecap: round; }
+.tooth[data-condition="open_root_canal"] .t-crown { fill: var(--c-canal); fill-opacity: .18; }
+.tooth[data-condition="extracted"] .t-outline { stroke: var(--c-extracted); fill: var(--surface-2); }
+.tooth[data-condition="extracted"] .t-x { stroke: var(--c-extracted); stroke-width: 2.4; stroke-linecap: round; }
+.tooth[data-condition="missing"] .t-outline { stroke: var(--c-missing); stroke-dasharray: 3 3; fill: none; }
+.tooth[data-condition="missing"] .t-cej { opacity: 0; }
+.tooth[data-condition="implant"] .t-outline { stroke: var(--c-implant); }
+.tooth[data-condition="implant"] .t-implant { stroke: var(--c-implant); stroke-width: 2.2; stroke-linecap: round; }
+.tooth[data-condition="bridge"] .t-crown { fill: var(--c-bridge); fill-opacity: .7; }
+.tooth[data-condition="bridge"] .t-bar { stroke: var(--c-bridge); stroke-width: 3; }
+.tooth[data-condition="fractured"] .t-crack { stroke: var(--c-fractured); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.tooth[data-condition="impacted"] .t-crown { fill: var(--c-impacted); fill-opacity: .45; }
+.tooth[data-condition="impacted"] .t-outline { stroke: var(--c-impacted); stroke-width: 2; }
+.tooth[data-progress] .t-ring { stroke: var(--ink); stroke-width: 2.2; }
+.t-rct {
+  display: none; position: absolute; inset-inline-start: 50%; transform: translateX(-50%);
+  font-size: .62rem; font-weight: 800; line-height: 1; padding: 2px 3px; border-radius: 4px;
+  background: var(--c-canal); color: #fff; letter-spacing: .02em;
+}
+.tooth.upper .t-rct { inset-block-start: 26px; }
+.tooth.lower .t-rct { inset-block-end: 26px; }
+.tooth[data-condition="open_root_canal"] .t-rct { display: block; }
+.chart-hint { color: var(--muted); font-size: .9rem; margin-block-start: 10px; text-align: center; }
+.legend { list-style: none; margin: 12px 0 0; padding: 12px 0 0; border-block-start: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .85rem; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.key { display: inline-block; flex: none; inline-size: 12px; block-size: 12px; border-radius: 99px; border: 1.5px solid var(--tooth-line); background: var(--surface); }
+.key[data-condition="caries"] { background: var(--c-caries); border-color: var(--c-caries); }
+.key[data-condition="pulp_caries"] { background: var(--c-pulp); border-color: var(--c-pulp); }
+.key[data-condition="planned"] { background: var(--c-planned); border-color: var(--c-planned); }
+.key[data-condition="filling"] { background: var(--c-filling); border-color: var(--c-filling); }
+.key[data-condition="crown"] { background: var(--c-crown); border-color: var(--c-crown); }
+.key[data-condition="root_canal"], .key[data-condition="open_root_canal"] { background: var(--c-canal); border-color: var(--c-canal); }
+.key[data-condition="extracted"] { background: var(--c-extracted); border-color: var(--c-extracted); }
+.key[data-condition="missing"] { background: var(--c-missing); border-color: var(--c-missing); }
+.key[data-condition="implant"] { background: var(--c-implant); border-color: var(--c-implant); }
+.key[data-condition="bridge"] { background: var(--c-bridge); border-color: var(--c-bridge); }
+.key[data-condition="fractured"] { background: var(--c-fractured); border-color: var(--c-fractured); }
+.key[data-condition="impacted"] { background: var(--c-impacted); border-color: var(--c-impacted); }
+.key-done { inline-size: 8px; block-size: 8px; background: var(--ink); border-color: var(--ink); }
+.key-ring { background: transparent; border: 2px solid var(--ink); inline-size: 14px; block-size: 14px; }
+.key-rct { font-size: .62rem; font-weight: 800; line-height: 1; padding: 2px 3px; border-radius: 4px; background: var(--c-canal); color: #fff; }
+
+.tooth-panel { margin-block-end: 0; padding: 0; display: flex; flex-direction: column; }
+.tooth-panel[hidden] { display: none; }
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-block: 14px 10px; padding-inline: 16px; border-block-end: 1px solid var(--line); }
+.panel-head h2 { font-size: 1.15rem; font-weight: 800; }
+.panel-head h2:focus { outline: none; }
+.panel-head h2:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.panel-state { display: flex; align-items: center; gap: 6px; color: var(--muted); font-weight: 700; font-size: .9rem; }
+.panel-body { padding-block: 0 16px; padding-inline: 16px; }
+.panel-part { display: grid; gap: 10px; padding-block: 14px; border-block-end: 1px solid var(--line); }
+.panel-part:last-child { border-block-end: 0; }
+.panel-part form { display: grid; gap: 10px; margin: 0; }
+.panel-part h3 { font-size: .95rem; font-weight: 800; }
+.panel-part fieldset { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+.panel-part fieldset[hidden] { display: none; }
+.panel-part legend { font-size: .9rem; font-weight: 700; padding: 0; margin-block-end: 6px; }
+.panel-note { margin-block: 14px 0; font-size: .9rem; }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.conditions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.cond { position: relative; display: flex; }
+.cond input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.cond > span {
+  display: flex; align-items: center; gap: 8px; inline-size: 100%; min-block-size: 44px; padding-inline: 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-weight: 600; font-size: .9rem; line-height: 1.25;
+}
+.cond input:checked + span { border-color: var(--teal); background: var(--teal-tint); color: var(--teal-dark); font-weight: 800; box-shadow: inset 0 0 0 1px var(--teal); }
+.cond input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.surfaces .chip > span { min-inline-size: 44px; justify-content: center; }
+.plan-picks { display: grid; gap: 6px; }
+.plan-picks:empty { display: none; }
+.plan-pick { justify-content: flex-start; text-align: start; }
+.history { list-style: none; margin: 0; padding: 0; }
+.history-item { padding-block: 8px; border-block-end: 1px solid var(--line); font-size: .9rem; display: grid; gap: 2px; }
+.history-item:last-child { border-block-end: 0; }
+.history-top { display: flex; align-items: center; gap: 6px; }
+
+@media (min-width: 1200px) {
+  .chart-layout.with-panel { grid-template-columns: minmax(0, 1fr) 300px; }
+  .tooth-panel { position: sticky; inset-block-start: 12px; max-block-size: calc(100vh - 24px); overflow: auto; }
+}
+@media (max-width: 1199px) {
+  /* A bottom sheet over the page; the chart above it stays tappable. */
+  .tooth-panel {
+    position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 40; max-block-size: 56vh; overflow: auto;
+    border-radius: 16px 16px 0 0; border-block-end: 0; box-shadow: 0 -10px 40px rgba(0, 0, 0, .25);
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+  .tooth-panel .panel-head { position: sticky; inset-block-start: 0; background: var(--surface); z-index: 1; }
+  .chart-layout.with-panel { padding-block-end: 60vh; }
+}
+@media print {
+  .tooth-panel, .segmented, .chart-hint { display: none; }
 }

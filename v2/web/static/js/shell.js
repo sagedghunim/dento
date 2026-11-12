@@ -50,7 +50,12 @@ document.addEventListener("click", async (event) => {
   }
   if (button.dataset.action === "language") {
     button.disabled = true;
-    await save("POST", "/api/v1/me/language", { language: button.dataset.language }, { key: newKey() });
+    // The cookie keeps the choice on the signed-out pages too (core/middleware.py reads it before sign-in).
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `hamada_language=${button.dataset.language}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+    if (!("signedOut" in button.dataset)) {
+      await save("POST", "/api/v1/me/language", { language: button.dataset.language }, { key: newKey() });
+    }
     window.location.reload();
   }
 });

@@ -137,7 +137,7 @@ def _replay_record(ctx, stored):
 
 @api("POST", perm="procedures.record", replay=_replay_record)
 def record_procedure_view(request, ctx, data, appointment_id):
-    """POST {procedure_id, tooth?, surfaces?, area?, qty?, unit_price?, plan_item_id?, note?}."""
+    """POST {procedure_id, tooth?, surfaces?, area?, qty?, unit_price?, plan_item_id?, note?, use_package?}."""
     appointment_id = _id(appointment_id, "appointment")
     plan_item = data.get("plan_item_id")
     body = {
@@ -149,6 +149,8 @@ def record_procedure_view(request, ctx, data, appointment_id):
         "unit_price": parse_money(data["unit_price"], "unit_price") if data.get("unit_price") not in (None, "") else None,
         "plan_item_id": validate.ident(plan_item, "plan_item_id") if plan_item is not None else None,
         "note": validate.text(data, "note", 500, required=False),
+        # F7: a prepaid session of this procedure is used unless the doctor says not to (or names a price).
+        "use_package": validate.boolean(data, "use_package", True),
     }
     record, _invoice, _tooth, _version = services.record_procedure(ctx, appointment_id, body)
     return Result(_record_answer(ctx, record["id"]), status=201, target_type="visit_procedure", target_id=record["id"])
