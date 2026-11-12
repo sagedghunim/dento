@@ -770,7 +770,6 @@ progress.inv-bar.low::-moz-progress-bar { background: var(--red); }
 .stat-sub { color: var(--muted); font-size: .8rem; margin-block-start: 2px; }
 .fin-stats .stat-sub .num { font-size: inherit; font-weight: 700; line-height: inherit; }
 .icon-btn.is-spacer { visibility: hidden; }
-.stat.is-loss .num { color: var(--red); }
 .owed-card { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
 .owed-sum { margin-block-start: 4px; font-size: 1.15rem; }
 .fin-splits { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }

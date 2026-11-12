@@ -40,7 +40,7 @@ from scheduling.models import Appointment
 from .seed_demo import DEMO
 
 SEED = 20261112
-PATIENTS = 60
+PATIENTS_PER_DOCTOR = 170  # a busy Egyptian clinic: 10 to 20 visits a doctor an evening
 MARKER_DAYS = 21  # a place with a visit this old already has activity
 METHODS = (("cash", 55), ("card", 15), ("wallet", 15), ("instapay", 15))
 SOURCES = (("clinic", 50), ("phone", 30), ("whatsapp", 15), ("online", 5))
@@ -137,7 +137,9 @@ class Place:
         kids = {s.id for s in self.sections if s.specialty_code == "pediatrics"}
         month_start = self.today.replace(day=1)
         span = (self.today - self.first_day).days
-        for i in range(PATIENTS):
+        doctors = {s.doctor_id for day in self.sessions.values() for s in day}
+        count = PATIENTS_PER_DOCTOR * max(len(doctors), 1)
+        for i in range(count):
             section = self.sections[i % len(self.sections)].id
             sex = rng.choice("mf")
             first = rng.choice(MALE if sex == "m" else FEMALE)
@@ -150,11 +152,12 @@ class Place:
             if rng.random() < 0.06:
                 fields["allergies"] = "بنسلين"
             # Who they are in the insights (F6): once and gone, used to come, new this month, or regular.
-            if i < 10:
+            share = i / count
+            if share < 0.15:
                 profile, window, visits = "once", (span - 2, 35), 1
-            elif i < 18:
+            elif share < 0.27:
                 profile, window, visits = "quiet", (span, max(span - 14, 91)), rng.randint(2, 3)
-            elif i < 28:
+            elif share < 0.42:
                 profile, window, visits = "new", (min(20, (self.today - month_start).days + 7), 1), rng.randint(1, 3)
             else:
                 profile, window, visits = "regular", (span, 1), rng.randint(4, 9)
@@ -371,16 +374,17 @@ class Place:
         self.at(at)
         dental = any(s.specialty_code == "dental" for s in self.sections)
         size = len(self.sections)
-        bills = [("rent", day, 400000 + 100000 * (size - 1), "إيجار الشهر"),
-                 ("utilities", min(day + dt.timedelta(days=9), self.today), rng.randint(8, 15) * 10000,
+        # Cairo and Alexandria prices, 2026: rent 12,000 to 30,000 a month, bills 2,500 to 4,500.
+        bills = [("rent", day, (1200000, 2000000, 3000000)[min(size, 3) - 1], "إيجار الشهر"),
+                 ("utilities", min(day + dt.timedelta(days=9), self.today), rng.randint(25, 45) * 10000 * size,
                   "كهرباء ومياه وإنترنت")]
         if dental:
-            bills.append(("materials", min(day + dt.timedelta(days=4), self.today), rng.randint(10, 25) * 10000,
+            bills.append(("materials", min(day + dt.timedelta(days=4), self.today), rng.randint(60, 90) * 10000,
                           "خامات حشو وتخدير"))
-            bills.append(("lab", min(day + dt.timedelta(days=15), self.today), rng.randint(5, 15) * 10000,
+            bills.append(("lab", min(day + dt.timedelta(days=15), self.today), rng.randint(40, 80) * 10000,
                           "معمل تركيبات"))
-        else:
-            bills.append(("materials", min(day + dt.timedelta(days=6), self.today), rng.randint(3, 8) * 10000,
+        if size > 1 or not dental:
+            bills.append(("materials", min(day + dt.timedelta(days=6), self.today), rng.randint(15, 30) * 10000,
                           "مستلزمات طبية"))
         for code, when, amount, note in bills:
             finance.add_expense(owner, finance.category_by_code(owner, code), amount, min(when, day), note,
@@ -414,7 +418,7 @@ class Place:
             finance.open_shift(self.desk, 20000)
         pool = [p for p in self.patients if p["profile"] in ("regular", "new") and p["id"] is not None]
         rng.shuffle(pool)
-        stages = ["done", "done", "done", "in_room", "ready", "waiting", "waiting", "booked", "booked"]
+        stages = ["done"] * 7 + ["in_room", "ready", "waiting", "waiting", "waiting", "booked", "booked", "booked"]
         span = (now - window_start - dt.timedelta(minutes=5)).total_seconds()
         for s in sessions:
             mine = [p for p in pool if p["section"] == s.section_id][:len(stages)]
@@ -469,9 +473,10 @@ class Place:
         for m in self.members.values():
             if m.role == "owner" or rules.get(m.id, {}).get("rule", {}).get("version"):
                 continue
-            values = ({"percent_bp": 0, "per_visit": 0, "per_procedure": 0, "monthly_salary": 450000}
+            # The usual deal: the assistant on a salary, a doctor on a share of what their visits bring in.
+            values = ({"percent_bp": 0, "per_visit": 0, "per_procedure": 0, "monthly_salary": 650000}
                       if m.role == "assistant" else
-                      {"percent_bp": 3500, "per_visit": 0, "per_procedure": 2000, "monthly_salary": 0})
+                      {"percent_bp": 4000, "per_visit": 0, "per_procedure": 0, "monthly_salary": 0})
             finance.set_rule(self.owner, m.id, values, 0)
 
     def tag_patients(self):

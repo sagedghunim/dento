@@ -23,7 +23,7 @@
   {% if money %}
   <div class="stats fin-stats ov-money">
     <div class="stat"><div class="num" data-ov="revenue">{{ clinic.revenue|money }}</div><div class="lbl">{% translate "Collected" %}</div>{% if clinic.refunded %}<div class="stat-sub">{% translate "after refunds" %}</div>{% endif %}</div>
-    <div class="stat{% if clinic.profit < 0 %} is-loss{% endif %}"><div class="num">{{ clinic.profit|money }}</div><div class="lbl">{% if clinic.profit < 0 %}{% translate "Loss this month" %}{% else %}{% translate "Profit this month" %}{% endif %}</div></div>
+    <div class="stat"><div class="num">{{ clinic.profit|money }}</div><div class="lbl">{% translate "Net this month" %}</div>{% if clinic.profit < 0 %}<div class="stat-sub">{% translate "Costs are ahead of income so far this month" %}</div>{% endif %}</div>
     <div class="stat"><div class="num">{{ clinic.owed.owed|money }}</div><div class="lbl">{% translate "Patients owe" %}</div><div class="stat-sub"><a href="/finances?tab=owed">{% translate "See who owes" %}</a></div></div>
   </div>
   {% endif %}

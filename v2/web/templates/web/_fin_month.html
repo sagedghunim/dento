@@ -4,7 +4,7 @@
   <div class="stat"><div class="num" data-stat="collected">{{ profit.collected|money }}</div><div class="lbl">{% translate "Collected" %}</div>{% if profit.refunded %}<div class="stat-sub">{% translate "Refunded:" %} {{ profit.refunded|money }}</div>{% endif %}</div>
   <div class="stat"><div class="num" data-stat="expenses">{{ profit.expenses|money }}</div><div class="lbl">{% translate "Expenses" %}</div></div>
   <div class="stat"><div class="num" data-stat="staff">{{ profit.staff_pay|money }}</div><div class="lbl">{% translate "Staff pay (earned)" %}</div><div class="stat-sub">{% translate "Paid out:" %} {{ profit.staff_paid_out|money }}</div></div>
-  <div class="stat{% if profit.profit < 0 %} is-loss{% endif %}"><div class="num" data-stat="profit">{{ profit.profit|money }}</div><div class="lbl">{% if profit.profit < 0 %}{% translate "Loss" %}{% else %}{% translate "Profit" %}{% endif %}</div></div>
+  <div class="stat"><div class="num" data-stat="profit">{{ profit.profit|money }}</div><div class="lbl">{% translate "Net this month" %}</div>{% if profit.profit < 0 %}<div class="stat-sub">{% translate "Costs are ahead of income so far this month" %}</div>{% endif %}</div>
 </div>
 
 <section class="card owed-card" aria-labelledby="owed-sum-title">

@@ -2764,9 +2764,6 @@ msgstr "مصروفاتها القديمة تبقى كما هي. يمكنك اس�
 msgid "Left"
 msgstr "ترك العمل"
 
-msgid "Loss"
-msgstr "خسارة"
-
 msgid "Matched"
 msgstr "مطابق"
 
@@ -2930,9 +2927,6 @@ msgstr "الشهر السابق"
 
 msgid "Procedures"
 msgstr "الإجراءات"
-
-msgid "Profit"
-msgstr "الربح"
 
 msgid "Record the payout"
 msgstr "سجّل الصرف"
@@ -3118,9 +3112,6 @@ msgstr "يرجعون مرة أخرى"
 msgid "Going quiet"
 msgstr "بدأوا يغيبون"
 
-msgid "Loss this month"
-msgstr "خسارة هذا الشهر"
-
 msgid "Never came back"
 msgstr "لم يرجعوا"
 
@@ -3154,9 +3145,6 @@ msgstr "الفترة"
 msgid "Procedures:"
 msgstr "الإجراءات:"
 
-msgid "Profit this month"
-msgstr "ربح هذا الشهر"
-
 msgid "The clinic"
 msgstr "العيادة"
 
@@ -3180,3 +3168,9 @@ msgstr "من الحجوزات"
 
 msgid "min"
 msgstr "دقيقة"
+
+msgid "Net this month"
+msgstr "صافي الشهر"
+
+msgid "Costs are ahead of income so far this month"
+msgstr "المصروفات أكتر من الدخل لحد النهارده"

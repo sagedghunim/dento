@@ -1,6 +1,7 @@
 """seed_activity fills the demo places so the owner's Overview shows visits and revenue."""
 
 import io
+from unittest import mock
 
 from django.core.management import call_command
 from django.test import override_settings
@@ -13,6 +14,7 @@ from directory.models import DirectoryClinic
 
 
 @override_settings(DEBUG=True)
+@mock.patch("directory.management.commands.seed_activity.PATIENTS_PER_DOCTOR", 30)  # keep the suite quick
 class SeedActivityTests(ShardTestCase):
     def test_the_owner_overview_shows_visits_and_revenue(self):
         call_command("seed_demo", stdout=io.StringIO())
