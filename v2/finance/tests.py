@@ -163,7 +163,7 @@ class ExpenseTests(M2TestCase):
 
 class StaffPayTests(M2TestCase):
     def test_rule_statement_payout_and_profit(self):
-        doctor = self.a.membership("owner").id  # the owner works the queue
+        doctor = self.a.membership("doctor").id  # M2 visits are the doctor's
         r = call(self.owner, "PUT", f"/api/v1/finances/pay/{doctor}",
                  {"percent_bp": 3000, "per_visit": 1000, "per_procedure": 0, "monthly_salary": 0, "version": 0})
         self.assertEqual(r.status_code, 200, r.content)

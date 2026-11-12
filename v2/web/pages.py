@@ -38,8 +38,10 @@ SOURCES = ("clinic", "phone", "online", "whatsapp")
 
 def _perms(ctx):
     """What the screens offer this person; the server checks every action again."""
+    from scheduling.rules import may_book
+
     return {
-        "book": ctx.can("appointments.book") and not nav.is_manager(ctx), "queue": ctx.can("appointments.queue"),
+        "book": may_book(ctx), "queue": ctx.can("appointments.queue"),
         "view_patients": ctx.can("patients.view"), "edit_patients": ctx.can("patients.edit"),
         "collect": ctx.can("billing.collect"), "discount": ctx.can("billing.discount"),
         "refund": ctx.can("billing.refund"), "finances": ctx.can("finances.view"),
@@ -205,7 +207,7 @@ def today_queue(request, ctx):
 @page()
 @clinic_page
 def today_page(request, ctx):
-    # The owner and anyone with reports but no queue get the Overview instead (Saged, 2026-11-12).
+    # An owner who only manages, and anyone with reports but no queue, get the Overview instead (Saged, 2026-11-13).
     if nav.is_manager(ctx) or (request.path == "/" and ctx.can("reports.view") and not any(
             ctx.can(code) for code in QUEUE_CODES)):
         return redirect("/overview")

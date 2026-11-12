@@ -80,6 +80,7 @@ def book(ctx, request, deltas=None):
         if day != today:
             raise _not_today()
 
+    rules.require_doctor(ctx, request["doctor_id"])  # a doctor books only for themselves (Saged, 2026-11-13)
     doctor, service = rules.doctor_day_and_service(ctx, request["doctor_id"], request["service_id"], day, lock=True)
     scope = rules.section_scope(ctx)
     if scope is not None and service.section_id not in scope:
@@ -94,10 +95,11 @@ def book(ctx, request, deltas=None):
     is_extra = bool(request["extra"] and starts_at is not None)
 
     if request["patient_id"] is not None:
+        mine, mine_params = rules.patient_sql(ctx, "p.clinic_id", "p.id")  # another doctor's patient is 404 to a doctor
         found = sql.row(ctx, f'SELECT p.id, p.full_name, p.phone, p.file_no, {rules.history_sql("p.id")} '
-                             'FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s',
+                             f'FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s{mine}',
                         [*rules.history_params(ctx, doctor.doctor_id, day, rules.follow_up_window(clinic)),
-                         ctx.clinic_id, request["patient_id"]])
+                         ctx.clinic_id, request["patient_id"], *mine_params])
         if found is None:
             raise rules.not_found("patient")
         patient = {"id": found[0], "full_name": found[1], "phone": found[2], "file_no": found[3]}
@@ -168,11 +170,6 @@ def book(ctx, request, deltas=None):
     return body, version
 
 
-# A doctor without appointments.others does these only on their own visits (design G4). Arrive, the assistant's
-# stages, cancel and reschedule are the desk's and stay open to anyone with the code.
-OWN_ACTIONS = frozenset({"call", "finish", "undo_call"})
-
-
 def _not_today():
     return ApiError("not_today", _("A visit can be marked arrived only on its own day."), 409, fields={"day": "not_today"})
 
@@ -185,7 +182,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     that already happened is a harmless 200. Returns the version of the appointment's day.
     """
     sources, target, column = TRANSITIONS[action]
-    rules.guard(ctx, appointment_id, own=action in OWN_ACTIONS)  # sections and a doctor's own visits (design G1, G4)
+    rules.guard(ctx, appointment_id)  # another section's visit, or another doctor's for a doctor, is 404
     if seen not in sources:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
@@ -255,7 +252,7 @@ def undo(ctx, appointment_id, action, seen):
     Returns the version of the appointment's day, or None for a harmless repeat.
     """
     source, column, target_sql, targets = UNDO[action]
-    rules.guard(ctx, appointment_id, own=action in OWN_ACTIONS)
+    rules.guard(ctx, appointment_id)
     if seen != source:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
@@ -334,6 +331,7 @@ def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
     if status != "booked":
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
     rules.check_day(clinic, day)
+    rules.require_doctor(ctx, doctor_id)
     doctor = rules.doctor_day(ctx, doctor_id, day, lock=True)
     new_starts, new_ends = rules.resolve_slot(clinic, day, doctor, starts_at, section_id)  # the visit keeps its section
     is_extra = bool(extra and new_starts is not None)
@@ -374,8 +372,8 @@ WAITING = ("waiting", "with_assistant", "ready")
 
 
 def _walk_in_doctor(ctx, today, section_id=None):
-    """The doctor a walk-in goes to when the desk doesn't pick one: a doctor bound to their own visits takes it if
-    they work today; else the only working doctor, else the one with the fewest people waiting (then the lowest id).
+    """The doctor a walk-in goes to when the desk doesn't pick one: a doctor takes it themselves (they book only for
+    themselves); else the only working doctor, else the one with the fewest people waiting (then the lowest id).
     Only doctors working today in the member's sections (and the given section) count. One statement."""
     scope = rules.section_scope(ctx)
     rows = sql.rows(ctx, """
@@ -391,12 +389,10 @@ def _walk_in_doctor(ctx, today, section_id=None):
         sections = [s for s in sections if (scope is None or s in scope) and (section_id is None or s == section_id)]
         if sections:
             working.append((waiting, doctor_id, sections))
+    if rules.own_doctor(ctx) is not None:
+        working = [item for item in working if item[1] == ctx.membership_id]
     if not working:
         raise ApiError("no_doctor", _("No doctor works today."), 409, fields={"doctor_id": "none_working"})
-    if rules.own_only(ctx):
-        for item in working:
-            if item[1] == ctx.membership_id:
-                return item[1], item[2]
     _waiting, doctor_id, sections = min(working)
     return doctor_id, sections
 

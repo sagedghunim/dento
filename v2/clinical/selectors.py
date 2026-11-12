@@ -78,13 +78,16 @@ def templates(ctx, section_id=None, include_inactive=False, template_id=None):
 
 
 def prescription(ctx, prescription_id):
-    found = sql.dicts(ctx, """
+    from scheduling.rules import patient_sql
+
+    mine, params = patient_sql(ctx, "r.clinic_id", "r.patient_id")  # another doctor's patient's is 404 to a doctor
+    found = sql.dicts(ctx, f"""
         SELECT r.id, r.number, r.patient_id, r.appointment_id, r.doctor_id, r.section_id, r.notes, r.created_at,
                p.full_name AS patient_name, p.file_no AS patient_file_no, p.allergies, m.display_name AS doctor_name
           FROM "clinical_prescription" r
           JOIN "patients_patient" p ON p.clinic_id = r.clinic_id AND p.id = r.patient_id
           JOIN "clinics_membership" m ON m.clinic_id = r.clinic_id AND m.id = r.doctor_id
-         WHERE r.clinic_id = %s AND r.id = %s""", [ctx.clinic_id, prescription_id])
+         WHERE r.clinic_id = %s AND r.id = %s{mine}""", [ctx.clinic_id, prescription_id, *params])
     if not found:
         raise services.not_found("prescription")
     r = found[0]
@@ -163,8 +166,11 @@ def attachments(ctx, patient_id, size, after):
 
 
 def attachment(ctx, attachment_id):
-    found = sql.dicts(ctx, f'SELECT {ATTACHMENT_COLUMNS}, storage_key FROM "clinical_attachment" '
-                           "WHERE clinic_id = %s AND id = %s", [ctx.clinic_id, attachment_id])
+    from scheduling.rules import patient_sql
+
+    mine, params = patient_sql(ctx, "x.clinic_id", "x.patient_id")  # another doctor's patient's is 404 to a doctor
+    found = sql.dicts(ctx, f'SELECT {ATTACHMENT_COLUMNS}, storage_key FROM "clinical_attachment" x '
+                           f"WHERE x.clinic_id = %s AND x.id = %s{mine}", [ctx.clinic_id, attachment_id, *params])
     if not found:
         raise services.not_found("attachment")
     return found[0]

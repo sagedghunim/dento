@@ -48,13 +48,13 @@ class FinishTests(M2TestCase):
         self.assertEqual(body["invoice"]["remaining"], 0)
         self.assertEqual(body["balance"]["owed"], self.fee - 100_00)
         self.assertEqual([i["appointment_id"] for i in body["balance"]["invoices"]], [self.second])
-        owner = self.a.membership("owner").id
-        self.assertEqual(payments(self.a, self.patient), [(self.visit, self.fee, "card", owner),
-                                                          (self.first, self.fee, "transfer", owner),
-                                                          (self.second, 100_00, "transfer", owner)])
+        doctor = self.a.membership("doctor").id  # the visits' doctor
+        self.assertEqual(payments(self.a, self.patient), [(self.visit, self.fee, "card", doctor),
+                                                          (self.first, self.fee, "transfer", doctor),
+                                                          (self.second, 100_00, "transfer", doctor)])
         clinic, doctors = summaries(self.a, today(self.a))
         self.assertEqual(clinic["collected"], 2 * self.fee + 100_00)
-        self.assertEqual(doctors[owner]["collected"], 2 * self.fee + 100_00)
+        self.assertEqual(doctors[doctor]["collected"], 2 * self.fee + 100_00)
 
     def test_more_than_the_earlier_balance_is_refused_and_nothing_happens(self):
         r = self.act(self.visit, "finish", "in_room", earlier={"amount": 2 * self.fee + 1, "method": "cash"})
@@ -74,7 +74,7 @@ class FinishTests(M2TestCase):
         _clinic, doctors = summaries(self.a, dt.date.fromisoformat(tomorrow))
         self.assertEqual((doctors[owner]["booked"], doctors[owner]["last_queue_no"]), (1, 1))
         _clinic, doctors = summaries(self.a, today(self.a))
-        self.assertEqual(doctors[owner]["done"], 3)
+        self.assertEqual(doctors[self.a.membership("doctor").id]["done"], 3)
 
     def test_a_next_visit_that_cant_be_booked_undoes_the_finish_and_its_payments(self):
         yesterday = (today(self.a) - dt.timedelta(days=1)).isoformat()
@@ -158,7 +158,7 @@ class NoteTests(M2TestCase):
         self.assertEqual(revisions, [(2, "second")])
 
     def test_a_cancelled_visit_takes_no_note(self):
-        booked = self.book().json()["appointment"]
+        booked = self.booked()
         self.assertEqual(self.act(booked["id"], "cancel", "booked").status_code, 200)
         r = put(self.doc, f"/api/v1/appointments/{booked['id']}/note", {"complaint": "x"}, 0)
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "visit_closed"))
@@ -235,7 +235,7 @@ class RecordProcedureTests(M2TestCase):
         extraction = self.procedure("Primary tooth extraction")
         r = call(self.doc, "POST", self.url, {"procedure_id": extraction["id"], "tooth": 85})
         self.assertEqual((r.status_code, r.json()["tooth"]["condition"]), (201, "extracted"))
-        booked = self.book().json()["appointment"]
+        booked = self.booked()
         r = call(self.doc, "POST", f"/api/v1/appointments/{booked['id']}/procedures",
                  {"procedure_id": extraction["id"], "tooth": 85})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "visit_closed"))

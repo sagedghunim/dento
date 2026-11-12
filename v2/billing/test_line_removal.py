@@ -50,7 +50,7 @@ class LineRemovalTests(M1TestCase):
     def test_the_desk_removes_its_own_line_the_same_day_but_not_anyone_elses(self):
         invoice = self.invoice()
         mine = self.add(invoice["id"])
-        doctors = self.add(invoice["id"], self.a.client("doctor"))
+        doctors = self.add(invoice["id"], self.owner)  # someone else: the visit's doctor (the owner)
         lines = {line["id"]: line for line in self.lines(invoice["id"])}
         self.assertEqual((lines[mine["id"]]["removable"], lines[doctors["id"]]["removable"]), (True, False))
         self.assertEqual(lines[mine["id"]]["created_by_id"], self.a.membership("assistant").id)

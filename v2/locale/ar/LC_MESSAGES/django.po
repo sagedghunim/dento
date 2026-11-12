@@ -1851,9 +1851,6 @@ msgstr "التصنيف ده موجود في القائمة بالفعل."
 msgid "This list wasn't found."
 msgstr "القائمة دي مش موجودة."
 
-msgid "Handle other doctors' patients"
-msgstr "التعامل مع مرضى الأطباء الآخرين"
-
 msgid "The day's list, booking and the queue"
 msgstr "قائمة اليوم والحجز والدور"
 
@@ -1948,13 +1945,6 @@ msgstr "ابعت رقم النسخة اللي قريتها."
 
 msgid "Someone changed this section meanwhile. Reload and try again."
 msgstr "حد تاني عدّل القسم ده في نفس الوقت. حدّث الصفحة وحاول تاني."
-
-msgid ""
-"This visit belongs to another doctor. Ask the owner for permission to handle"
-" other doctors' patients."
-msgstr ""
-"الكشف ده تبع دكتور تاني. اطلب من المالك صلاحية التعامل مع مرضى الأطباء "
-"الآخرين."
 
 msgid "No doctor works today."
 msgstr "مفيش دكتور شغال النهارده."
@@ -3177,3 +3167,22 @@ msgstr "المصروفات أكتر من الدخل لحد النهارده"
 
 msgid "{n} of {total}"
 msgstr "{n} من {total}"
+
+msgid "A medical center can't be run by one person alone."
+msgstr "المركز الطبي ماينفعش يديره شخص واحد لوحده."
+
+msgid "I run everything myself (no assistant)"
+msgstr "أنا بعمل كل حاجة بنفسي (من غير مساعد)"
+
+msgid "No"
+msgstr "لا"
+
+msgid "Yes"
+msgstr "أيوه"
+
+msgid ""
+"Yes: you book, receive patients and take payments yourself. No: an assistant"
+" at the desk does that."
+msgstr ""
+"أيوه: إنت بتحجز وبتستقبل المرضى وبتحصّل الفلوس بنفسك. لا: فيه مساعد على "
+"الاستقبال بيعمل ده."

@@ -29,9 +29,11 @@ class GroupTests(SimpleTestCase):
         self.assertEqual(wanted, {"inventory.use"})
         self.assertEqual(perms.lists_for("assistant", perms.TEMPLATES["assistant"] - {"cash.shift"}), ([], ["cash.shift"]))
 
-    def test_others_code_is_off_for_doctors_and_on_for_the_owner(self):
-        self.assertNotIn("appointments.others", perms.TEMPLATES["doctor"])
-        self.assertIn("appointments.others", perms.effective_codes("owner"))
+    def test_the_retired_others_code_is_gone_and_ignored_when_stored(self):
+        # A doctor never sees or acts on another doctor's patients (Saged, 2026-11-13).
+        self.assertNotIn("appointments.others", perms.CODES)
+        self.assertNotIn("appointments.others", perms.effective_codes("owner"))
+        self.assertNotIn("appointments.others", perms.effective_codes("doctor", granted=["appointments.others"]))
 
 
 class TeamCase(M1TestCase):
@@ -62,7 +64,7 @@ class TableTests(TeamCase):
         body = r.json()
         self.assertEqual([g["key"] for g in body["groups"]][:2], ["today", "patients"])
         assistant = next(m for m in body["members"] if m["id"] == self.ids["assistant"])
-        self.assertEqual(assistant["groups"]["today"], "partial")  # book and queue, not others
+        self.assertEqual(assistant["groups"]["today"], "on")  # book and queue
         self.assertEqual(assistant["groups"]["team"], "off")
         self.assertEqual(assistant["groups"]["money"], "partial")
         owner = next(m for m in body["members"] if m["id"] == self.ids["owner"])

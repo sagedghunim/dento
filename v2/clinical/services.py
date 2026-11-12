@@ -89,8 +89,11 @@ def default_section(ctx, data, name="section_id"):
 
 
 def _patient(ctx, patient_id, lock=False):
-    found = sql.row(ctx, 'SELECT id, allergies FROM "patients_patient" WHERE clinic_id = %s AND id = %s',
-                    [ctx.clinic_id, patient_id])
+    from scheduling.rules import patient_sql
+
+    mine, params = patient_sql(ctx, "p.clinic_id", "p.id")  # another doctor's patient is 404 to a doctor
+    found = sql.row(ctx, f'SELECT p.id, p.allergies FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s{mine}',
+                    [ctx.clinic_id, patient_id, *params])
     if found is None:
         raise not_found("patient")
     return {"id": found[0], "allergies": found[1]}
@@ -102,10 +105,10 @@ def _appointment(ctx, appointment_id):
     if found is None:
         raise not_found("appointment")
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "section_id"), found))
-    # Every caller writes clinical data on this visit: the member's sections, and a doctor's own visits (design G1, G4).
+    # Every caller writes clinical data on this visit: the member's sections, and a doctor's own visits (design G1).
     from scheduling.rules import check_scope
 
-    check_scope(ctx, appointment["section_id"], appointment["doctor_id"], own=True)
+    check_scope(ctx, appointment["section_id"], appointment["doctor_id"])
     return appointment
 
 
@@ -847,7 +850,7 @@ def record_procedure(ctx, appointment_id, request):
     from scheduling.rules import check_scope
 
     procedure = _procedure(ctx, request["procedure_id"])  # another place's id is 404 before any other answer
-    check_scope(ctx, appointment["section_id"], appointment["doctor_id"], own=True)
+    check_scope(ctx, appointment["section_id"], appointment["doctor_id"])
     status = appointment["status"]
     if status in ("booked", "cancelled", "no_show"):
         raise ApiError("visit_closed", _("Record procedures on a visit that has arrived."), 409, fields={"status": status})
@@ -1007,8 +1010,11 @@ def create_plan(ctx, patient_id, section, title, items):
 
 def add_plan_items(ctx, plan_id, items):
     """More items on a plan. The plan row is locked first, so two adds take positions one after the other."""
-    found = sql.row(ctx, 'SELECT id, section_id FROM "clinical_plan" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
-                    [ctx.clinic_id, plan_id])
+    from scheduling.rules import patient_sql
+
+    mine, params = patient_sql(ctx, "pl.clinic_id", "pl.patient_id")  # another doctor's patient's plan is 404
+    found = sql.row(ctx, f'SELECT pl.id, pl.section_id FROM "clinical_plan" pl WHERE pl.clinic_id = %s AND pl.id = %s{mine} '
+                         "FOR NO KEY UPDATE", [ctx.clinic_id, plan_id, *params])
     if found is None:
         raise not_found("plan")
     count, last = sql.row(ctx, 'SELECT count(*), coalesce(max(position), 0) FROM "clinical_plan_item" '
@@ -1025,6 +1031,18 @@ def move_plan_item(ctx, item_id, status, expected):
     status the screen showed decides, so a double click takes effect once and a stale screen gets 409."""
     if status not in PLAN_ITEM_STATUSES:
         raise ApiError("invalid", "status is not a plan item status", fields={"status": "choice"})
+    from scheduling.rules import own_doctor, require_patient
+
+    if own_doctor(ctx) is not None:  # another doctor's patient's plan item is 404 to a doctor
+        owner = sql.row(ctx, 'SELECT pl.patient_id FROM "clinical_plan_item" i JOIN "clinical_plan" pl '
+                             "ON pl.clinic_id = i.clinic_id AND pl.id = i.plan_id WHERE i.clinic_id = %s AND i.id = %s",
+                        [ctx.clinic_id, item_id])
+        if owner is None:
+            raise not_found("plan_item")
+        try:
+            require_patient(ctx, owner[0])
+        except ApiError:
+            raise not_found("plan_item")
     found = sql.row(ctx, 'UPDATE "clinical_plan_item" SET status = %s, updated_at = %s WHERE clinic_id = %s AND id = %s '
                          "AND status = %s AND %s = ANY(%s) RETURNING plan_id",
                     [status, timezone.now(), ctx.clinic_id, item_id, expected, status,

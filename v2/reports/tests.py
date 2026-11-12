@@ -128,7 +128,7 @@ class PerformanceTests(M2TestCase):
         self.assertEqual(row["timed"], 1)
         self.assertIsNotNone(row["avg_doctor_secs"])
         staff = call(self.owner, "GET", "/api/v1/reports/staff").json()["items"]
-        self.assertEqual([(s["membership_id"], s["visits"]) for s in staff], [(self.a.membership("owner").id, 1)])
+        self.assertEqual([(s["membership_id"], s["visits"]) for s in staff], [(self.a.membership("doctor").id, 1)])  # M2 visits are the doctor's
         month = call(self.owner, "GET", "/api/v1/reports/performance?by=month").json()
         self.assertEqual(month["items"][0]["key"], day[:7])
         self.assertEqual(call(self.desk, "GET", "/api/v1/reports/staff").status_code, 403)

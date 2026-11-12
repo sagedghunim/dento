@@ -13,7 +13,6 @@
     {% elif a.status == "cancelled" %}<span class="pill red"><svg class="icon"><use href="#i-x"/></svg>{% translate "Cancelled" %}</span>
     {% else %}<span class="pill red"><svg class="icon"><use href="#i-minus"/></svg>{% translate "Didn't come" %}</span>{% endif %}
     {% if perms.collect and a.status != "cancelled" and a.status != "no_show" %}{% if a.due > 0 %}<span class="pill amber"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Owes" %} {{ a.due|money }}</span>{% elif a.invoice and a.invoice.paid > 0 %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "Paid" %}</span>{% endif %}{% endif %}
-    {% if a.can_act is not False %}{# another doctor's visit is read-only for a doctor bound to their own (design G4) #}
     <div class="appt-actions">
       {% if is_today and perms.queue %}
         {% if a.status == "booked" %}<button type="button" class="btn" data-act="arrive">{% translate "Arrived" %}</button>
@@ -36,7 +35,6 @@
         </div>
       </details>
     </div>
-    {% endif %}
   </div>
   </div>
 </li>{% endspaceless %}

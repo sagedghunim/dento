@@ -10,6 +10,8 @@ from core.days import business_day
 from core.errors import ApiError
 from core.validate import boolean, ident, path_id, text
 
+from scheduling.rules import require_patient
+
 from . import selectors, services, tags
 
 
@@ -76,6 +78,7 @@ def update_view(request, ctx, data, patient_id):
     if unknown:
         raise ApiError("invalid", "Unknown fields: " + ", ".join(sorted(unknown)),
                        fields={name: "unknown" for name in unknown})
+    require_patient(ctx, patient_id)  # another doctor's patient is 404 to a doctor
     today = business_day(ctx.clinic)
     patient = services.update(ctx, patient_id, services.clean_fields(changes, today, partial=True), expected, today)
     # The summary and what was sent, never the rest of the file: only GET patients/{id} reads it (with an access event).
@@ -163,6 +166,7 @@ def patient_tags_view(request, ctx, data, patient_id):
 def set_patient_tags_view(request, ctx, data, patient_id):
     """PUT {tag_ids: [...]}: the patient's tags, absolute."""
     patient_id = path_id(patient_id, _not_found())
+    require_patient(ctx, patient_id)
     raw = data.get("tag_ids")
     if not isinstance(raw, list):
         raise ApiError("invalid", "tag_ids must be a list", fields={"tag_ids": "list"})

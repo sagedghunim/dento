@@ -105,6 +105,7 @@ function body() {
     phone: asciiDigits(field("phone").value).trim(),
   };
   if (center) out.layout = layout();
+  else out.solo = (form.querySelector('[name="solo"]:checked') || {}).value === "yes";  // a clinic only, never a center
   if (mode === "signup") {
     out.owner = {
       full_name: field("owner_full_name").value.trim(),

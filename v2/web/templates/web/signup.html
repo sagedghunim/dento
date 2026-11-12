@@ -53,6 +53,14 @@
       </div>
       <p class="card-sub">{% translate "Separate branches become one place each, under your account. You move between them from the place picker." %}</p>
     </fieldset>
+    <fieldset class="group" data-when-kind="clinic">
+      <legend>{% translate "I run everything myself (no assistant)" %}</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="solo" value="yes"><span>{% translate "Yes" %}</span></label>
+        <label class="chip"><input type="radio" name="solo" value="no" checked><span>{% translate "No" %}</span></label>
+      </div>
+      <p class="card-sub">{% translate "Yes: you book, receive patients and take payments yourself. No: an assistant at the desk does that." %}</p>
+    </fieldset>
   </section>
 
   <section class="card" aria-labelledby="step-place">

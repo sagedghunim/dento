@@ -21,6 +21,7 @@ class ClinicalConcurrencyTests(TransactionTestCase):
         helper = ShardTestCase()
         self.a = helper.clinic("mc", "shard_1")
         add_schedule(self.a, "owner")
+        add_schedule(self.a, "doctor")  # the visits are the doctor's: a doctor acts only on their own
         self.services = services_of(self.a)
         self.owner_id = self.a.membership("owner").id
         self.desk = self.a.client("assistant")
@@ -44,7 +45,7 @@ class ClinicalConcurrencyTests(TransactionTestCase):
         return results
 
     def visit(self, patient_id=None, finish=False):
-        body = {"doctor_id": self.owner_id, "service_id": self.services["procedure"].id}
+        body = {"doctor_id": self.a.membership("doctor").id, "service_id": self.services["procedure"].id}
         body.update({"patient_id": patient_id} if patient_id else {"new_patient": {"full_name": "Race Patient"}})
         visit = call(self.desk, "POST", "/api/v1/appointments", body).json()["appointment"]
         call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/arrive", {"status": "booked"})

@@ -23,7 +23,7 @@ DAY_SETTINGS = ("timezone", "day_ends_at")
 def clinic_payload(ctx):
     from billing.models import METHODS
 
-    from scheduling.rules import own_only, section_scope
+    from scheduling.rules import own_doctor, section_scope
 
     clinic = ctx.clinic
     scope = section_scope(ctx)
@@ -47,7 +47,7 @@ def clinic_payload(ctx):
                     for d in doctors],
         "payment_methods": list(METHODS),  # transfer added for the finish dialog (design E3)
         "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "codes": sorted(ctx.codes),
-               "sections": list(ctx.membership.sections), "own_only": own_only(ctx)},
+               "sections": list(ctx.membership.sections), "own_only": own_doctor(ctx) is not None},
     }
 
 
@@ -99,7 +99,7 @@ def clinic_settings_view(request, ctx, data):
         raise ApiError("invalid", _("Send the changes and the values they replace."))
     day_changes = _clean_day_settings({key: changes[key] for key in DAY_SETTINGS if key in changes})
     changes = {key: value for key, value in changes.items() if key not in DAY_SETTINGS}
-    clinic_settings.validated(changes)
+    clinic_settings.validated(changes, ctx.clinic.kind)
     clinic = Clinic.objects.select_for_update(no_key=True).get(id=ctx.clinic_id)
     current = {**clinic_settings.effective(clinic.settings), "timezone": clinic.timezone,
                "day_ends_at": clinic.day_ends_at.strftime("%H:%M")}

@@ -166,7 +166,7 @@ class PackageConcurrencyTests(TransactionTestCase):
                 connections.close_all()
 
         threads = [threading.Thread(target=worker, args=(0, visits[0], "owner")),
-                   threading.Thread(target=worker, args=(1, visits[1], "doctor"))]
+                   threading.Thread(target=worker, args=(1, visits[1], "owner"))]  # the owner's visits
         [t.start() for t in threads]
         [t.join() for t in threads]
         self.assertEqual(results, [201, 201])

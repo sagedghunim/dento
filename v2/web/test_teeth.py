@@ -69,7 +69,7 @@ class TeethPageTests(M2TestCase):
         self.assertIn('"plan_id": %d' % r.json()["plan"]["id"], html)  # "add to plan" goes to the open plan
 
     def test_a_booked_visit_takes_findings_but_not_procedures(self):
-        visit = self.book(client=self.desk).json()["appointment"]
+        visit = self.booked()  # the doctor's own
         html = self.doc.get(f"/visits/{visit['id']}/teeth").content.decode()
         self.assertIn('data-part="finding"', html)
         self.assertNotIn('data-part="procedure"', html)

@@ -1,4 +1,4 @@
-"""A doctor's own visits (design G4) and the walk-in (design G5)."""
+"""A doctor's own patients and visits (Saged, 2026-11-13) and the walk-in (design G5)."""
 
 import uuid
 
@@ -7,70 +7,122 @@ from core.testing import call
 from .testing import M1TestCase
 
 
-class OwnVisitTests(M1TestCase):
-    """The owner works a queue, the doctor works slots; the doctor holds no appointments.others."""
+class OwnPatientsTests(M1TestCase):
+    """A doctor never sees or acts on another doctor's patients or visits: they are 404, as another place's are
+    (Saged, 2026-11-13). The owner works a queue, the doctor works slots."""
 
     def setUp(self):
         super().setUp()
-        from clinics.models import Membership
-        from core.routing import clinic_transaction
-
-        with clinic_transaction(self.a.id, self.a.shard):  # the fixture gives it; this rule's tests take it away
-            Membership.objects.filter(clinic_id=self.a.id, id=self.a.membership("doctor").id).update(granted=[])
         self.doctor = self.a.client("doctor")
-        self.owner_visit = self.book().json()["appointment"]["id"]
+        self.doctor_id = self.a.membership("doctor").id
+        other = self.book().json()["appointment"]  # the owner's visit and patient, "Mohamed Ahmed"
+        self.owner_visit, self.owner_patient = other["id"], other["patient"]["id"]
         self.act(self.owner_visit, "arrive", "booked")
+        r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
+                 {"doctor_id": self.doctor_id, "new_patient": {"full_name": "Own Patient", "phone": "01099999999"}})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.own_visit, self.own_patient = r.json()["appointment"]["id"], r.json()["appointment"]["patient"]["id"]
 
-    def test_a_doctor_cant_call_or_finish_another_doctors_visit(self):
-        r = self.act(self.owner_visit, "call", "waiting", client=self.doctor)
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "not_your_patient"))
+    def get(self, url, client=None):
+        return call(client or self.doctor, "GET", url)
+
+    def test_another_doctors_visit_is_404_for_every_action(self):
+        for action, status in (("call", "waiting"), ("cancel", "waiting"), ("undo-arrive", "waiting")):
+            r = self.act(self.owner_visit, action, status, client=self.doctor)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (404, "not_found"), action)
         self.assertEqual(self.appointment(self.owner_visit).status, "waiting")
-
-    def test_the_refusal_is_in_the_users_language(self):
-        user = self.a.user("doctor")
-        user.language = "en"
-        user.save(update_fields=["language"])
-        r = self.act(self.owner_visit, "call", "waiting", client=self.a.client("doctor"))
-        self.assertIn("another doctor", r.json()["error"]["message"])
-        user.language = "ar"
-        user.save(update_fields=["language"])
-        r = self.act(self.owner_visit, "call", "waiting", client=self.a.client("doctor"))
-        self.assertTrue(any("؀" <= ch <= "ۿ" for ch in r.json()["error"]["message"]))
-
-    def test_a_doctor_cant_write_the_note_of_another_doctors_visit(self):
+        for url in (f"/api/v1/appointments/{self.owner_visit}", f"/api/v1/appointments/{self.owner_visit}/record"):
+            self.assertEqual(self.get(url).status_code, 404, url)
         r = self.doctor.generic("PUT", f"/api/v1/appointments/{self.owner_visit}/note",
                                 '{"complaint": "x"}', content_type="application/json",
                                 headers={"X-Membership": str(self.doctor.membership_id),
                                          "Idempotency-Key": str(uuid.uuid4()), "If-Match": "0"})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "not_your_patient"))
+        self.assertEqual(r.status_code, 404)
+        r = call(self.doctor, "POST", f"/api/v1/appointments/{self.owner_visit}/payments", {"amount": "10", "method": "cash"})
+        self.assertEqual(r.status_code, 404)
+        # Their own visit works as before.
+        self.assertEqual(self.act(self.own_visit, "call", "waiting", client=self.doctor).status_code, 200)
 
-    def test_the_owner_acts_on_anyones_visit_and_a_grant_lifts_the_rule(self):
-        self.assertEqual(self.act(self.owner_visit, "call", "waiting", client=self.owner).status_code, 200)
-        self.assertEqual(self.act(self.owner_visit, "undo-call", "in_room", client=self.owner).status_code, 200)
-        member = self.a.membership("doctor")
+    def test_today_shows_only_their_own_visits(self):
+        body = self.get("/api/v1/today").json()
+        self.assertTrue(body["own_only"])
+        self.assertEqual([q["doctor"]["id"] for q in body["queues"]], [self.doctor_id])
+        self.assertEqual([a["id"] for q in body["queues"] for a in q["appointments"]], [self.own_visit])
+        self.assertEqual({e["appointment_id"] for e in body["recent"]}, {self.own_visit})
+        desk = self.get("/api/v1/today", self.desk).json()
+        self.assertFalse(desk["own_only"])
+        self.assertEqual({a["id"] for q in desk["queues"] for a in q["appointments"]}, {self.owner_visit, self.own_visit})
+
+    def test_patients_search_finds_only_their_own(self):
+        self.assertEqual(self.get("/api/v1/patients?q=Mohamed").json()["items"], [])
+        self.assertEqual(self.get("/api/v1/patients?q=0101234").json()["items"], [])
+        self.assertEqual(self.get("/api/v1/patients/by-phone?phone=01012345678").json()["items"], [])
+        self.assertEqual([i["id"] for i in self.get("/api/v1/patients?q=Own").json()["items"]], [self.own_patient])
+        self.assertEqual([i["id"] for i in self.get("/api/v1/patients?q=Mohamed", self.desk).json()["items"]],
+                         [self.owner_patient])
+
+    def test_another_doctors_patient_is_404_everywhere(self):
+        p = self.owner_patient
+        for url in (f"/api/v1/patients/{p}", f"/api/v1/patients/{p}/visits", f"/api/v1/patients/{p}/payments",
+                    f"/api/v1/patients/{p}/timeline", f"/api/v1/patients/{p}/prescriptions",
+                    f"/api/v1/patients/{p}/attachments", f"/api/v1/patients/{p}/teeth", f"/api/v1/patients/{p}/plans",
+                    f"/api/v1/patients/{p}/balance"):
+            self.assertEqual(self.get(url).status_code, 404, url)
+            self.assertEqual(self.get(url, self.owner).status_code, 200, url)
+        r = call(self.doctor, "PATCH", f"/api/v1/patients/{p}", {"changes": {"notes": "x"}, "expected": {}})
+        self.assertEqual(r.status_code, 404)
+        r = call(self.doctor, "PUT", f"/api/v1/patients/{p}/teeth/16", {"condition": "caries", "surfaces": ["O"]})
+        self.assertEqual(r.status_code, 404)
+        for url in (f"/patients/{p}", f"/patients/{p}/teeth", f"/visits/{self.owner_visit}/teeth"):
+            self.assertEqual(self.doctor.get(url).status_code, 404, url)
+        self.assertEqual(self.doctor.get(f"/patients/{self.own_patient}").status_code, 200)
+
+    def test_a_shared_patient_shows_only_their_own_visits(self):
+        day = self.appointment(self.owner_visit).day
+        visit = self.book(patient_id=self.owner_patient, doctor_id=self.doctor_id,
+                          starts_at=self.slot_iso(self.a, day, "13:40")).json()["appointment"]
+        self.assertEqual(self.get(f"/api/v1/patients/{self.owner_patient}").status_code, 200)
+        visits = self.get(f"/api/v1/patients/{self.owner_patient}/visits").json()["items"]
+        self.assertEqual([v["id"] for v in visits], [visit["id"]])
+
+    def test_a_file_they_created_is_theirs(self):
+        r = call(self.doctor, "POST", "/api/v1/patients", {"full_name": "Created Here", "phone": "01055555555"})
+        self.assertEqual(r.status_code, 201, r.content)
+        created = r.json()["patient"]["id"]
+        self.assertEqual([i["id"] for i in self.get("/api/v1/patients?q=Created").json()["items"]], [created])
+        self.assertEqual(self.get(f"/api/v1/patients/{created}").status_code, 200)
+
+    def test_a_doctor_books_only_for_themselves_and_their_patients(self):
+        r = self.book(client=self.doctor, expect=404)
+        self.assertEqual(r.json()["error"]["code"], "not_found")
+        day = self.appointment(self.owner_visit).day
+        r = self.book(client=self.doctor, expect=404, doctor_id=self.doctor_id, patient_id=self.owner_patient,
+                      starts_at=self.slot_iso(self.a, day, "13:40"))
+        self.assertEqual(r.json()["error"]["code"], "not_found")
+
+    def test_the_owner_and_the_desk_are_unchanged(self):
+        self.assertEqual(self.get(f"/api/v1/patients/{self.own_patient}", self.owner).status_code, 200)
+        self.assertEqual(self.act(self.own_visit, "call", "waiting", client=self.owner).status_code, 200)
+        self.assertEqual(self.act(self.owner_visit, "call", "waiting").status_code, 200)  # the assistant
+
+    def test_a_stored_retired_grant_changes_nothing(self):
         from clinics.models import Membership
         from core.routing import clinic_transaction
 
         with clinic_transaction(self.a.id, self.a.shard):
-            version = Membership.objects.get(clinic_id=self.a.id, id=member.id).version
-        r = call(self.owner, "PUT", f"/api/v1/team/members/{member.id}/permissions",
-                 {"version": version, "codes": {"appointments.others": True}})
+            Membership.objects.filter(clinic_id=self.a.id, id=self.doctor_id).update(granted=["appointments.others"])
+        doctor = self.a.client("doctor")
+        self.assertEqual(self.act(self.owner_visit, "call", "waiting", client=doctor).status_code, 404)
+        team = call(self.owner, "GET", "/api/v1/team").json()
+        member = next(m for m in team["members"] if m["id"] == self.doctor_id)
+        self.assertNotIn("appointments.others", member["codes"])
+        self.assertTrue(member["editable"])
+        r = call(self.owner, "PUT", f"/api/v1/team/members/{self.doctor_id}/permissions",
+                 {"version": member["version"], "codes": {"appointments.others": True}})
+        self.assertEqual(r.status_code, 400)
+        r = call(self.owner, "PUT", f"/api/v1/team/members/{self.doctor_id}/permissions",
+                 {"version": member["version"], "codes": {"billing.discount": True}})
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(self.act(self.owner_visit, "call", "waiting", client=self.doctor).status_code, 200)
-
-    def test_the_desk_and_arrive_are_unaffected(self):
-        visit = self.book().json()["appointment"]["id"]
-        self.assertEqual(self.act(visit, "arrive", "booked", client=self.doctor).status_code, 200)
-        self.assertEqual(self.act(self.owner_visit, "call", "waiting").status_code, 200)  # the assistant
-
-    def test_today_marks_what_the_doctor_can_act_on(self):
-        body = call(self.doctor, "GET", "/api/v1/today").json()
-        self.assertTrue(body["own_only"])
-        self.assertEqual(body["my_doctor_id"], self.a.membership("doctor").id)
-        visit = next(a for q in body["queues"] for a in q["appointments"] if a["id"] == self.owner_visit)
-        self.assertFalse(visit["can_act"])
-        owner_view = call(self.owner, "GET", "/api/v1/today").json()
-        self.assertTrue(all(a["can_act"] for q in owner_view["queues"] for a in q["appointments"]))
 
 
 class WalkInTests(M1TestCase):

@@ -54,7 +54,7 @@ class FinishAfterFinishTests(M1TestCase):
     def test_a_finish_with_a_payment_after_another_finish_is_409_and_records_nothing(self):
         appt = self.in_room()
         self.assertEqual(self.act(appt["id"], "finish", "in_room").status_code, 200)
-        doctor = self.a.client("doctor")
+        doctor = self.owner  # the visit's doctor
         r = self.act(appt["id"], "finish", "in_room", client=doctor, payment={"amount": 5000, "method": "cash"})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "already_finished"), r.content)
         current = r.json()["error"]["appointment"]
@@ -86,7 +86,7 @@ class FinishRaceTests(TransactionTestCase):
                 "doctor_id": a.membership("owner").id, "service_id": services["consultation"].id, "arrive": True,
                 "new_patient": {"full_name": f"Race {round_}"}}).json()["appointment"]
             call(desk, "POST", f"/api/v1/appointments/{appt['id']}/call", {"status": "waiting"})
-            c1, c2 = a.client("assistant"), a.client("doctor")
+            c1, c2 = a.client("assistant"), a.client("owner")
             plain, paying = run_together([
                 lambda: call(c1, "POST", f"/api/v1/appointments/{appt['id']}/finish", {"status": "in_room"}),
                 lambda: call(c2, "POST", f"/api/v1/appointments/{appt['id']}/finish",

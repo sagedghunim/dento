@@ -43,7 +43,14 @@ def payment_payload(clinic, p):
 
 def invoice(ctx, invoice_id):
     """The invoice with its patient, visit, lines and payments (three statements)."""
-    found = sql.dicts(ctx, INVOICE_SQL, [ctx.clinic_id, invoice_id])
+    from scheduling.rules import patient_sql, visit_sql
+
+    # A doctor: another doctor's patient's invoice, or one for another doctor's visit, is 404.
+    mine, params = patient_sql(ctx, "i.clinic_id", "i.patient_id")
+    own, own_params = visit_sql(ctx, "a.doctor_id")
+    if own:
+        own, own_params = " AND (a.id IS NULL OR a.doctor_id = %s)", own_params
+    found = sql.dicts(ctx, INVOICE_SQL + mine + own, [ctx.clinic_id, invoice_id, *params, *own_params])
     if not found:
         raise _not_found()
     i = found[0]

@@ -52,8 +52,17 @@ def search(ctx, query, today):
     return found
 
 
+def _mine(ctx):
+    """(sql, params): a doctor finds only their own patients (a visit with them, or a file they created), in the
+    WHERE clause of each scan (Saged, 2026-11-13). Empty for everyone else."""
+    from scheduling.rules import patient_sql
+
+    return patient_sql(ctx, '"patients_patient".clinic_id', '"patients_patient".id')
+
+
 def _search(ctx, query, today):
     query = (query or "").strip()
+    mine, mine_params = _mine(ctx)
     if looks_like_phone(query):
         digits = "".join(ch for ch in ascii_digits(query) if ch.isdigit())
         if len(digits) < 2:
@@ -63,11 +72,12 @@ def _search(ctx, query, today):
         file_no = int(digits) if len(digits) <= 15 else 0
         hits = sql.rows(ctx, f"""
             SELECT {_SUMMARY} FROM (
-                (SELECT {_SUMMARY}, 0 AS rank FROM "patients_patient" WHERE clinic_id = %s AND file_no = %s)
+                (SELECT {_SUMMARY}, 0 AS rank FROM "patients_patient" WHERE clinic_id = %s AND file_no = %s{mine})
                 UNION ALL
                 (SELECT {_SUMMARY}, 1 AS rank FROM "patients_patient"
-                  WHERE clinic_id = %s AND phone_norm >= %s AND phone_norm < %s ORDER BY phone_norm LIMIT %s)
-            ) hits ORDER BY rank""", [ctx.clinic_id, file_no, ctx.clinic_id, prefix, _next_prefix(prefix), SEARCH_LIMIT])
+                  WHERE clinic_id = %s AND phone_norm >= %s AND phone_norm < %s{mine} ORDER BY phone_norm LIMIT %s)
+            ) hits ORDER BY rank""", [ctx.clinic_id, file_no, *mine_params, ctx.clinic_id, prefix, _next_prefix(prefix),
+                                      *mine_params, SEARCH_LIMIT])
         seen, unique = set(), []
         for hit in hits:
             if hit[0] not in seen:
@@ -80,14 +90,14 @@ def _search(ctx, query, today):
     sql.statement_timeout(ctx, SEARCH_TIMEOUT_MS)
     # 1. The name starts with the query: a range, so it keeps its index range under row-level security.
     hits = sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" '
-                         "WHERE clinic_id = %s AND name_norm >= %s AND name_norm < %s ORDER BY name_norm LIMIT %s",
-                    [ctx.clinic_id, name, _next_prefix(name), SEARCH_LIMIT])
+                         f"WHERE clinic_id = %s AND name_norm >= %s AND name_norm < %s{mine} ORDER BY name_norm LIMIT %s",
+                    [ctx.clinic_id, name, _next_prefix(name), *mine_params, SEARCH_LIMIT])
     if len(hits) < SEARCH_LIMIT:
         # 2. A later word starts with it: LIKE isn't leakproof, so this scans the clinic's part of the index.
         hits += sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" '
-                              "WHERE clinic_id = %s AND name_norm LIKE %s ESCAPE '\\' AND NOT (id = ANY(%s::bigint[])) "
-                              "ORDER BY name_norm LIMIT %s",
-                         [ctx.clinic_id, "% " + _escape_like(name) + "%", [hit[0] for hit in hits],
+                              "WHERE clinic_id = %s AND name_norm LIKE %s ESCAPE '\\' AND NOT (id = ANY(%s::bigint[]))"
+                              f"{mine} ORDER BY name_norm LIMIT %s",
+                         [ctx.clinic_id, "% " + _escape_like(name) + "%", [hit[0] for hit in hits], *mine_params,
                           SEARCH_LIMIT - len(hits)])
     return _with_details(ctx, hits, today)
 
@@ -124,8 +134,10 @@ def by_ids(ctx, patient_ids, today):
     """Search results for known ids, in that order (the tag filter, F6): two statements."""
     if not patient_ids:
         return []
+    mine, mine_params = _mine(ctx)
     found = {r[0]: r for r in sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s '
-                                            "AND id = ANY(%s::bigint[])", [ctx.clinic_id, list(patient_ids)])}
+                                            f"AND id = ANY(%s::bigint[]){mine}",
+                                       [ctx.clinic_id, list(patient_ids), *mine_params])}
     return _with_details(ctx, [found[i] for i in patient_ids if i in found], today)
 
 
@@ -134,20 +146,36 @@ def by_phone(ctx, phone):
     phone_norm = normalize_phone(phone)
     if not phone_norm:
         raise ApiError("invalid", _("Enter a valid mobile number."), fields={"phone": "phone"})
-    rows = sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s AND phone_norm = %s '
-                         "ORDER BY id LIMIT 20", [ctx.clinic_id, phone_norm])
+    mine, mine_params = _mine(ctx)
+    rows = sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s AND phone_norm = %s{mine} '
+                         "ORDER BY id LIMIT 20", [ctx.clinic_id, phone_norm, *mine_params])
     return [{"id": r[0], "name": r[1], "phone": r[2], "file_no": r[3]} for r in rows]
 
 
+def _visible(ctx, patient_id):
+    """This clinic's patient with this id, if the member may see it: a doctor only their own (Saged, 2026-11-13)."""
+    from django.db.models import Exists, OuterRef, Q
+
+    from scheduling.models import Appointment
+    from scheduling.rules import own_doctor
+
+    found = Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient_id)
+    doctor = own_doctor(ctx)
+    if doctor is not None:
+        visits = Appointment.objects.filter(clinic_id=OuterRef("clinic_id"), patient_id=OuterRef("id"), doctor_id=doctor)
+        found = found.filter(Q(created_by_id=ctx.user_id) | Exists(visits))
+    return found
+
+
 def get(ctx, patient_id):
-    patient = Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient_id).first()
+    patient = _visible(ctx, patient_id).first()
     if patient is None:
         raise ApiError("not_found", _("This patient wasn't found."), 404)
     return patient
 
 
 def exists(ctx, patient_id):
-    if not Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient_id).exists():
+    if not _visible(ctx, patient_id).exists():
         raise ApiError("not_found", _("This patient wasn't found."), 404)
 
 

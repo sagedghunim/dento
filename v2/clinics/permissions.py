@@ -5,8 +5,6 @@ from django.utils.translation import gettext_lazy as _
 CODES = {
     "appointments.book": _("Book, reschedule and cancel"),
     "appointments.queue": _("Arrive, call in and finish"),
-    # A doctor calls in, finishes, undoes and writes clinical data only on their own visits without it (design G4).
-    "appointments.others": _("Handle other doctors' patients"),
     "patients.view": _("Search and open patient details"),
     "patients.edit": _("Create and edit patient files"),
     "clinical.view": _("Read visit notes and prescriptions"),
@@ -37,6 +35,9 @@ CODES = {
     "audit.view": _("Read the change and access logs"),
 }
 ALL = frozenset(CODES)
+# Codes that no longer exist but may stay in stored granted or revoked lists: ignored everywhere.
+# appointments.others: a doctor never sees or acts on another doctor's patients (Saged, 2026-11-13).
+RETIRED = frozenset({"appointments.others"})
 
 # Only the owner gives or removes these (design 4.2).
 OWNER_ONLY = frozenset({"team.manage", "billing.refund", "finances.view", "finances.pay", "audit.view",
@@ -83,7 +84,7 @@ def check_change(actor, target, new_role, new_granted, new_revoked):
     if target.role == "owner" or new_role == "owner":
         # Ownership moves only through the platform admin (design 5.12).
         raise GrantRefused("owner_fixed")
-    unknown = (set(new_granted) | set(new_revoked)) - ALL
+    unknown = (set(new_granted) | set(new_revoked)) - ALL - RETIRED
     if unknown:
         raise GrantRefused("unknown_code", ", ".join(sorted(unknown)))
     before = effective_codes(target.role, target.granted, target.revoked)
@@ -104,7 +105,7 @@ def check_change(actor, target, new_role, new_granted, new_revoked):
 # Every code is in exactly one group (a test checks it).
 GROUPS = (
     ("today", _("Today"), _("The day's list, booking and the queue"),
-     ("appointments.book", "appointments.queue", "appointments.others")),
+     ("appointments.book", "appointments.queue")),
     ("patients", _("Patients"), _("Patient files, tags and exports"),
      ("patients.view", "patients.edit", "patients.tags", "patients.export")),
     ("visit", _("The visit"), _("Clinical notes, vital signs, prescriptions, procedures and online consultations"),

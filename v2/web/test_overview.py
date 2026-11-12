@@ -1,9 +1,10 @@
-"""Overview, the owner's home (Saged, 2026-11-12), and the side bar of an owner who manages or also treats."""
+"""Overview, the owner's home (Saged, 2026-11-12), and the side bar of an owner who manages, also treats, or runs
+the clinic alone (Saged, 2026-11-13)."""
 
 import datetime as dt
 import re
 
-from clinics.models import Membership, Schedule, Section
+from clinics.models import Clinic, Membership, Schedule, Section
 from core.routing import clinic_transaction
 from core.testing import ShardTestCase
 
@@ -49,11 +50,38 @@ class OwnerNavTests(OverviewCase):
         self.assertNotIn("data-book-patient", owner.get("/patients").content.decode())  # lookup only
         self.assertEqual(owner.get("/today")["Location"], "/overview")
 
-    def test_an_owner_who_also_treats_still_only_manages(self):
+    def test_an_owner_who_also_treats_gets_their_own_queue_without_booking(self):
         owner = self.sessions(keep=True)
-        self.assertEqual(owner.get("/")["Location"], "/overview")
-        links = nav_links(owner.get("/overview").content.decode())
-        self.assertEqual(links, ["/overview", "/finances", "/team", "/patients"])
+        r = owner.get("/")
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertEqual(nav_links(html), ["/", "/prescriptions", "/overview", "/finances", "/team", "/patients"])
+        for marker in ("data-open-walkin", "data-open-book", 'id="walkin-dialog"'):
+            self.assertNotIn(marker, html, marker)  # booking stays the desk's
+        self.assertEqual(owner.get("/prescriptions").status_code, 200)
+        self.assertNotIn("data-book-patient", owner.get("/patients").content.decode())
+
+    def test_a_solo_owner_sees_everything_and_books(self):
+        self.sessions(keep=True)
+        with clinic_transaction(self.a.id, self.a.shard):
+            Clinic.objects.filter(id=self.a.id).update(settings={"solo": True})
+        owner = self.a.client("owner")
+        r = owner.get("/")
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        for link in ("/", "/overview", "/patients", "/finances", "/prescriptions", "/team"):
+            self.assertIn(link, nav_links(html), link)
+        self.assertIn("data-open-book", html)
+        self.assertEqual(owner.get("/prescriptions").status_code, 200)
+        self.assertEqual(owner.get("/overview").status_code, 200)
+
+    def test_solo_never_applies_to_a_center(self):
+        center = self.clinic("c", sections=[{"specialty": "dental", "name": "Teeth"}, {"specialty": "pediatrics", "name": "Kids"}])
+        with clinic_transaction(center.id, center.shard):
+            Clinic.objects.filter(id=center.id).update(settings={"solo": True})
+            Schedule.objects.filter(clinic_id=center.id, doctor_id=center.membership("owner").id).delete()
+        owner = center.client("owner")
+        self.assertEqual(owner.get("/")["Location"], "/overview")  # stored by mistake: still a manager
 
     def test_others_are_unchanged(self):
         desk = self.a.client("assistant")

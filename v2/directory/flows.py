@@ -121,20 +121,22 @@ def clean_sections(kind, sections, language="ar"):
     return plan_places(kind, sections, language)[0]
 
 
-def create_planned(*, name, owner, kind, places, city="", phone="", language="ar", default_session=False, shard=None):
+def create_planned(*, name, owner, kind, places, city="", phone="", language="ar", default_session=False, shard=None,
+                   solo=False):
     """Create places already validated by plan_places. Branches are named "<name> - <specialty>", each a clinic or
-    a center by its number of sections."""
+    a center by its number of sections. `solo` (a single clinic only) is stored as the clinic's setting."""
     entries = []
     for place in places:
         branch_kind = kind if len(places) == 1 else ("center" if len(place) > 1 else "clinic")
         place_name = name if len(places) == 1 else f"{name} - {specialty_name(place[0]['specialty'], language)}"[:120]
         entries.append(create_clinic(name=place_name, owner=owner, kind=branch_kind, sections=place, city=city,
-                                     phone=phone, language=language, default_session=default_session, shard=shard))
+                                     phone=phone, language=language, default_session=default_session, shard=shard,
+                                     solo=solo and branch_kind == "clinic"))
     return entries
 
 
 def create_clinic(*, name, owner, specialty_code=None, kind="clinic", sections=None, city="", phone="", language="ar",
-                  shard=None, timezone_name="Africa/Cairo", default_session=False):
+                  shard=None, timezone_name="Africa/Cairo", default_session=False, solo=False):
     """Create a place with its owner. `owner` is an existing User (the platform admin or sign-up creates it first).
 
     A clinic takes `specialty_code` (or one section); a center takes `sections` (design D1). Steps:
@@ -152,20 +154,21 @@ def create_clinic(*, name, owner, specialty_code=None, kind="clinic", sections=N
         entry = DirectoryClinic.objects.create(shard=shard or least_full_shard(), name=name, kind=kind,
                                                timezone=timezone_name)
     membership_id = ensure_clinic_on_shard(entry, sections, owner, kind=kind, city=city, phone=phone, language=language,
-                                           timezone_name=timezone_name, default_session=default_session)
+                                           timezone_name=timezone_name, default_session=default_session,
+                                           solo=solo and kind == "clinic")
     UserClinic.objects.get_or_create(user=owner, clinic=entry, defaults={"membership_id": membership_id, "role": "owner"})
     return entry
 
 
 def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", phone="", language="ar",
-                           timezone_name="Africa/Cairo", default_session=False):
+                           timezone_name="Africa/Cairo", default_session=False, solo=False):
     """Step 2, idempotent by clinic id: a step that finds its rows leaves them alone. Returns the owner's membership id."""
     with clinic_transaction(entry.id, entry.shard):
         clinic = Clinic.objects.filter(id=entry.id).first()
         if clinic is None:
             clinic = Clinic.objects.create(id=entry.id, name=entry.name, kind=kind, city=city, phone=phone,
                                            specialty_code=sections[0]["specialty"], timezone=timezone_name,
-                                           settings={"print_language": language})
+                                           settings={"print_language": language, **({"solo": True} if solo else {})})
         existing = list(Section.objects.filter(clinic=clinic).order_by("sort", "id"))
         if not existing:
             existing = [Section.objects.create(clinic=clinic, name=section["name"], name_en=section.get("name_en", ""),

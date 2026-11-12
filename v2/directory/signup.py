@@ -46,7 +46,10 @@ def _nested(prefix, call):
 
 
 def clean_place(data, language):
-    """kind, sections, layout, name, city and an optional phone, validated as the platform admin's form is (D2, E2).
+    """kind, sections, layout, name, city, an optional phone and solo, validated as the platform admin's form is (D2, E2).
+
+    `solo` (optional, false by default): "I run everything myself (no assistant)". Only a single clinic may say yes;
+    a center (one place or branches) is refused.
 
     `sections` is [{specialty, count?, name?}]: a card with a count (names made from the specialty), or one entry
     per section with count 1 and its own name. `layout` is "one_place" (default) or "branches"; with branches each
@@ -59,7 +62,13 @@ def clean_place(data, language):
     phone = normalize_phone(text(data, "phone", 20, required=False))
     if phone and not is_valid_phone(phone):
         raise ApiError("invalid", _("Enter a valid phone number."), fields={"phone": "phone"})
-    return {"kind": data["kind"], "layout": layout, "places": places, "name": name, "city": city, "phone": phone}
+    solo = data.get("solo", False)
+    if not isinstance(solo, bool):
+        raise ApiError("invalid", "solo must be true or false", fields={"solo": "boolean"})
+    if solo and data["kind"] != "clinic":
+        raise ApiError("invalid", _("A medical center can't be run by one person alone."), fields={"solo": "center"})
+    return {"kind": data["kind"], "layout": layout, "places": places, "name": name, "city": city, "phone": phone,
+            "solo": solo}
 
 
 def clean_owner(data):
@@ -153,7 +162,8 @@ def sign_up(request, data):
             _refuse_taken(owner["username"], owner["mobile"])
             raise
         entry = create_planned(name=place["name"], owner=user, kind=place["kind"], places=place["places"],
-                               city=place["city"], phone=place["phone"], language=language, default_session=True)[0]
+                               city=place["city"], phone=place["phone"], language=language, default_session=True,
+                               solo=place["solo"])[0]
         event(user.id, "signup", request)
         _complete(request, user, mfa=False)
         pick_clinic(request, user, _membership_id(user, entry.id))
@@ -192,7 +202,8 @@ def add_place(request, user, data):
         raise _too_many(wait)
     _take_place(ip)
     entries = create_planned(name=place["name"], owner=user, kind=place["kind"], places=place["places"],
-                             city=place["city"], phone=place["phone"], language=user.language, default_session=True)
+                             city=place["city"], phone=place["phone"], language=user.language, default_session=True,
+                             solo=place["solo"])
     entry = entries[0]
     event(user.id, "place_added", request)
     pick_clinic(request, user, _membership_id(user, entry.id))

@@ -1,5 +1,7 @@
 """The clinic settings registry (design 4.2): every policy a clinic may change, with its default."""
 
+from django.utils.translation import gettext as _
+
 from core.errors import ApiError
 
 DEFAULTS = {
@@ -10,6 +12,7 @@ DEFAULTS = {
     "letterhead": False,        # pre-printed paper: no printed header
     "letterhead_top_mm": 0,
     "letterhead_bottom_mm": 0,
+    "solo": False,              # a single clinic run by its owner alone (no assistant); never a center
 }
 
 _RULES = {
@@ -20,6 +23,7 @@ _RULES = {
     "letterhead": lambda v: isinstance(v, bool),
     "letterhead_top_mm": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 120,
     "letterhead_bottom_mm": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 120,
+    "solo": lambda v: isinstance(v, bool),
 }
 
 
@@ -29,11 +33,14 @@ def effective(stored):
     return values
 
 
-def validated(changes):
+def validated(changes, kind="clinic"):
+    """The changes, checked against the registry. `kind` is the place's: a center is never solo."""
     unknown = set(changes) - set(DEFAULTS)
     if unknown:
         raise ApiError("invalid", "Unknown settings: " + ", ".join(sorted(unknown)))
     bad = [key for key, value in changes.items() if not _RULES[key](value)]
     if bad:
         raise ApiError("invalid", "Invalid settings: " + ", ".join(sorted(bad)), fields={key: "invalid" for key in bad})
+    if changes.get("solo") and kind == "center":
+        raise ApiError("invalid", _("A medical center can't be run by one person alone."), fields={"solo": "center"})
     return changes

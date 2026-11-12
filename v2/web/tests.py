@@ -114,7 +114,7 @@ class TodayTests(M1TestCase):
         owner = self.owner.get("/overview").content.decode()
         self.assertIn("الحسابات", desk)  # finances: the desk sees the register (cash.collect, M3)
         self.assertIn("الحسابات", owner)
-        self.assertNotIn('href="/prescriptions"', owner)  # the owner manages, never books or prescribes
+        self.assertIn('href="/prescriptions"', owner)  # an owner who treats writes prescriptions (Saged, 2026-11-13)
         self.assertIn('href="/patients"', desk)
 
     def test_the_fragment_answers_304_while_nothing_changes(self):

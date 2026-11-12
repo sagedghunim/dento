@@ -268,7 +268,7 @@ def stranded(clinic, bookings, sessions):
     return out
 
 
-# --- Who may act on which visit (design G1, G4) -----------------------------------------------------------------
+# --- Who sees and acts on which visit and patient (design G1; Saged, 2026-11-13) ---------------------------------
 
 
 def section_scope(ctx):
@@ -279,37 +279,117 @@ def section_scope(ctx):
     return frozenset(member.sections)
 
 
-def own_only(ctx):
-    """A doctor without appointments.others calls in, finishes, undoes and writes clinical data only on their own
-    visits (design G4). The owner holds every code."""
+def own_doctor(ctx):
+    """The membership id of a doctor bound to their own patients and visits, or None.
+
+    A doctor never sees or acts on another doctor's patients or visits, in every kind of place (Saged,
+    2026-11-13): those are 404, as another place's are. The owner and assistants are unaffected.
+    """
     member = ctx.membership
-    return member is not None and member.role == "doctor" and not ctx.can("appointments.others")
+    return member.id if member is not None and member.role == "doctor" else None
 
 
-def can_act(ctx, doctor_id):
-    return not own_only(ctx) or doctor_id == ctx.membership_id
+def is_solo(clinic):
+    """The owner runs a single clinic alone (no assistant): never a center."""
+    return clinic.kind != "center" and bool(clinic_settings.effective(clinic.settings)["solo"])
 
 
-def not_yours():
-    message = _("This visit belongs to another doctor. Ask the owner for permission to handle other doctors' patients.")
-    return ApiError("not_your_patient", message, 403)
+def _owner_has_sessions(ctx):
+    """Whether the owner has any doctor session in this place. One indexed read, kept on the ctx for the request."""
+    cached = getattr(ctx, "_owner_has_sessions", None)
+    if cached is None:
+        cached = bool(sql.row(ctx, 'SELECT 1 FROM "clinics_schedule" WHERE clinic_id = %s AND doctor_id = %s LIMIT 1',
+                              [ctx.clinic_id, ctx.membership_id]))
+        object.__setattr__(ctx, "_owner_has_sessions", cached)  # Ctx is frozen; this is a per-request cache
+    return cached
 
 
-def check_scope(ctx, section_id, doctor_id, own=False):
-    """A visit outside the member's sections is not found, like another place's; another doctor's is 403."""
+def owner_mode(ctx):
+    """What the owner's screens are (Saged, 2026-11-13), or None for anyone else:
+
+    "solo": a single clinic run alone: everything, Today with booking and walk-in is home.
+    "doctor": also treats patients (has sessions): their own queue and Prescription, plus the manager's sections;
+              no booking or walk-in (the desk books).
+    "manager": treats nobody: Overview, Finances, Team and Patients only.
+    The side bar, the pages and the screens' permissions all read this one rule.
+    """
+    member = getattr(ctx, "membership", None)
+    if member is None or member.role != "owner":
+        return None
+    if is_solo(ctx.clinic):
+        return "solo"
+    return "doctor" if _owner_has_sessions(ctx) else "manager"
+
+
+def queue_doctor(ctx):
+    """The doctor whose visits alone Today shows this member: a doctor, or an owner who treats in a shared place."""
+    doctor = own_doctor(ctx)
+    if doctor is None and owner_mode(ctx) == "doctor":
+        return ctx.membership_id
+    return doctor
+
+
+def may_book(ctx):
+    """The screens offer booking and walk-in: never to an owner unless they run the clinic alone."""
+    return ctx.can("appointments.book") and owner_mode(ctx) in (None, "solo")
+
+
+def patient_sql(ctx, clinic_column, patient_column):
+    """(sql, params) to AND into a WHERE: the patient is one the member may see. Empty for all but a doctor.
+
+    A doctor sees a patient who has a visit with them (index appointment_patient_hist on (clinic, patient, ...))
+    or whose file they created (patients_patient's primary key).
+    """
+    doctor = own_doctor(ctx)
+    if doctor is None:
+        return "", []
+    return (f' AND (EXISTS (SELECT 1 FROM "scheduling_appointment" ov WHERE ov.clinic_id = {clinic_column} '
+            f"AND ov.patient_id = {patient_column} AND ov.doctor_id = %s) "
+            f'OR EXISTS (SELECT 1 FROM "patients_patient" op WHERE op.clinic_id = {clinic_column} '
+            f"AND op.id = {patient_column} AND op.created_by_id = %s))", [doctor, ctx.user_id])
+
+
+def visit_sql(ctx, doctor_column):
+    """(sql, params) to AND into a WHERE on appointments: a doctor's own only. Empty for everyone else."""
+    doctor = own_doctor(ctx)
+    if doctor is None:
+        return "", []
+    return f" AND {doctor_column} = %s", [doctor]
+
+
+def require_patient(ctx, patient_id):
+    """404 unless the member may see this patient of this clinic. No query for anyone but a doctor."""
+    if own_doctor(ctx) is None:
+        return
+    extra, params = patient_sql(ctx, "p.clinic_id", "p.id")
+    if not sql.row(ctx, f'SELECT 1 FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s{extra}',
+                   [ctx.clinic_id, patient_id, *params]):
+        raise not_found("patient")
+
+
+def require_doctor(ctx, doctor_id):
+    """A doctor books and moves visits only for themselves: another doctor is 404 to them."""
+    doctor = own_doctor(ctx)
+    if doctor is not None and doctor_id != doctor:
+        raise not_found("doctor")
+
+
+def check_scope(ctx, section_id, doctor_id):
+    """A visit outside the member's sections, or another doctor's visit for a doctor, is not found."""
     scope = section_scope(ctx)
     if scope is not None and section_id not in scope:
         raise not_found("appointment")
-    if own and not can_act(ctx, doctor_id):
-        raise not_yours()
+    doctor = own_doctor(ctx)
+    if doctor is not None and doctor_id != doctor:
+        raise not_found("appointment")
 
 
-def guard(ctx, appointment_id, own=False):
-    """check_scope for an action by id. Reads the visit only for a limited member, so others pay no query."""
-    if section_scope(ctx) is None and not (own and own_only(ctx)):
+def guard(ctx, appointment_id):
+    """check_scope for an action by id. Reads the visit only for a limited assistant or a doctor."""
+    if section_scope(ctx) is None and own_doctor(ctx) is None:
         return
     found = sql.row(ctx, 'SELECT section_id, doctor_id FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
                     [ctx.clinic_id, appointment_id])
     if found is None:
         raise not_found("appointment")
-    check_scope(ctx, found[0], found[1], own)
+    check_scope(ctx, found[0], found[1])

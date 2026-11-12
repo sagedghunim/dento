@@ -97,11 +97,10 @@ class TeamPageTests(ShardTestCase):
 
 
 class TodayOwnVisitsTests(M1TestCase):
-    """A doctor without appointments.others sees other doctors' rows with no actions (design G4)."""
+    """A doctor's Today is their own queue only; the desk's is everyone's (Saged, 2026-11-13)."""
 
     def setUp(self):
         super().setUp()
-        set_codes(self.a, "doctor")  # the fixture gives appointments.others; this rule takes it away
         self.owner_visit = self.book().json()["appointment"]["id"]
         self.act(self.owner_visit, "arrive", "booked")
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
@@ -114,22 +113,30 @@ class TodayOwnVisitsTests(M1TestCase):
         found = re.search(rf'<li class="appt [^"]*" data-id="{appointment_id}".*?</li>', html, re.S)
         return found.group(0) if found else ""
 
-    def test_other_doctors_rows_are_read_only_for_a_bound_doctor(self):
-        html = self.a.client("doctor").get("/").content.decode()
-        other, own = self.row(html, self.owner_visit), self.row(html, self.own_visit)
-        self.assertTrue(other and own)
-        self.assertNotIn("data-act", other)
-        self.assertNotIn("appt-actions", other)
-        self.assertIn('data-act="call"', own)
-        queue = fragment(self.a.client("doctor"), "/today/queue").content.decode()
-        self.assertNotIn("data-act", self.row(queue, self.owner_visit))
+    def test_a_doctors_today_and_its_poll_show_only_their_own_rows(self):
+        doctor = self.a.client("doctor")
+        html = doctor.get("/").content.decode()
+        self.assertEqual(self.row(html, self.owner_visit), "")
+        self.assertIn('data-act="call"', self.row(html, self.own_visit))
+        self.assertNotIn("Mohamed Ahmed", html)
+        queue = fragment(doctor, "/today/queue")
+        self.assertEqual(queue.status_code, 200)
+        self.assertEqual(self.row(queue.content.decode(), self.owner_visit), "")
+        self.assertIn('data-act="call"', self.row(queue.content.decode(), self.own_visit))
+        # The ETag is the doctor's own: unchanged data answers 304; any change in the place moves the version.
+        etag = queue["ETag"]
+        self.assertNotEqual(etag, fragment(self.desk, "/today/queue")["ETag"])
+        again = doctor.get("/today/queue", headers={"X-Membership": str(doctor.membership_id), "If-None-Match": etag})
+        self.assertEqual(again.status_code, 304)
+        self.act(self.owner_visit, "call", "waiting")  # the desk calls the owner's patient in
+        changed = doctor.get("/today/queue", headers={"X-Membership": str(doctor.membership_id), "If-None-Match": etag})
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(self.row(changed.content.decode(), self.owner_visit), "")
 
-    def test_the_desk_and_a_granted_doctor_act_on_every_row(self):
-        self.assertEqual(self.owner.get("/")["Location"], "/overview")  # the owner manages, never runs the queue
-        for client in (self.desk,):
-            self.assertIn('data-act="call"', self.row(client.get("/").content.decode(), self.owner_visit))
-        set_codes(self.a, "doctor", granted=["appointments.others"])
-        self.assertIn('data-act="call"', self.row(self.a.client("doctor").get("/").content.decode(), self.owner_visit))
+    def test_the_desk_acts_on_every_row(self):
+        html = self.desk.get("/").content.decode()
+        self.assertIn('data-act="call"', self.row(html, self.owner_visit))
+        self.assertIn('data-act="call"', self.row(html, self.own_visit))
 
     def test_the_walk_in_button_and_its_defaults(self):
         html = self.desk.get("/").content.decode()
@@ -140,7 +147,7 @@ class TodayOwnVisitsTests(M1TestCase):
         body = r.json()
         self.assertIn(body["doctor_id"], {self.a.membership("owner").id, self.a.membership("doctor").id})
         self.assertIsNotNone(body["service_id"])
-        # A bound doctor who works today takes their own walk-ins (design G5).
+        # A doctor who works today takes their own walk-ins (they book only for themselves).
         self.assertEqual(fragment(self.a.client("doctor"), "/today/walk-in").json()["doctor_id"],
                          self.a.membership("doctor").id)
         self.assertEqual(self.desk.get("/today/walk-in").status_code, 409)  # without X-Membership, as the API
@@ -187,7 +194,7 @@ class OverviewTests(M1TestCase):
         self.assertEqual(set(places), {self.a.id, self.far.id, self.near.id})
         self.assertTrue(places[self.a.id]["current"])
         self.assertEqual((places[self.far.id]["role"], places[self.near.id]["role"]), ("assistant", "doctor"))
-        self.assertEqual(places[self.a.id]["groups"]["today"], "partial")
+        self.assertEqual(places[self.a.id]["groups"]["today"], "on")  # book and queue: the whole group
         self.assertEqual(places[self.near.id]["groups"]["visit"], "on")  # a doctor there: the whole visit group
         self.assertEqual(places[self.far.id]["groups"]["team"], "off")
         self.assertNotIn(self.a.membership("owner").id, [p["member_id"] for p in team_data(

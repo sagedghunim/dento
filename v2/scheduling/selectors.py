@@ -79,7 +79,10 @@ def payload(clinic, r):
 
 
 def appointment(ctx, appointment_id):
-    found = sql.dicts(ctx, ROW_SQL + " WHERE a.clinic_id = %s AND a.id = %s", [ctx.clinic_id, appointment_id])
+    """One visit; another doctor's is 404 to a doctor (Saged, 2026-11-13)."""
+    own, own_params = rules.visit_sql(ctx, "a.doctor_id")
+    found = sql.dicts(ctx, ROW_SQL + " WHERE a.clinic_id = %s AND a.id = %s" + own,
+                      [ctx.clinic_id, appointment_id, *own_params])
     if not found:
         raise rules.not_found("appointment")
     return payload(ctx.clinic, found[0])
@@ -120,9 +123,11 @@ def today_section(raw):
 
 def today_etag(ctx, day, version, language, section_id=None):
     """"<clinic>.<day>.<version>.<hash of the person's codes, language and section filter>"."""
-    # A limited assistant's sections and a doctor's own-visits rule change the body too (design G1, G4).
+    # A limited assistant's sections and whose visits alone the member sees change the body too (design G1;
+    # Saged, 2026-11-13: a doctor's own, and an owner's own unless they run the clinic alone).
     member = ctx.membership
-    scope = f"{member.id}:{member.role}:{sorted(member.sections)}" if member is not None else ""
+    scope = (f"{member.id}:{member.role}:{sorted(member.sections)}:{rules.queue_doctor(ctx)}"
+             if member is not None else "")
     key = ",".join(sorted(ctx.codes)) + "|" + (language or "") + "|" + str(section_id or "") + "|" + scope
     digest = hashlib.sha256(key.encode()).hexdigest()[:12]
     return f'"{ctx.clinic_id}.{day.isoformat()}.{version}.{digest}"'
@@ -190,8 +195,15 @@ def today_data(ctx, day, state, section_id=None):
             raise rules.not_found("section")
         for doctor in doctors.values():
             doctor["sessions"] = [s for s in doctor["sessions"] if s["section_id"] == section_id]
-    rows = sql.dicts(ctx, ROW_SQL + " WHERE a.clinic_id = %s AND a.day = %s ORDER BY a.doctor_id, a.queue_no LIMIT %s",
-                     [ctx.clinic_id, day, TODAY_LIMIT])
+    own_queue = rules.queue_doctor(ctx)
+    if own_queue is not None:
+        # A doctor, or an owner who treats in a shared place, sees only their own queue (Saged, 2026-11-13).
+        doctors = {own_queue: doctors[own_queue]} if own_queue in doctors else {}
+        own, own_params = " AND a.doctor_id = %s", [own_queue]  # index appointment_turn_uniq (clinic, day, doctor, ...)
+    else:
+        own, own_params = "", []
+    rows = sql.dicts(ctx, ROW_SQL + " WHERE a.clinic_id = %s AND a.day = %s" + own
+                     + " ORDER BY a.doctor_id, a.queue_no LIMIT %s", [ctx.clinic_id, day, *own_params, TODAY_LIMIT])
     truncated = len(rows) >= TODAY_LIMIT
     if section_id is not None:
         rows = [r for r in rows if r["section_id"] == section_id]
@@ -200,8 +212,6 @@ def today_data(ctx, day, state, section_id=None):
     # By slot time, then turn; never by status (design 7.4).
     rows.sort(key=lambda r: (r["doctor_id"], r["starts_at"] is None, r["starts_at"] or now, r["queue_no"]))
     appointments = [payload(clinic, r) for r in rows]
-    for a in appointments:
-        a["can_act"] = rules.can_act(ctx, a["doctor_id"])  # another doctor's visit is read-only for them (G4)
     day_rows = {r["doctor_id"]: r for r in summaries.doctor_days(ctx, day)}
     show_money = ctx.can("finances.view")
 
@@ -226,9 +236,9 @@ def today_data(ctx, day, state, section_id=None):
         "business_day": business_day(clinic, now).isoformat(), "next_rollover": local_iso(clinic, next_rollover(clinic, now)),
         "kind": clinic.kind, "sections": sections, "section_id": section_id,
         "queues": queues, "recent": _recent(appointments), "low_stock": low_stock,
-        # A doctor's screens open on their own queue; the others stay readable (design G4).
+        # A doctor's screens open on their own queue; own_only: no other doctor's visits are in it.
         "my_doctor_id": ctx.membership_id if ctx.membership.role in ("owner", "doctor") else None,
-        "own_only": rules.own_only(ctx),
+        "own_only": own_queue is not None,
         "truncated": truncated,
     }
     if show_money:
@@ -257,8 +267,9 @@ def _recent(appointments, size=10):
 
 def patient_visits(ctx, patient_id, size, after):
     """A patient's appointments, newest first (index (clinic_id, patient_id, day DESC, id DESC))."""
-    params = [ctx.clinic_id, patient_id]
-    where = " WHERE a.clinic_id = %s AND a.patient_id = %s"
+    own, own_params = rules.visit_sql(ctx, "a.doctor_id")  # a doctor sees their own visits only
+    params = [ctx.clinic_id, patient_id, *own_params]
+    where = " WHERE a.clinic_id = %s AND a.patient_id = %s" + own
     if after:
         where += " AND (a.day, a.id) < (%s, %s)"
         params += [after[0], after[1]]

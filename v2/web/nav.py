@@ -31,22 +31,29 @@ SECTIONS = (
 )
 
 
-# An owner who sees no patients of their own manages the place: their side bar is these, in this order.
+# The owner's side bar (Saged, 2026-11-13), in this order. A solo owner sees every section, as SECTIONS orders them.
 MANAGER_SECTIONS = ("overview", "finances", "team", "patients")
+TREATING_OWNER_SECTIONS = ("today", "prescription", "overview", "finances", "team", "patients")
+
+
+def owner_mode(ctx):
+    """"solo", "doctor", "manager", or None for anyone but the owner: the one rule the side bar, the pages and the
+    screens' permissions read (scheduling.rules.owner_mode)."""
+    from scheduling.rules import owner_mode as mode
+
+    return mode(ctx) if getattr(ctx, "membership", None) is not None else None
 
 
 def is_manager(ctx):
-    """The owner manages the place: Overview is their home; Today, booking, walk-in and Prescription are hidden.
-
-    Saged, 2026-11-12: the owner never books, even when they also treat patients."""
-    membership = getattr(ctx, "membership", None)
-    return membership is not None and getattr(membership, "role", None) == "owner"
+    """The owner only manages the place: Overview is their home; Today, booking, walk-in and Prescription are hidden."""
+    return owner_mode(ctx) == "manager"
 
 
 def visible(ctx):
     """The sections this person may see, in order."""
     shown = [section for section in SECTIONS if any(ctx.can(code) for code in section.codes)]
-    if is_manager(ctx):
-        order = {key: i for i, key in enumerate(MANAGER_SECTIONS)}
+    keys = {"manager": MANAGER_SECTIONS, "doctor": TREATING_OWNER_SECTIONS}.get(owner_mode(ctx))
+    if keys:
+        order = {key: i for i, key in enumerate(keys)}
         shown = sorted((s for s in shown if s.key in order), key=lambda s: order[s.key])
     return shown

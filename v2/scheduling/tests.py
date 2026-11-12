@@ -368,9 +368,10 @@ class TodayTests(M1TestCase):
         self.assertEqual([a["queue_no"] for a in queue["appointments"]], [1, 2])
         self.assertEqual(body["recent"][0]["appointment_id"], appt["id"])
         owner = call(self.owner, "GET", "/api/v1/today").json()
-        self.assertEqual(owner["totals"]["collected"], 5000)
+        self.assertEqual(owner["totals"]["collected"], 5000)  # the place's money, though the owner sees their own queue
+        self.assertEqual([q["doctor"]["id"] for q in owner["queues"]], [self.a.membership("owner").id])
         # The slot doctor works today, with no bookings yet.
-        self.assertIn(self.a.membership("doctor").id, [q["doctor"]["id"] for q in owner["queues"]])
+        self.assertIn(self.a.membership("doctor").id, [q["doctor"]["id"] for q in body["queues"]])
 
     def test_another_clinics_rows_never_show(self):
         self.book(fixture=self.b, new_patient={"full_name": "Secret Person"})

@@ -94,7 +94,7 @@ class PrescriptionTests(M2TestCase):
         self.assertEqual([w["position"] for w in body["prescription"]["warnings"]], [1])  # Augmentin holds amoxicillin
         rx = body["prescription"]
         self.assertEqual((rx["items"][0]["dose"], rx["doctor"]["id"]),
-                         (self.augmentin["default_dose"], self.a.membership("owner").id))
+                         (self.augmentin["default_dose"], self.a.membership("doctor").id))  # the visit's doctor
         second = self.rx(items=[{"name": "Panadol"}]).json()["prescription"]
         self.assertEqual(second["number"], rx["number"] + 1)
         with clinic_transaction(self.a.id, self.a.shard):

@@ -9,31 +9,49 @@ from django.test.utils import CaptureQueriesContext
 from clinics.models import Membership
 from core.routing import clinic_transaction
 from core.testing import call
-from scheduling.testing import M1TestCase
+from scheduling.testing import M1TestCase, add_schedule
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 PDF = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 
 
 class M2TestCase(M1TestCase):
-    """M1's clinics A (shard 1) and B (shard 2), plus the doctor's client and the copied dental catalogue."""
+    """M1's clinics A (shard 1) and B (shard 2), plus the doctor's client and the copied dental catalogue.
+
+    B's doctor works a queue too, so each place's doctor has visits of their own: a doctor never sees or acts on
+    another doctor's patients (Saged, 2026-11-13)."""
 
     def setUp(self):
         super().setUp()
         self.doc = self.a.client("doctor")
+        add_schedule(self.b, "doctor")
 
     def in_room(self, patient_id=None, service="procedure", client=None, fixture=None):
-        """A visit called in, on a procedure service so a repeat visit is never a free follow-up."""
+        """The doctor's visit, called in, on a procedure service so a repeat visit is never a free follow-up.
+
+        Booked by the desk as a walk-in (the next turn with no time, already arrived), so it goes to the doctor's
+        own queue although A's doctor works slots.
+        """
         fixture = fixture or self.a
         services = self.services_a if fixture is self.a else self.services_b
-        body = {"service_id": services[service].id}
+        body = {"service_id": services[service].id, "doctor_id": fixture.membership("doctor").id}
         if patient_id is not None:
             body["patient_id"] = patient_id
+        else:
+            body["new_patient"] = {"full_name": "Mohamed Ahmed", "phone": "01012345678", "sex": "m", "age": 30}
         desk = self.desk if fixture is self.a else fixture.client("assistant")
-        visit = self.book(client=desk, fixture=fixture, **body).json()["appointment"]
-        self.assertEqual(self.act(visit["id"], "arrive", "booked", client=desk).status_code, 200)
+        r = call(desk, "POST", "/api/v1/appointments/walk-in", body)
+        self.assertEqual(r.status_code, 201, r.content)
+        visit = r.json()["appointment"]
         self.assertEqual(self.act(visit["id"], "call", "waiting", client=desk).status_code, 200)
         return visit
+
+    def booked(self, hhmm="10:00"):
+        """A booked (not arrived) visit of A's doctor, at one of their slots today."""
+        from scheduling.testing import today
+
+        return self.book(doctor_id=self.a.membership("doctor").id,
+                         starts_at=self.slot_iso(self.a, today(self.a), hhmm)).json()["appointment"]
 
     def owed_visit(self, patient_id=None, fixture=None):
         """A finished visit with nothing paid: its invoice stays open with the whole fee owed."""
