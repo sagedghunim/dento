@@ -30,6 +30,7 @@ class Clinic(models.Model):
     owned = models.BooleanField(default=True)
     kind = models.CharField(max_length=6, choices=Kind.choices, default=Kind.CLINIC)
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True, default="", db_default="")  # shown in English mode (design G3)
     city = models.CharField(max_length=60, blank=True, default="")
     address = models.CharField(max_length=200, blank=True, default="")
     phone = models.CharField(max_length=20, blank=True, default="")
@@ -62,6 +63,7 @@ class Section(models.Model):
 
     clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, db_index=False, related_name="+")
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True, default="", db_default="")
     specialty_code = models.CharField(max_length=30)
     is_active = models.BooleanField(default=True)
     sort = models.PositiveSmallIntegerField(default=0)
@@ -86,8 +88,13 @@ class Membership(models.Model):
     user_id = models.BigIntegerField()
     role = models.CharField(max_length=10, choices=Role.choices)
     display_name = models.CharField(max_length=120)
+    display_name_en = models.CharField(max_length=120, blank=True, default="", db_default="")
     title = models.CharField(max_length=120, blank=True, default="")
     is_active = models.BooleanField(default=True)
+    # An assistant limited to some sections of a center (design G1); empty means every section.
+    sections = ArrayField(models.BigIntegerField(), default=list, blank=True)
+    # Every team write is conditional on it (design G1).
+    version = models.PositiveIntegerField(default=1)
     granted = ArrayField(models.CharField(max_length=40), default=list, blank=True)
     revoked = ArrayField(models.CharField(max_length=40), default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,6 +107,8 @@ class Membership(models.Model):
             models.UniqueConstraint(fields=["clinic"], condition=Q(role="owner"), name="membership_one_owner"),
             models.CheckConstraint(condition=Q(role__in=["owner", "doctor", "assistant"]), name="membership_role_valid"),
             models.CheckConstraint(condition=~Q(role="owner") | Q(is_active=True), name="membership_owner_active"),
+            models.CheckConstraint(condition=Q(sections__len__lte=20), name="membership_sections_max"),
+            models.CheckConstraint(condition=Q(role="assistant") | Q(sections=[]), name="membership_sections_assistant"),
         ]
 
     @property
@@ -116,6 +125,7 @@ class Service(models.Model):
     clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, db_index=False, related_name="+")
     section = models.ForeignKey(Section, on_delete=models.PROTECT, db_constraint=False, db_index=False, related_name="+")
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True, default="", db_default="")
     kind = models.CharField(max_length=12, choices=Kind.choices)
     price = models.BigIntegerField(default=0)
     duration_min = models.PositiveSmallIntegerField(default=15)

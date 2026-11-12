@@ -58,7 +58,7 @@ def summaries(fixture, day):
 
     with clinic_transaction(fixture.id, fixture.shard):
         clinic = ClinicDay.objects.filter(clinic_id=fixture.id, day=day).values(
-            "version", "done", "collected", "refunded", "changed_since_recompute").first()
+            "version", "done", "collected", "refunded", "expenses", "changed_since_recompute").first()
         doctors = {r["doctor_id"]: r for r in DoctorDay.objects.filter(clinic_id=fixture.id, day=day).values(
             "doctor_id", "last_queue_no", "booked", "done", "collected", "refunded")}
     return clinic, doctors

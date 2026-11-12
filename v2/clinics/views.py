@@ -10,11 +10,12 @@ from core import validate
 from core.api import Result, api, by_method
 from core.days import business_day, local_iso
 from core.errors import ApiError
+from core.i18n import pick
 from core.numbers import parse_int
 
 from . import selectors, services
 from . import settings as clinic_settings
-from .models import Clinic, Membership, Schedule, Service
+from .models import Clinic, Membership, Schedule, Section, Service
 
 DAY_SETTINGS = ("timezone", "day_ends_at")
 
@@ -22,7 +23,10 @@ DAY_SETTINGS = ("timezone", "day_ends_at")
 def clinic_payload(ctx):
     from billing.models import METHODS
 
+    from scheduling.rules import own_only, section_scope
+
     clinic = ctx.clinic
+    scope = section_scope(ctx)
     today = business_day(clinic)
     services = Service.objects.filter(clinic_id=clinic.id, is_active=True).order_by("sort", "id")
     doctors = Membership.objects.filter(clinic_id=clinic.id, is_active=True, role__in=["owner", "doctor"]).order_by("id")
@@ -33,15 +37,17 @@ def clinic_payload(ctx):
             {"starts": session.starts.strftime("%H:%M"), "ends": session.ends.strftime("%H:%M"), "mode": session.mode,
              "slot_minutes": session.slot_minutes, "section_id": session.section_id})
     return {
-        "clinic": {"id": clinic.id, "name": clinic.name, "kind": clinic.kind, "timezone": clinic.timezone,
+        "clinic": {"id": clinic.id, "name": pick(clinic.name, clinic.name_en), "name_ar": clinic.name,
+                   "name_en": clinic.name_en, "kind": clinic.kind, "timezone": clinic.timezone,
                    "day_ends_at": clinic.day_ends_at.strftime("%H:%M"), "business_day": today.isoformat()},
         "sections": selectors.sections(ctx),
         "settings": clinic_settings.effective(clinic.settings),
-        "services": [{"id": s.id, "section_id": s.section_id, "name": s.name, "kind": s.kind, "price": s.price,
-                      "duration_min": s.duration_min, "follow_up_service_id": s.follow_up_service_id} for s in services],
-        "doctors": [{"id": d.id, "name": d.display_name, "today": hours.get(d.id, [])} for d in doctors],
+        "services": [selectors.service_payload(s) for s in services if scope is None or s.section_id in scope],
+        "doctors": [{"id": d.id, "name": pick(d.display_name, d.display_name_en), "today": hours.get(d.id, [])}
+                    for d in doctors],
         "payment_methods": list(METHODS),  # transfer added for the finish dialog (design E3)
-        "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "codes": sorted(ctx.codes)},
+        "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "codes": sorted(ctx.codes),
+               "sections": list(ctx.membership.sections), "own_only": own_only(ctx)},
     }
 
 
@@ -234,3 +240,83 @@ def schedule_delete_view(request, ctx, data, schedule_id):
 
 schedules_endpoint = by_method(GET=schedules_view, POST=schedule_create_view)
 schedule_endpoint = by_method(PUT=schedule_update_view, DELETE=schedule_delete_view)
+
+
+# --- Names in both languages: the place's profile and its sections (design G3), guarded by settings.manage --------
+
+PROFILE_FIELDS = {"name": 120, "name_en": 120, "city": 60, "address": 200, "phone": 20}
+
+
+def _clean_changes(data, fields):
+    changes, expected = data.get("changes"), data.get("expected")
+    if not isinstance(changes, dict) or not changes or not isinstance(expected, dict):
+        raise ApiError("invalid", _("Send the changes and the values they replace."))
+    unknown = set(changes) - set(fields)
+    if unknown:
+        raise ApiError("invalid", "Unknown fields: " + ", ".join(sorted(unknown)), fields={k: "unknown" for k in unknown})
+    cleaned = {name: validate.text(changes, name, fields[name], required=name == "name") for name in changes}
+    return cleaned, expected
+
+
+def _profile(clinic):
+    return {"profile": {name: getattr(clinic, name) for name in PROFILE_FIELDS}}
+
+
+@api("PUT", perm="settings.manage", replay=lambda ctx, stored: _profile(Clinic.objects.get(id=ctx.clinic_id)))
+def profile_view(request, ctx, data):
+    """{changes: {name?, name_en?, city?, address?, phone?}, expected: {...}}. The names also go to the directory."""
+    from django.db import transaction
+
+    from directory.models import DirectoryClinic
+
+    changes, expected = _clean_changes(data, PROFILE_FIELDS)
+    clinic = Clinic.objects.select_for_update(no_key=True).get(id=ctx.clinic_id)  # lock order 6 (design 5.0)
+    stale = [k for k in changes if k in expected and expected[k] != getattr(clinic, k)]
+    if stale:
+        raise ApiError("stale", _("Someone changed these settings meanwhile. Reload and try again."), 409,
+                       fields={k: "changed" for k in stale})
+    before = {k: getattr(clinic, k) for k in changes}
+    if before == changes:
+        return _profile(clinic)
+    for name, value in changes.items():
+        setattr(clinic, name, value)
+    clinic.save(update_fields=list(changes))
+    record_change(ctx, "settings.profile", "clinic", clinic.id, before=before, after=changes)
+    if {"name", "name_en"} & set(changes):
+        names = {"name": clinic.name, "name_en": clinic.name_en}
+        transaction.on_commit(lambda: DirectoryClinic.objects.filter(id=clinic.id).update(**names), using=ctx.alias)
+    return _profile(clinic)
+
+
+SECTION_FIELDS = {"name": 120, "name_en": 120}
+
+
+def _replay_section(ctx, stored):
+    return {"section": selectors.section_payload(Section.objects.get(clinic_id=ctx.clinic_id, id=stored["target_id"]))}
+
+
+@api("PATCH", perm="settings.manage", replay=_replay_section)
+def section_update_view(request, ctx, data, section_id):
+    """{changes: {name?, name_en?}, expected: {...}}. Lock order: key -> the section row."""
+    from django.db import IntegrityError, transaction
+
+    section_id = _section_id(section_id)
+    changes, expected = _clean_changes(data, SECTION_FIELDS)
+    section = Section.objects.select_for_update(no_key=True).filter(clinic_id=ctx.clinic_id, id=section_id).first()
+    if section is None:
+        raise selectors.section_not_found()
+    stale = [k for k in changes if k in expected and expected[k] != getattr(section, k)]
+    if stale:
+        raise ApiError("stale", _("Someone changed this section meanwhile. Reload and try again."), 409,
+                       fields={k: "changed" for k in stale})
+    before = {k: getattr(section, k) for k in changes}
+    if before != changes:
+        for name, value in changes.items():
+            setattr(section, name, value)
+        try:
+            with transaction.atomic(using=ctx.alias):
+                Section.objects.filter(clinic_id=ctx.clinic_id, id=section.id).update(**changes)
+        except IntegrityError:
+            raise ApiError("duplicate", _("Give each section its own name."), 409, fields={"name": "duplicate"})
+        record_change(ctx, "section.rename", "section", section.id, before=before, after=changes)
+    return Result({"section": selectors.section_payload(section)}, target_type="section", target_id=section.id)

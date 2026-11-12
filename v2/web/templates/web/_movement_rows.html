@@ -1,0 +1,10 @@
+{% load i18n hamada %}{% for m in items %}
+<li class="move-row">
+  <div class="move-top">
+    <span class="pill {% if m.qty > 0 %}teal{% elif m.kind == 'waste' %}red{% else %}grey{% endif %}">{% if m.kind == "purchase" %}{% translate "Purchase" %}{% elif m.kind == "use" %}{% translate "Used" %}{% elif m.kind == "waste" %}{% translate "Expired or broken" %}{% else %}{% translate "Count" %}{% endif %}</span>
+    <strong class="move-qty"><bdi class="ltr num">{% if m.qty > 0 %}+{% endif %}{{ m.qty|digits }}</bdi></strong>
+    <span class="muted">{% translate "Left:" %} <bdi class="ltr num">{{ m.balance_after|digits }}</bdi></span>
+  </div>
+  <p class="move-meta">{{ m.day }} · {{ m.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}{% if m.patient %} · {% translate "Patient:" %} <bdi dir="auto">{{ m.patient }}</bdi>{% endif %}{% if m.reason %} · <bdi dir="auto">{{ m.reason }}</bdi>{% endif %}</p>
+</li>
+{% empty %}<li class="empty-note">{% translate "Nothing recorded for this item yet." %}</li>{% endfor %}

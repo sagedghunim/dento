@@ -66,6 +66,41 @@ class InsightTests(M2TestCase):
         self.assertEqual(call(self.b.client("owner"), "GET", "/api/v1/reports/patients/outstanding_balance")
                          .json()["items"], [])
 
+    def test_money_shows_only_with_finances_view(self):
+        visit = self.in_room()
+        call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/payments", {"amount": 700, "method": "cash"})
+        self.act(visit["id"], "finish", "in_room")
+        money = {"revenue_this_month", "revenue_per_patient", "collected", "refunded", "revenue"}
+        urls = ("/api/v1/reports/insights", "/api/v1/reports/performance", "/api/v1/reports/staff")
+        owner = [call(self.owner, "GET", url).json() for url in urls]
+        self.assertEqual(owner[0]["revenue_this_month"], 700)
+        self.assertEqual(owner[2]["items"][0]["revenue"], 700)
+        self.assertFalse(owner[0]["money_hidden"])
+        self.set_codes("doctor", granted=["reports.view"])
+        for url in urls:
+            body = call(self.doc, "GET", url).json()
+            self.assertTrue(body["money_hidden"], url)
+            for row in [body, *body.get("items", [])]:
+                self.assertFalse(money & set(row), (url, row))
+        self.assertEqual(call(self.doc, "GET", urls[2]).json()["items"][0]["visits"], 1)
+
+    def test_an_export_over_the_cap_is_refused_not_cut(self):
+        from unittest import mock
+
+        self.owed_visit()
+        second = self.book(new_patient={"full_name": "Second Patient", "phone": "01055555555"}).json()["appointment"]
+        self.owed_visit(second["patient"]["id"])
+        url = "/api/v1/reports/patients/outstanding_balance/export"
+        with mock.patch("reports.selectors.EXPORT_LIMIT", 1):
+            r = call(self.owner, "GET", url)
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "export_too_large"), r.content)
+        with clinic_transaction(self.a.id, self.a.shard):  # nothing was exported, so nothing was logged
+            self.assertFalse(AuditAccess.objects.filter(clinic_id=self.a.id, action=AuditAccess.Action.EXPORT).exists())
+        with mock.patch("reports.selectors.EXPORT_LIMIT", 2):
+            r = call(self.owner, "GET", url)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.content.decode("utf-8-sig").strip().splitlines()), 3)  # the header and both rows
+
     def test_unfinished_treatment_and_unused_sessions(self):
         visit = self.in_room()
         patient = visit["patient"]["id"]

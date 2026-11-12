@@ -81,8 +81,16 @@ def book(ctx, request, deltas=None):
             raise _not_today()
 
     doctor, service = rules.doctor_day_and_service(ctx, request["doctor_id"], request["service_id"], day, lock=True)
+    scope = rules.section_scope(ctx)
+    if scope is not None and service.section_id not in scope:
+        raise rules.not_found("service")  # a limited assistant books only in their sections (design G1)
     # The section comes from the service; the doctor must have a session in it that day (design D1).
-    starts_at, ends_at = rules.resolve_slot(clinic, day, doctor, request["starts_at"], service.section_id)
+    if request.get("walk_in"):
+        # A walk-in takes the next turn with no time, even with a slot doctor (design G5).
+        rules.require_working(doctor, service.section_id)
+        starts_at, ends_at = None, None
+    else:
+        starts_at, ends_at = rules.resolve_slot(clinic, day, doctor, request["starts_at"], service.section_id)
     is_extra = bool(request["extra"] and starts_at is not None)
 
     if request["patient_id"] is not None:
@@ -106,6 +114,11 @@ def book(ctx, request, deltas=None):
     if fields is not None:
         patient = patients.create(ctx, fields)  # counter patient_file
     invoice_number = take_numbers(ctx, "invoice")[0] if payment is not None else None  # kept for ensure_invoice
+    shift_id = None
+    if payment is not None and payment["method"] == "cash":
+        from finance.services import shift_for
+
+        shift_id = shift_for(ctx, "cash")  # the open shift (8a), opened if none is, before the doctor-day
     deltas = (Deltas() if own else deltas).take_turn(day, doctor.doctor_id, doctor.cap)
     deltas.clinic_day(day)
     if payment is not None:
@@ -136,7 +149,7 @@ def book(ctx, request, deltas=None):
                   "section_id": service.section_id}
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
-                                            invoice_number=invoice_number, today=today)
+                                            invoice_number=invoice_number, today=today, shift_id=shift_id)
     version = deltas.write_clinics(ctx)[day] if own else None
 
     from .selectors import payload
@@ -155,6 +168,11 @@ def book(ctx, request, deltas=None):
     return body, version
 
 
+# A doctor without appointments.others does these only on their own visits (design G4). Arrive, the assistant's
+# stages, cancel and reschedule are the desk's and stay open to anyone with the code.
+OWN_ACTIONS = frozenset({"call", "finish", "undo_call"})
+
+
 def _not_today():
     return ApiError("not_today", _("A visit can be marked arrived only on its own day."), 409, fields={"day": "not_today"})
 
@@ -167,6 +185,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     that already happened is a harmless 200. Returns the version of the appointment's day.
     """
     sources, target, column = TRANSITIONS[action]
+    rules.guard(ctx, appointment_id, own=action in OWN_ACTIONS)  # sections and a doctor's own visits (design G1, G4)
     if seen not in sources:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
@@ -236,6 +255,7 @@ def undo(ctx, appointment_id, action, seen):
     Returns the version of the appointment's day, or None for a harmless repeat.
     """
     source, column, target_sql, targets = UNDO[action]
+    rules.guard(ctx, appointment_id, own=action in OWN_ACTIONS)
     if seen != source:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
@@ -300,6 +320,7 @@ def _with_patient(params, patient_id):
 
 def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
     """Move a booked visit (design 5.2). Returns the version of the new day, or None when nothing changed."""
+    rules.guard(ctx, appointment_id)
     if seen != "booked":
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
@@ -345,3 +366,89 @@ def current_version(ctx, appointment_id):
         raise rules.not_found("appointment")
     return summaries_read.clinic_day(ctx, day)["version"]
 
+
+
+# --- A walk-in (design G5) -------------------------------------------------------------------------------------
+
+WAITING = ("waiting", "with_assistant", "ready")
+
+
+def _walk_in_doctor(ctx, today, section_id=None):
+    """The doctor a walk-in goes to when the desk doesn't pick one: a doctor bound to their own visits takes it if
+    they work today; else the only working doctor, else the one with the fewest people waiting (then the lowest id).
+    Only doctors working today in the member's sections (and the given section) count. One statement."""
+    scope = rules.section_scope(ctx)
+    rows = sql.rows(ctx, """
+        SELECT m.id, array_agg(DISTINCT s.section_id),
+               (SELECT count(*) FROM "scheduling_appointment" a WHERE a.clinic_id = m.clinic_id AND a.day = %s
+                   AND a.doctor_id = m.id AND a.status = ANY(%s))
+          FROM "clinics_membership" m
+          JOIN "clinics_schedule" s ON s.clinic_id = m.clinic_id AND s.doctor_id = m.id AND s.weekday = %s
+         WHERE m.clinic_id = %s AND m.is_active AND m.role IN ('owner', 'doctor')
+         GROUP BY m.id, m.clinic_id ORDER BY m.id""", [today, list(WAITING), today.weekday(), ctx.clinic_id])
+    working = []
+    for doctor_id, sections, waiting in rows:
+        sections = [s for s in sections if (scope is None or s in scope) and (section_id is None or s == section_id)]
+        if sections:
+            working.append((waiting, doctor_id, sections))
+    if not working:
+        raise ApiError("no_doctor", _("No doctor works today."), 409, fields={"doctor_id": "none_working"})
+    if rules.own_only(ctx):
+        for item in working:
+            if item[1] == ctx.membership_id:
+                return item[1], item[2]
+    _waiting, doctor_id, sections = min(working)
+    return doctor_id, sections
+
+
+def _walk_in_service(ctx, doctor_id, today, sections=None):
+    """The first consultation of the doctor's first section today (by session start), among `sections`."""
+    found = sql.row(ctx, """
+        SELECT sv.id FROM "clinics_schedule" s
+          JOIN "clinics_service" sv ON sv.clinic_id = s.clinic_id AND sv.section_id = s.section_id
+         WHERE s.clinic_id = %s AND s.doctor_id = %s AND s.weekday = %s AND sv.kind = 'consultation' AND sv.is_active
+           AND (%s::bigint[] IS NULL OR s.section_id = ANY(%s::bigint[]))
+         ORDER BY s.starts, sv.sort, sv.id LIMIT 1""", [ctx.clinic_id, doctor_id, today.weekday(), sections, sections])
+    if found is None:
+        if not sql.row(ctx, 'SELECT 1 FROM "clinics_membership" WHERE clinic_id = %s AND id = %s AND is_active '
+                            "AND role IN ('owner', 'doctor')", [ctx.clinic_id, doctor_id]):
+            raise rules.not_found("doctor")
+        raise ApiError("no_service", _("This doctor has no consultation service. Pick the service."), 409,
+                       fields={"service_id": "required"})
+    return found[0]
+
+
+def walk_in(ctx, request):
+    """POST /appointments/walk-in: today, the next turn, no time, already arrived, with an optional payment.
+
+    `request` has patient_id or new_patient, and optional doctor_id, service_id, section_id, payment and note.
+    The defaults are resolved here, then booking runs as for any visit (one transaction, the same lock order).
+    Returns (appointment, version, ahead): ahead is how many wait for that doctor before this turn.
+    """
+    today = business_day(ctx.clinic)
+    doctor_id, service_id = request["doctor_id"], request["service_id"]
+    scope = rules.section_scope(ctx)
+    sections = [request["section_id"]] if request.get("section_id") else (sorted(scope) if scope is not None else None)
+    if doctor_id is None:
+        section_id = request.get("section_id")
+        if service_id is not None:
+            found = sql.row(ctx, 'SELECT section_id FROM "clinics_service" WHERE clinic_id = %s AND id = %s',
+                            [ctx.clinic_id, service_id])
+            if found is None:
+                raise rules.not_found("service")
+            section_id = found[0]
+        doctor_id, sections = _walk_in_doctor(ctx, today, section_id)
+    if service_id is None:
+        service_id = _walk_in_service(ctx, doctor_id, today, sections)
+    appointment, version = book(ctx, {
+        "patient_id": request["patient_id"], "new_patient": request["new_patient"], "doctor_id": doctor_id,
+        "service_id": service_id, "day": today, "starts_at": None, "extra": False, "arrive": True, "walk_in": True,
+        "source": "clinic", "note": request["note"], "payment": request["payment"]})
+    return appointment, version, waiting_ahead(ctx, appointment)
+
+
+def waiting_ahead(ctx, appointment):
+    return sql.row(ctx, 'SELECT count(*) FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s '
+                        "AND doctor_id = %s AND status = ANY(%s) AND queue_no < %s",
+                   [ctx.clinic_id, appointment["day"], appointment["doctor_id"], list(WAITING),
+                    appointment["queue_no"]])[0]

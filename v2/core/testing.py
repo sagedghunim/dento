@@ -78,6 +78,8 @@ class ShardTestCase(TestCase):
         With `sections` ([{"specialty": ..., "name": ...}, ...]) it is a center with those sections.
         With `register` (the default) its cash register has an open shift, so cash payments work as before
         M3; the register tests pass register=False (design F1).
+        The doctor holds appointments.others, so tests written before design G4 may act on the owner's visits;
+        the tests of that rule take it away (scheduling.test_own_visits).
         """
         owner = self.user(f"{prefix}_owner", with_totp=True)
         entry = create_clinic(name=f"{prefix} clinic", specialty_code=specialty, owner=owner, shard=shard,
@@ -90,6 +92,7 @@ class ShardTestCase(TestCase):
         add_member(entry, doctor, "doctor", "Doctor")
         add_member(entry, assistant, "assistant", "Assistant")
         with clinic_transaction(entry.id, entry.shard):
+            Membership.objects.filter(clinic_id=entry.id, user_id=doctor.id).update(granted=["appointments.others"])
             members = {m.user_id: m for m in Membership.objects.filter(clinic_id=entry.id)}
             if register:
                 from finance.models import Shift

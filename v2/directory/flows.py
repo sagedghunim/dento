@@ -68,9 +68,13 @@ def _expand(sections, language):
         name = section.get("name")
         if name is not None and not isinstance(name, str):
             raise ApiError("invalid", "name must be text", fields={f"sections.{index}.name": "text"})
-        base = clean_name(name or "") or specialty_name(section["specialty"], language)
+        typed = clean_name(name or "")
+        base = typed or specialty_name(section["specialty"], language)
+        # A default name gets both languages; a typed one is kept as typed (design G3).
+        base_en = "" if typed else specialty_name(section["specialty"], "en")
         for number in range(1, count + 1):
             expanded.append({"specialty": section["specialty"], "name": base if count == 1 else f"{base} {number}",
+                             "name_en": (base_en if count == 1 else f"{base_en} {number}") if base_en else "",
                              "index": index})
     return expanded
 
@@ -86,7 +90,7 @@ def _check_place(sections):
             raise ApiError("invalid", _("Give each section its own name."),
                            fields={f"sections.{section['index']}.name": "duplicate"})
         seen.add(section["name"].casefold())
-    return [{"specialty": s["specialty"], "name": s["name"]} for s in sections]
+    return [{"specialty": s["specialty"], "name": s["name"], "name_en": s.get("name_en", "")} for s in sections]
 
 
 def plan_places(kind, sections, language="ar", layout="one_place"):
@@ -164,8 +168,9 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
                                            settings={"print_language": language})
         existing = list(Section.objects.filter(clinic=clinic).order_by("sort", "id"))
         if not existing:
-            existing = [Section.objects.create(clinic=clinic, name=section["name"], specialty_code=section["specialty"],
-                                               sort=sort) for sort, section in enumerate(sections)]
+            existing = [Section.objects.create(clinic=clinic, name=section["name"], name_en=section.get("name_en", ""),
+                                               specialty_code=section["specialty"], sort=sort)
+                        for sort, section in enumerate(sections)]
         owner_membership = Membership.objects.filter(clinic=clinic, role="owner").first()
         if owner_membership is None:
             owner_membership = Membership.objects.create(clinic=clinic, user_id=owner.id, role="owner",
@@ -198,11 +203,12 @@ def copy_services(clinic, section, language="ar"):
     template = SPECIALTIES[section.specialty_code]["services"]
     existing = set(Service.objects.filter(clinic=clinic, section=section).values_list("name", flat=True))
     for sort, (arabic, english, kind, price, minutes) in enumerate(template):
+        # Both languages (design G3); an English place types English, so its name is the English one.
         name = arabic if language == "ar" else english
-        if name in existing:
+        if arabic in existing or english in existing:
             continue
-        Service.objects.create(clinic=clinic, section=section, name=name, kind=kind, price=price, duration_min=minutes,
-                               sort=sort)
+        Service.objects.create(clinic=clinic, section=section, name=name, name_en=english, kind=kind, price=price,
+                               duration_min=minutes, sort=sort)
     # A consultation's follow-up is the first follow-up service of the same section.
     follow_up = (Service.objects.filter(clinic=clinic, section=section, kind="follow_up", is_active=True)
                  .order_by("sort", "id").first())

@@ -29,18 +29,29 @@ class PlanTests(ShardTestCase):
 
     def test_a_count_names_the_sections_and_a_count_of_one_keeps_the_specialty_name(self):
         self.assertEqual(plan_places("center", [{"specialty": "dental", "count": 3}, {"specialty": "pediatrics"}]), [[
-            {"specialty": "dental", "name": "أسنان 1"}, {"specialty": "dental", "name": "أسنان 2"},
-            {"specialty": "dental", "name": "أسنان 3"}, {"specialty": "pediatrics", "name": "أطفال"}]])
+            {"specialty": "dental", "name": "أسنان 1", "name_en": "Dental 1"},
+            {"specialty": "dental", "name": "أسنان 2", "name_en": "Dental 2"},
+            {"specialty": "dental", "name": "أسنان 3", "name_en": "Dental 3"},
+            {"specialty": "pediatrics", "name": "أطفال", "name_en": "Pediatrics"}]])  # defaults in both languages (G3)
 
     def test_branches_group_by_specialty_in_both_shapes(self):
+        from clinics.specialties import SPECIALTIES
+
+        ent_en = SPECIALTIES["ent"]["name"]["en"]
         counted = plan_places("center", [{"specialty": "dental", "count": 2}, {"specialty": "ent", "count": 1}],
                               layout="branches")
         per_section = plan_places("center", [{"specialty": "dental", "count": 1, "name": "أسنان 1"},
                                              {"specialty": "ent", "count": 1},
                                              {"specialty": "dental", "count": 1, "name": "أسنان 2"}], layout="branches")
-        expected = [[{"specialty": "dental", "name": "أسنان 1"}, {"specialty": "dental", "name": "أسنان 2"}],
-                    [{"specialty": "ent", "name": "أنف وأذن وحنجرة"}]]
+        expected = [[{"specialty": "dental", "name": "أسنان 1", "name_en": "Dental 1"},
+                     {"specialty": "dental", "name": "أسنان 2", "name_en": "Dental 2"}],
+                    [{"specialty": "ent", "name": "أنف وأذن وحنجرة", "name_en": ent_en}]]
         self.assertEqual(counted, expected)
+        # Typed names stay as typed, with no English (design G3).
+        for place in expected:
+            for section in place:
+                if section["specialty"] == "dental":
+                    section["name_en"] = ""
         self.assertEqual(per_section, expected)
 
     def test_limits_are_clear_400s(self):

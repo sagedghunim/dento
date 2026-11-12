@@ -1,0 +1,22 @@
+{% load i18n %}{% if templates %}
+<ul class="rx-templates">
+  {% for r in templates %}
+  <li class="rx-template" data-template="{{ r.json }}">
+    <div class="rx-template-head">
+      <h3><bdi dir="auto">{{ r.name }}</bdi></h3>
+      {% if r.section_name %}<span class="pill grey"><bdi dir="auto">{{ r.section_name }}</bdi></span>{% endif %}
+      <div class="row-actions">
+        <button type="button" class="btn ghost" data-rx="edit">{% translate "Edit" %}</button>
+        <button type="button" class="icon-btn danger-icon" data-rx="remove" aria-label="{% translate "Remove" %}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+    </div>
+    <ol class="rx-lines">
+      {% for line in r.items %}<li><bdi dir="auto" class="rx-med">{{ line.name }}{% if line.strength %} {{ line.strength }}{% endif %}</bdi>{% if line.dose %} — <bdi dir="auto">{{ line.dose }}</bdi>{% endif %}{% if line.note %} <span class="muted">(<bdi dir="auto">{{ line.note }}</bdi>)</span>{% endif %}</li>{% endfor %}
+    </ol>
+    {% if r.notes %}<p class="muted rx-notes"><bdi dir="auto">{{ r.notes }}</bdi></p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-note">{% translate "No ready prescriptions yet. Save the ones you write often, and write them in one tap." %}</p>
+{% endif %}

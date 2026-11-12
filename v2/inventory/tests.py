@@ -126,6 +126,13 @@ class StockTests(M2TestCase):
         self.assertEqual(len(call(self.owner, "POST", "/api/v1/inventory/defaults").json()["items"]), count)
         filling = self.procedure("Composite filling, one surface")
         self.assertTrue(call(self.owner, "GET", f"/api/v1/inventory/materials/{filling['id']}").json()["items"])
+        # Seeded items start at zero and may go below it until the place counts them, so an uncounted
+        # material never refuses a recording with 409 out_of_stock.
+        self.assertTrue(all(i["allow_negative"] for i in r.json()["items"]))
+        visit = self.in_room()
+        r = call(self.owner, "POST", f"/api/v1/appointments/{visit['id']}/procedures", {"procedure_id": filling["id"],
+                                                                                     "tooth": 16, "surfaces": ["O"]})
+        self.assertEqual(r.status_code, 201, r.content)
 
 
 class StockConcurrencyTests(TransactionTestCase):

@@ -72,7 +72,8 @@ class SectionModelTests(ShardTestCase):
             self.assertIn(field, caught.exception.fields)
         twenty = clean_sections("center", [{"specialty": "dental", "name": f"S{i}"} for i in range(20)])
         self.assertEqual(len(twenty), 20)
-        self.assertEqual(clean_sections("clinic", [{"specialty": "dental"}], "en"), [{"specialty": "dental", "name": "Dental"}])
+        self.assertEqual(clean_sections("clinic", [{"specialty": "dental"}], "en"), [{"specialty": "dental", "name": "Dental",
+                                                                                      "name_en": "Dental"}])
 
     def test_one_active_section_per_name(self):
         with clinic_transaction(self.c.id, self.c.shard):

@@ -22,9 +22,9 @@ class Section:
 SECTIONS = (
     Section("today", _("Today"), "/", ("appointments.book", "appointments.queue"), True),
     Section("patients", _("Patients"), "/patients", ("patients.view",), True),
-    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), False),       # M3
+    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True),        # M3
     Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage"), False),           # M3
-    Section("prescription", _("Prescription"), "/prescriptions", ("clinical.write",), False),              # M2
+    Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True),           # M2
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
     Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage"), False),              # M3
 )

@@ -43,12 +43,12 @@ function headersFor(method, body, key, extra) {
   return headers;
 }
 
-async function once(method, url, body, key) {
+async function once(method, url, body, key, extra) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const response = await fetch(url, {
-      method, headers: headersFor(method, body, key), credentials: "same-origin", signal: controller.signal,
+      method, headers: headersFor(method, body, key, extra), credentials: "same-origin", signal: controller.signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let data = {};
@@ -73,12 +73,13 @@ function retryable(result) {
 }
 
 // Send an action. Returns {status, data, settled}. settled=false means the outcome is unknown.
-export async function send(method, url, body, { key, onWaiting } = {}) {
+// `headers` adds request headers, such as If-Match for a versioned PUT.
+export async function send(method, url, body, { key, onWaiting, headers } = {}) {
   const started = Date.now();
   let attempt = 0;
   let csrfRetried = false;
   for (;;) {
-    const result = await once(method, url, body, key);
+    const result = await once(method, url, body, key, headers);
     const code = result.data && result.data.error && result.data.error.code;
     if (result.status === 403 && code === "csrf_failed" && !csrfRetried) {
       csrfRetried = true;   // the token changed at sign-in: read the cookie again and resend once
@@ -155,11 +156,11 @@ export function pendingList() {
 // Run one action, owning its key until a definite answer. `label` names it for the "not confirmed" list.
 // `auto` marks a request that is safe to resend unattended: a row action whose body carries the status
 // it expects, so a resend after the person redid it is a harmless 200 or a 409, never a second effect.
-export async function save(method, url, body, { key, onWaiting, label, auto = false } = {}) {
-  const entry = { url, method, body, key: key || newKey(), label: label || "", auto, user: userId(),
+export async function save(method, url, body, { key, onWaiting, label, auto = false, headers } = {}) {
+  const entry = { url, method, body, headers, key: key || newKey(), label: label || "", auto, user: userId(),
                   membership: membership(), created_at: Date.now() };
   writePending([...readPending().filter((p) => p.key !== entry.key), entry]);
-  const result = await send(method, url, body, { key: entry.key, onWaiting });
+  const result = await send(method, url, body, { key: entry.key, onWaiting, headers });
   if (result.settled) forget(entry.key);
   return { ...result, key: entry.key };
 }
@@ -169,7 +170,7 @@ export async function retryPending(key, { onWaiting } = {}) {
   const entry = readPending().find((p) => p.key === key);
   if (!entry) return null;
   if (Date.now() - entry.created_at > DAY_MS) { forget(key); return { status: 0, settled: false, expired: true }; }
-  const result = await send(entry.method, entry.url, entry.body, { key, onWaiting });
+  const result = await send(entry.method, entry.url, entry.body, { key, onWaiting, headers: entry.headers });
   if (result.settled) forget(key);
   return result;
 }
@@ -193,7 +194,7 @@ export async function settlePending() {
       continue;
     }
     if (!entry.auto || Date.now() - entry.created_at > AUTO_MS) continue;  // listed, not resent
-    const result = await send(entry.method, entry.url, entry.body, { key: entry.key });
+    const result = await send(entry.method, entry.url, entry.body, { key: entry.key, headers: entry.headers });
     if (result.settled) forget(entry.key);
     results.push({ entry, ...result });
   }

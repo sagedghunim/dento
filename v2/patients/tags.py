@@ -13,14 +13,19 @@ from audit.services import record_change
 from core import sql
 from core.errors import ApiError
 
-TAG_COLUMNS = "id, name, color, is_active, sort"
+TAG_COLUMNS = "id, name, color, is_active, sort, name_en"
 MAX_TAGS_PER_PATIENT = 20
 BY_TAG_LIMIT = 20
 COLOR = re.compile(r"^(#[0-9a-fA-F]{6})?$")
 
 
 def _tag(values):
-    return dict(zip(("id", "name", "color", "is_active", "sort"), values))
+    from core.i18n import pick
+
+    tag = dict(zip(("id", "name", "color", "is_active", "sort", "name_en"), values))
+    tag["name_ar"] = tag["name"]
+    tag["name"] = pick(tag["name_ar"], tag["name_en"] or "")  # design G3
+    return tag
 
 
 def not_found():
@@ -61,9 +66,10 @@ def get_tag(ctx, tag_id):
     return _tag(found)
 
 
-def create_tag(ctx, name, color=""):
-    return _tag(_savepoint(ctx, f'INSERT INTO "patients_tag" (clinic_id, name, color, is_active, sort) '
-                                f"VALUES (%s, %s, %s, true, 0) RETURNING {TAG_COLUMNS}", [ctx.clinic_id, name, color]))
+def create_tag(ctx, name, color="", name_en=""):
+    return _tag(_savepoint(ctx, f'INSERT INTO "patients_tag" (clinic_id, name, name_en, color, is_active, sort) '
+                                f"VALUES (%s, %s, %s, %s, true, 0) RETURNING {TAG_COLUMNS}",
+                           [ctx.clinic_id, name, name_en, color]))
 
 
 def update_tag(ctx, tag_id, values):
@@ -81,7 +87,7 @@ def update_tag(ctx, tag_id, values):
 def patient_tags(ctx, patient_id):
     """The patient's active tags (one statement)."""
     return [_tag(r) for r in sql.rows(ctx, """
-        SELECT t.id, t.name, t.color, t.is_active, t.sort FROM "patients_patient_tag" pt
+        SELECT t.id, t.name, t.color, t.is_active, t.sort, t.name_en FROM "patients_patient_tag" pt
           JOIN "patients_tag" t ON t.clinic_id = pt.clinic_id AND t.id = pt.tag_id
          WHERE pt.clinic_id = %s AND pt.patient_id = %s AND t.is_active ORDER BY t.sort, t.name, t.id""",
                                       [ctx.clinic_id, patient_id])]

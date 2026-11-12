@@ -64,6 +64,8 @@ def mutating(test, o):
         "book": ("POST", "/api/v1/appointments", {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.patient},
                  {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.patient, "note": "x"},
                  ["appointments.book"]),
+        "walk in": ("POST", "/api/v1/appointments/walk-in", {"patient_id": o.patient},
+                    {"patient_id": o.patient, "note": "x"}, ["appointments.book", "appointments.queue"]),
         "arrive": ("POST", f"/api/v1/appointments/{o.booked}/arrive", {"status": "booked"},
                    {"status": "booked", "note": 1}, ["appointments.queue"]),
         "call": ("POST", f"/api/v1/appointments/{o.waiting}/call", {"status": "waiting"},

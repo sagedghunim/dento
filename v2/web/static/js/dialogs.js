@@ -114,9 +114,10 @@ export class Submitter {
   }
 
   // Send, or resend the unconfirmed request. Returns the result for a definite answer, or null.
-  async run(method, url, body, label) {
+  // `headers` (such as If-Match) stay with the request, so "Try again" resends them.
+  async run(method, url, body, label, { headers } = {}) {
     if (this.dialog.dataset.busy) return null;
-    const request = this.unknown || { method, url, body };
+    const request = this.unknown || { method, url, body, headers };
     this.dialog.dataset.busy = "1";
     this.buttons(true);
     this.lock(true);
@@ -124,7 +125,7 @@ export class Submitter {
     const slow = setTimeout(() => this.say(t("still_saving")), 3000);
     if (!this.unknown) this.lastLabel = label || this.label;
     const result = await save(request.method, request.url, request.body, {
-      key: this.key, label: this.lastLabel, onWaiting: () => this.say(t("checking")),
+      key: this.key, label: this.lastLabel, headers: request.headers, onWaiting: () => this.say(t("checking")),
     });
     clearTimeout(slow);
     delete this.dialog.dataset.busy;

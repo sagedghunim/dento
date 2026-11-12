@@ -47,6 +47,10 @@ class User(AbstractBaseUser):
     totp_confirmed_at = models.DateTimeField(null=True, blank=True)
     totp_last_step = models.BigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    # The place and request key that created this account from the team screen (design 5.12, B6, G1): a retry of
+    # that same request may reuse the account until it first signs in; nothing else ever attaches it.
+    created_for_clinic = models.BigIntegerField(null=True, blank=True)
+    created_request_key = models.UUIDField(null=True, blank=True)
 
     objects = UserManager()
 

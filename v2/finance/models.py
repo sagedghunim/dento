@@ -46,6 +46,7 @@ class Shift(models.Model):
     counted = models.BigIntegerField(null=True, blank=True)
     difference = models.BigIntegerField(null=True, blank=True)  # counted - expected
     note = models.CharField(max_length=200, blank=True, default="")
+    auto_opened = models.BooleanField(default=False, db_default=False)  # opened by a cash entry, float 0 (F1)
 
     class Meta:
         db_table = "finance_shift"
@@ -89,6 +90,7 @@ class Category(models.Model):
 
     clinic = _clinic()
     name = models.CharField(max_length=60)
+    name_en = models.CharField(max_length=60, blank=True, default="", db_default="")  # design G3
     code = models.CharField(max_length=20, blank=True, default="")  # the default it came from: rent, materials...
     is_system = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

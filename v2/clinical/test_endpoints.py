@@ -16,7 +16,7 @@ from core.testing import call
 from .testing import PNG, M2TestCase, upload
 
 # What the doctor template lacks among the codes these endpoints need.
-EXTRA = ["settings.manage", "billing.discount"]
+EXTRA = ["settings.manage", "billing.discount", "appointments.others"]  # others: the visits are the owner's (G4)
 
 
 def objects(test, fixture):

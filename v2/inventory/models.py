@@ -34,6 +34,7 @@ class Item(models.Model):
     clinic = _clinic()
     section = _ref("clinics.Section", null=True)
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True, default="", db_default="")  # design G3
     category = models.CharField(max_length=40, blank=True, default="")
     sku = models.CharField(max_length=40, blank=True, default="")
     unit = models.CharField(max_length=20, default="unit")

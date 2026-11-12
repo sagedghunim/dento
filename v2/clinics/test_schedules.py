@@ -209,12 +209,6 @@ class RouteTests(M1TestCase):
                 views = getattr(route.callback, "api_views", None) or {route.callback.api_meta["method"]: route.callback}
                 for method, view in views.items():
                     found[method, str(route.pattern)] = view.api_meta["perm"]
-        self.assertEqual(found, {
-            ("GET", "api/v1/sections"): ("appointments.book",),
-            ("GET", "api/v1/sections/<int:section_id>/services"): ("appointments.book",),
-            ("GET", "api/v1/sections/<int:section_id>/doctors"): ("appointments.book",),
-            ("GET", "api/v1/schedules"): ("settings.manage",),
-            ("POST", "api/v1/schedules"): ("settings.manage",),
-            ("PUT", "api/v1/schedules/<int:schedule_id>"): ("settings.manage",),
-            ("DELETE", "api/v1/schedules/<int:schedule_id>"): ("settings.manage",),
-        })
+        from clinics.test_team import RouteTests  # the full table, with the team and names routes (design G)
+
+        self.assertEqual(found, RouteTests.EXPECTED)

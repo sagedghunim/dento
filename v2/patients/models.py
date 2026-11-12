@@ -58,6 +58,7 @@ class Tag(models.Model):
     clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
                                related_name="+")
     name = models.CharField(max_length=40)
+    name_en = models.CharField(max_length=40, blank=True, default="", db_default="")  # design G3
     color = models.CharField(max_length=7, blank=True, default="")  # "#RRGGBB" or empty
     is_active = models.BooleanField(default=True)
     sort = models.PositiveSmallIntegerField(default=0)

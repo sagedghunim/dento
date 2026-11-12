@@ -1,9 +1,11 @@
 """The cash register, expenses and staff pay (design F1, F3, F4). Inside the request's shard transaction.
 
-Lock order (design 5.0): request key -> [appointment -> invoice -> payment rows] -> the open shift (8a: FOR SHARE to
-add to it, FOR NO KEY UPDATE to close it) -> inventory items -> expenses -> clinic-days. Closing locks the shift
-before it sums what the shift holds, so a cash payment either commits before the sum (and is counted) or waits
-and then finds the register closed (409 register_closed).
+Lock order (design 5.0): request key -> [appointment -> invoice -> payment rows -> counters] -> the open shift
+(8a: FOR SHARE to add to it, or opened by the cash entry when none is open; FOR NO KEY UPDATE only to close it)
+-> inventory items -> expenses -> doctor-days -> money-days -> clinic-days. Closing locks the shift before it
+sums what the shift holds and takes nothing after it, so a cash entry either commits before the sum (and is
+counted) or waits, finds the shift closed, and opens a new one (auto_opened, float 0). Cash never fails for
+want of a shift.
 """
 
 import datetime as dt
@@ -19,14 +21,24 @@ from core.errors import ApiError
 from summaries.services import Deltas
 
 SHIFT_COLUMNS = ("id, status, opening_float, opened_at, opened_by_id, closed_at, closed_by_id, expected, counted, "
-                 "difference, note")
-CATEGORY_COLUMNS = "id, name, code, is_system, is_active, sort"
+                 "difference, note, auto_opened")
+CATEGORY_COLUMNS = "id, name, name_en, code, is_system, is_active, sort"
 EXPENSE_COLUMNS = "id, category_id, amount, day, note, shift_id, purchase, created_at, created_by_id, voided_at"
 RULE_COLUMNS = "membership_id, percent_bp, per_visit, per_procedure, monthly_salary, version"
 
 
 def _cols(columns):
     return [c.strip() for c in columns.split(",")]
+
+
+def category_row(values):
+    """A category with its name in the request's language and both raw names for editing (design G3)."""
+    from core.i18n import pick
+
+    row = dict(zip(_cols(CATEGORY_COLUMNS), values)) if not isinstance(values, dict) else dict(values)
+    row["name_ar"] = row["name"]
+    row["name"] = pick(row["name_ar"], row["name_en"])
+    return row
 
 
 def not_found(what):
@@ -37,10 +49,6 @@ def not_found(what):
         "member": _("This member wasn't found."),
     }
     return ApiError("not_found", messages[what], 404)
-
-
-def register_closed():
-    return ApiError("register_closed", _("Open the cash register first."), 409)
 
 
 def _savepoint(ctx, statement, params, duplicates):
@@ -59,18 +67,36 @@ def _savepoint(ctx, statement, params, duplicates):
 # --- The register (F1) -----------------------------------------------------------------------------------------
 
 
-def shift_for(ctx, method):
-    """The open shift a payment, refund, expense or payout joins, locked FOR SHARE (lock order 8a).
+OPEN_SHIFT_SQL = "SELECT id FROM \"finance_shift\" WHERE clinic_id = %s AND status = 'open' FOR SHARE"
 
-    Cash needs one (409 register_closed) and the cash.collect code; other methods join it when one is open.
+
+def shift_for(ctx, method):
+    """The open shift a payment, refund, cash movement, expense or payout joins, locked FOR SHARE (lock order 8a).
+
+    Other methods join it when one is open. Cash needs the cash.collect code and never fails for want of a
+    shift: with none open, it opens one (float 0, auto_opened, the actor as opener) in this transaction.
+    Two first entries race on the one-open-shift index: ON CONFLICT DO NOTHING lets one insert; the other
+    waits for it, then finds and shares it. An entry that waited behind a close finds no open shift (the
+    FOR SHARE re-checks status = 'open') and opens a fresh one, so a closed shift never gains an entry.
     """
-    if method == "cash":
-        ctx.require("cash.collect")
-    found = sql.row(ctx, "SELECT id FROM \"finance_shift\" WHERE clinic_id = %s AND status = 'open' FOR SHARE",
-                    [ctx.clinic_id])
-    if found is None and method == "cash":
-        raise register_closed()
-    return found[0] if found else None
+    if method != "cash":
+        found = sql.row(ctx, OPEN_SHIFT_SQL, [ctx.clinic_id])
+        return found[0] if found else None
+    ctx.require("cash.collect")
+    for _attempt in range(3):
+        found = sql.row(ctx, OPEN_SHIFT_SQL, [ctx.clinic_id])
+        if found:
+            return found[0]
+        opened = sql.row(ctx, """
+            INSERT INTO "finance_shift" (clinic_id, status, opening_float, opened_at, opened_by_id, note, auto_opened)
+            VALUES (%s, 'open', 0, %s, %s, '', true)
+            ON CONFLICT (clinic_id) WHERE status = 'open' DO NOTHING RETURNING id""",
+                         [ctx.clinic_id, timezone.now(), ctx.membership_id])
+        if opened:
+            record_change(ctx, "shift.auto_open", "shift", opened[0])
+            return opened[0]
+        # Another request opened one and committed (or a close ended it) meanwhile: look again.
+    raise ApiError("busy", _("The register is busy. Try again."), 409)
 
 
 def _shift(values):
@@ -180,9 +206,10 @@ def shifts(ctx, size, after):
 
 # --- Expenses (F3) ---------------------------------------------------------------------------------------------
 
-DEFAULT_CATEGORIES = [  # (code, Arabic, English)
+# (code, Arabic, English). No "salaries": staff pay reaches profit through pay rules (F4, F5), so a default
+# salaries expense would count it twice (Appendix F).
+DEFAULT_CATEGORIES = [
     ("rent", "إيجار", "Rent"),
-    ("salaries", "مرتبات", "Salaries"),
     ("materials", "خامات ومستلزمات", "Materials"),
     ("lab", "معمل", "Lab"),
     ("utilities", "كهرباء ومياه وإنترنت", "Utilities"),
@@ -196,19 +223,20 @@ def seed_categories(clinic_id, language="ar"):
 
     have = set(Category.objects.filter(clinic_id=clinic_id).values_list("code", flat=True))
     Category.objects.bulk_create([
-        Category(clinic_id=clinic_id, code=code, name=arabic if language == "ar" else english, is_system=True, sort=sort)
+        Category(clinic_id=clinic_id, code=code, name=arabic if language == "ar" else english, name_en=english,
+                 is_system=True, sort=sort)
         for sort, (code, arabic, english) in enumerate(DEFAULT_CATEGORIES) if code not in have])
 
 
 def ensure_categories(ctx):
     """The default categories, for a place made before M3 that has none yet (one statement)."""
     language = ctx.clinic.settings.get("print_language", "ar")
-    rows = [(code, arabic if language == "ar" else english, sort) for sort, (code, arabic, english)
+    rows = [(code, arabic if language == "ar" else english, english, sort) for sort, (code, arabic, english)
             in enumerate(DEFAULT_CATEGORIES)]
     sql.run(ctx, f"""
-        INSERT INTO "finance_category" (clinic_id, name, code, is_system, is_active, sort)
-        VALUES {", ".join(["(%s, %s, %s, true, true, %s)"] * len(rows))} ON CONFLICT DO NOTHING""",
-            [p for code, name, sort in rows for p in (ctx.clinic_id, name, code, sort)])
+        INSERT INTO "finance_category" (clinic_id, name, name_en, code, is_system, is_active, sort)
+        VALUES {", ".join(["(%s, %s, %s, %s, true, true, %s)"] * len(rows))} ON CONFLICT DO NOTHING""",
+            [p for code, name, name_en, sort in rows for p in (ctx.clinic_id, name, name_en, code, sort)])
 
 
 def _duplicate_category():
@@ -217,15 +245,15 @@ def _duplicate_category():
 
 def categories(ctx, include_inactive=False):
     where = "" if include_inactive else " AND is_active"
-    return sql.dicts(ctx, f'SELECT {CATEGORY_COLUMNS} FROM "finance_category" WHERE clinic_id = %s{where} '
-                          "ORDER BY sort, id", [ctx.clinic_id])
+    return [category_row(r) for r in sql.dicts(ctx, f'SELECT {CATEGORY_COLUMNS} FROM "finance_category" '
+                                                    f"WHERE clinic_id = %s{where} ORDER BY sort, id", [ctx.clinic_id])]
 
 
-def create_category(ctx, name):
-    found = _savepoint(ctx, f'INSERT INTO "finance_category" (clinic_id, name, code, is_system, is_active, sort) '
-                            f"VALUES (%s, %s, '', false, true, 1000) RETURNING {CATEGORY_COLUMNS}",
-                       [ctx.clinic_id, name], {"category_active_name_uniq": _duplicate_category()})
-    return dict(zip(_cols(CATEGORY_COLUMNS), found))
+def create_category(ctx, name, name_en=""):
+    found = _savepoint(ctx, f'INSERT INTO "finance_category" (clinic_id, name, name_en, code, is_system, is_active, sort) '
+                            f"VALUES (%s, %s, %s, '', false, true, 1000) RETURNING {CATEGORY_COLUMNS}",
+                       [ctx.clinic_id, name, name_en], {"category_active_name_uniq": _duplicate_category()})
+    return category_row(found)
 
 
 def update_category(ctx, category_id, values):
@@ -237,7 +265,7 @@ def update_category(ctx, category_id, values):
                        {"category_active_name_uniq": _duplicate_category()})
     if found is None:
         raise not_found("category")
-    return dict(zip(_cols(CATEGORY_COLUMNS), found))
+    return category_row(found)
 
 
 def _active_category(ctx, category_id):
@@ -284,7 +312,11 @@ def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False,
     deltas.clinic_day(day, expenses=amount)
     if own:
         deltas.write_clinics(ctx)
-    return dict(zip(_cols(EXPENSE_COLUMNS), found))
+    expense = dict(zip(_cols(EXPENSE_COLUMNS), found))
+    record_change(ctx, "expense.add", "expense", expense["id"],
+                  after={"category_id": category_id, "amount": amount, "day": day.isoformat(), "shift_id": shift_id,
+                         "purchase": purchase})
+    return expense
 
 
 def void_expense(ctx, expense_id):
@@ -430,7 +462,7 @@ def statement(ctx, membership_id, month):
 
 
 def payout(ctx, membership_id, month, amount, method, note):
-    """A payout against a month's statement. Cash comes out of the open shift (409 register_closed). Audited.
+    """A payout against a month's statement. Cash comes out of the open shift (opened if none is). Audited.
 
     Payouts aren't capped at the balance: an advance on next month's pay is a payout too.
     """

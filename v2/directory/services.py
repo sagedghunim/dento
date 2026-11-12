@@ -5,6 +5,8 @@ import time
 from django.conf import settings
 from django.db.models import Q
 
+from core.i18n import pick
+
 from .models import DirectoryClinic, UserClinic
 
 _CACHE_SECONDS = 60
@@ -40,7 +42,8 @@ def clinics_for_user(user_id):
         .order_by("clinic__name", "clinic_id")
     )
     return [
-        {"clinic_id": link.clinic_id, "membership_id": link.membership_id, "name": link.clinic.name, "role": link.role,
+        {"clinic_id": link.clinic_id, "membership_id": link.membership_id,
+         "name": pick(link.clinic.name, link.clinic.name_en), "role": link.role,
          "kind": link.clinic.kind}
         for link in links
     ]

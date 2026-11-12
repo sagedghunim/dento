@@ -1,0 +1,20 @@
+{% load i18n %}{% if medicines %}
+<ul class="lines med-list" data-med-list>
+  {% for m in medicines %}
+  <li data-medicine="{{ m.json }}" data-search="{{ m.name }} {{ m.generic }}">
+    <div class="med-main">
+      <strong><bdi dir="auto">{{ m.name }}</bdi>{% if m.strength %} <bdi dir="auto" class="muted">{{ m.strength }}</bdi>{% endif %}</strong>
+      {% if m.section_name %}<span class="pill grey"><bdi dir="auto">{{ m.section_name }}</bdi></span>{% endif %}
+      <p class="muted">{% if m.generic %}<bdi dir="auto">{{ m.generic }}</bdi>{% endif %}{% if m.generic and m.form %} · {% endif %}{% if m.form %}<bdi dir="auto">{{ m.form }}</bdi>{% endif %}{% if m.default_dose %}{% if m.generic or m.form %} · {% endif %}<bdi dir="auto">{{ m.default_dose }}</bdi>{% endif %}</p>
+    </div>
+    <div class="row-actions">
+      <button type="button" class="btn ghost" data-med="edit">{% translate "Edit" %}</button>
+      <button type="button" class="icon-btn danger-icon" data-med="remove" aria-label="{% translate "Remove" %}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="empty-note" data-no-match hidden>{% translate "No medicine matches this search." %}</p>
+{% else %}
+<p class="empty-note">{% translate "No medicines yet. Add the ones you prescribe most." %}</p>
+{% endif %}

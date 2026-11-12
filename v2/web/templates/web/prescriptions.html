@@ -1,0 +1,149 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Prescription" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Prescription" %}</h1>
+  <p>{% translate "Nothing is written from scratch. Keep the clinic's medicines and ready prescriptions here; doctors pick from them when they write a prescription in the visit." %}</p>
+</div>
+
+<div class="pending-bar" data-pending-bar hidden></div>
+
+<div class="grid-2 rx-grid">
+  <section class="card" aria-labelledby="med-title">
+    <div class="card-head">
+      <div>
+        <h2 id="med-title">{% translate "Medicines" %}</h2>
+        <p class="card-sub">{% translate "Brand, active ingredient, form and the usual dose." %}</p>
+      </div>
+      <button type="button" class="btn" data-new-medicine><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a medicine" %}</button>
+    </div>
+    <label class="field list-search">{% translate "Search by brand or ingredient" %}
+      <input type="search" data-med-filter autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search">
+    </label>
+    <div data-medicines aria-live="polite">{% include "web/_medicine_rows.html" %}</div>
+  </section>
+
+  <section class="card" aria-labelledby="rx-title">
+    <div class="card-head">
+      <div>
+        <h2 id="rx-title">{% translate "Ready prescriptions" %}</h2>
+        <p class="card-sub">{% translate "A set of medicines with their instructions, written in one tap." %}</p>
+      </div>
+      <button type="button" class="btn" data-new-template><svg class="icon"><use href="#i-plus"/></svg>{% translate "New ready prescription" %}</button>
+    </div>
+    <div data-templates aria-live="polite">{% include "web/_template_rows.html" %}</div>
+  </section>
+</div>
+
+<dialog class="sheet" id="medicine-dialog" aria-labelledby="medicine-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="medicine-title"><span data-title-new>{% translate "Add a medicine" %}</span><span data-title-edit hidden>{% translate "Edit the medicine" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div class="grid-form">
+      <label class="field">{% translate "Brand name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+      <label class="field">{% translate "Active ingredient" %}<input name="generic" maxlength="200" dir="auto" autocomplete="off"></label>
+      <label class="field">{% translate "Strength" %}<input name="strength" maxlength="60" dir="auto" autocomplete="off" placeholder="500 mg"></label>
+      <label class="field">{% translate "Form" %}<input name="form" maxlength="60" dir="auto" autocomplete="off" list="med-forms" placeholder="{% translate "Tablets, syrup, gel…" %}"></label>
+      {% if sections %}
+      <label class="field" data-new-only>{% translate "Section" %}<select name="section_id">
+        {% for s in sections %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select></label>
+      {% endif %}
+    </div>
+    <label class="field">{% translate "Usual dose" %}<input name="default_dose" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "One tablet every 8 hours" %}"></label>
+    <label class="field">{% translate "Usual note (optional)" %}<input name="default_note" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "After meals, for 5 days" %}"></label>
+    <details class="more-fields">
+      <summary>{% translate "In English, for English prescriptions (optional)" %}</summary>
+      <div class="grid-form">
+        <label class="field">{% translate "Form in English" %}<input name="form_en" maxlength="60" dir="ltr" lang="en" autocomplete="off"></label>
+        <label class="field">{% translate "Usual dose in English" %}<input name="default_dose_en" maxlength="200" dir="ltr" lang="en" autocomplete="off"></label>
+        <label class="field">{% translate "Usual note in English" %}<input name="default_note_en" maxlength="200" dir="ltr" lang="en" autocomplete="off"></label>
+      </div>
+    </details>
+    <datalist id="med-forms">
+      <option value="{% translate "Tablets" %}"><option value="{% translate "Capsules" %}"><option value="{% translate "Syrup" %}">
+      <option value="{% translate "Mouthwash" %}"><option value="{% translate "Gel" %}"><option value="{% translate "Cream" %}">
+      <option value="{% translate "Drops" %}"><option value="{% translate "Injection" %}">
+    </datalist>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="template-dialog" aria-labelledby="template-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="template-title"><span data-title-new>{% translate "New ready prescription" %}</span><span data-title-edit hidden>{% translate "Edit the ready prescription" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div class="grid-form">
+      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus placeholder="{% translate "After an extraction" %}"></label>
+      {% if sections %}
+      <label class="field" data-new-only>{% translate "Section" %}<select name="section_id">
+        {% for s in sections %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select></label>
+      {% endif %}
+    </div>
+    <fieldset class="group">
+      <legend>{% translate "Medicines" %}</legend>
+      <ol class="edit-lines rx-edit" data-lines></ol>
+      <button type="button" class="btn ghost" data-add-line><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a medicine" %}</button>
+    </fieldset>
+    <label class="field">{% translate "Instructions (optional)" %}<textarea name="notes" maxlength="1000" dir="auto"></textarea></label>
+    <details class="more-fields">
+      <summary>{% translate "In English, for English prescriptions (optional)" %}</summary>
+      <label class="field">{% translate "Name in English" %}<input name="name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+      <label class="field">{% translate "Instructions in English" %}<textarea name="notes_en" maxlength="1000" dir="ltr" lang="en"></textarea></label>
+    </details>
+    <template data-line-template>
+      <li class="edit-line rx-line">
+        <label class="field">{% translate "Medicine" %}<select name="medicine_id">
+          <option value="">{% translate "Pick the medicine" %}</option>
+          <option value="other">{% translate "Another medicine (type its name)" %}</option>
+        </select></label>
+        <label class="field" data-other hidden>{% translate "Medicine name" %}<input name="other_name" maxlength="120" dir="auto" autocomplete="off"></label>
+        <label class="field">{% translate "Dose" %}<input name="dose" maxlength="200" dir="auto" autocomplete="off"></label>
+        <label class="field">{% translate "Note" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+        <button type="button" class="icon-btn" data-remove-line aria-label="{% translate "Remove" %}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+      </li>
+    </template>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="rx-remove-dialog" aria-labelledby="rx-remove-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="rx-remove-title">{% translate "Remove from the list?" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong></p>
+    <p class="muted">{% translate "Prescriptions already written keep it as they are." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Keep it" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Remove" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/prescriptions.js' %}"></script>{% endblock %}

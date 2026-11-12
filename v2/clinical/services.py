@@ -101,7 +101,12 @@ def _appointment(ctx, appointment_id):
                          "WHERE clinic_id = %s AND id = %s", [ctx.clinic_id, appointment_id])
     if found is None:
         raise not_found("appointment")
-    return dict(zip(("id", "status", "day", "doctor_id", "patient_id", "section_id"), found))
+    appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "section_id"), found))
+    # Every caller writes clinical data on this visit: the member's sections, and a doctor's own visits (design G1, G4).
+    from scheduling.rules import check_scope
+
+    check_scope(ctx, appointment["section_id"], appointment["doctor_id"], own=True)
+    return appointment
 
 
 def _open_visit(appointment):
@@ -113,34 +118,83 @@ def _open_visit(appointment):
 # --- Copying a specialty into a section (design E4) ------------------------------------------------------------
 
 
+ENGLISH_COLUMNS = {"clinical_procedure": {"description_en"},
+                   "clinical_medicine": {"form_en", "default_dose_en", "default_note_en"},
+                   "clinical_prescription_template": {"name_en", "notes_en"}}
+
+
+def _missing_english(alias):
+    """The design G3 columns a shard doesn't have yet. Only clinical 0002, an older migration that calls this code,
+    meets a shard without them; everywhere else this is empty."""
+    from django.db import connections
+
+    with connections[alias].cursor() as cursor:
+        cursor.execute("SELECT table_name, column_name FROM information_schema.columns "
+                       "WHERE table_name = ANY(%s) AND column_name = ANY(%s)",
+                       [list(ENGLISH_COLUMNS), sorted(set().union(*ENGLISH_COLUMNS.values()))])
+        found = {(table, column) for table, column in cursor.fetchall()}
+    return {(table, column) for table, columns in ENGLISH_COLUMNS.items() for column in columns
+            if (table, column) not in found}
+
+
+def _insert(model, objs, skip):
+    """bulk_create without the (table, column) pairs in `skip`; sets each object's id. For the migration path only."""
+    from django.db import connections
+
+    if not objs:
+        return objs
+    alias = model.objects.db
+    connection = connections[alias]
+    table = model._meta.db_table
+    fields = [f for f in model._meta.concrete_fields if not f.primary_key and (table, f.column) not in skip]
+    params = [f.get_db_prep_save(f.pre_save(obj, True), connection) for obj in objs for f in fields]
+    row = "(" + ", ".join(["%s"] * len(fields)) + ")"
+    with connection.cursor() as cursor:
+        cursor.execute(f'INSERT INTO "{model._meta.db_table}" ({", ".join(f.column for f in fields)}) '
+                       f"VALUES {', '.join([row] * len(objs))} RETURNING id", params)
+        for obj, (new_id,) in zip(objs, cursor.fetchall()):
+            obj.id = obj.pk = new_id
+    return objs
+
+
 def copy_specialty(clinic_id, section, language="ar"):
     """Add the section's specialty procedures, medicines and prescription templates it doesn't have yet.
 
     Runs inside the clinic's transaction (directory.flows.ensure_clinic_on_shard). Never deletes or changes a row
-    the clinic has (design 5.8), so running it again is harmless.
+    the clinic has (design 5.8), so running it again is harmless. Both languages are copied (design G3).
     """
+    from clinics.catalogue.english import english
     from clinics.specialties import SPECIALTIES
+    from core.routing import current_scope
 
     from .models import Medicine, PrescriptionTemplate, PrescriptionTemplateItem, Procedure
 
     spec = SPECIALTIES.get(section.specialty_code)
     if spec is None:
         return
+    skip = _missing_english(current_scope().alias)
+
+    def create(model, objs):
+        return _insert(model, objs, skip) if skip else model.objects.bulk_create(objs)
+
     have = set(Procedure.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)
                .values_list("name_ar", flat=True))
-    Procedure.objects.bulk_create([
+    create(Procedure, [
         Procedure(clinic_id=clinic_id, section_id=section.id, name_ar=p["name_ar"], name_en=p["name_en"],
                   category=p["category"], unit=p["unit"], price=p["price"], typical_min=p["typical_min"],
-                  typical_max=p["typical_max"], description=p.get("description", ""), condition=p["condition"], sort=sort)
+                  typical_max=p["typical_max"], description=p.get("description", ""),
+                  description_en=p.get("description_en", ""), condition=p["condition"], sort=sort)
         for sort, p in enumerate(spec["procedures"]) if p["name_ar"] not in have])
     have = set(Medicine.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)
                .values_list("name", "strength"))
-    Medicine.objects.bulk_create([
+    create(Medicine, [
         Medicine(clinic_id=clinic_id, section_id=section.id, name=m["name"], generic=m["generic"], strength=m["strength"],
-                 form=m["form"], default_dose=m["default_dose"], default_note=m["default_note"], sort=sort)
+                 form=m["form"], default_dose=m["default_dose"], default_note=m["default_note"], form_en=m["form_en"],
+                 default_dose_en=m["default_dose_en"], default_note_en=m["default_note_en"], sort=sort)
         for sort, m in enumerate(spec["medicines"]) if (m["name"], m["strength"]) not in have])
     medicines = {}
-    for medicine in Medicine.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True).order_by("id"):
+    library = Medicine.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True).order_by("id")
+    for medicine in library.only("id", "name", "strength", "form", "default_dose", "default_note"):
         medicines.setdefault((medicine.name, medicine.strength), medicine)
         medicines.setdefault((medicine.name, ""), medicine)
     have = set(PrescriptionTemplate.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)
@@ -148,8 +202,9 @@ def copy_specialty(clinic_id, section, language="ar"):
     for name, lines, notes in spec["templates"]:
         if name in have:
             continue
-        template = PrescriptionTemplate.objects.create(clinic_id=clinic_id, section_id=section.id, name=name,
-                                                       notes=notes[:1000])
+        template = create(PrescriptionTemplate, [PrescriptionTemplate(
+            clinic_id=clinic_id, section_id=section.id, name=name, name_en=english(name), notes=notes[:1000],
+            notes_en=english(notes)[:1000])])[0]
         items = []
         for position, (trade_name, strength) in enumerate(lines, start=1):
             medicine = medicines.get((trade_name, strength)) or medicines.get((trade_name, ""))
@@ -162,8 +217,11 @@ def copy_specialty(clinic_id, section, language="ar"):
 
 # --- Medicines library (design E3) -----------------------------------------------------------------------------
 
-MEDICINE_FIELDS = {"name": 120, "generic": 200, "strength": 60, "form": 60, "default_dose": 200, "default_note": 200}
-MEDICINE_COLUMNS = "id, section_id, name, generic, strength, form, default_dose, default_note, is_active, sort"
+MEDICINE_FIELDS = {"name": 120, "generic": 200, "strength": 60, "form": 60, "default_dose": 200, "default_note": 200,
+                   "form_en": 60, "default_dose_en": 200, "default_note_en": 200}
+MEDICINE_COLUMNS = ("id, section_id, name, generic, strength, form, default_dose, default_note, is_active, sort, "
+                    "form_en, default_dose_en, default_note_en")
+MEDICINE_TEXT = ("form", "default_dose", "default_note")  # shown in the request's language (design G3)
 
 
 def clean_medicine(data, partial=False):
@@ -183,17 +241,26 @@ def _duplicate_medicine():
 
 
 def medicine_row(values):
-    return dict(zip(("id", "section_id", "name", "generic", "strength", "form", "default_dose", "default_note",
-                     "is_active", "sort"), values))
+    """The row with form, dose and note in the request's language, and both raw texts (`<field>_ar`, `<field>_en`)."""
+    from core.i18n import pick
+
+    row = dict(zip(("id", "section_id", "name", "generic", "strength", "form", "default_dose", "default_note",
+                    "is_active", "sort", "form_en", "default_dose_en", "default_note_en"), values))
+    for name in MEDICINE_TEXT:
+        row[f"{name}_ar"] = row[name]
+        row[name] = pick(row[name], row[f"{name}_en"])
+    return row
 
 
 def create_medicine(ctx, section, values):
     found = _savepoint_insert(ctx, f"""
         INSERT INTO "clinical_medicine" (clinic_id, section_id, name, generic, strength, form, default_dose,
-                                         default_note, is_active, sort, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true, 1000, %s) RETURNING {MEDICINE_COLUMNS}""", [
+                                         default_note, form_en, default_dose_en, default_note_en, is_active, sort,
+                                         created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, 1000, %s) RETURNING {MEDICINE_COLUMNS}""", [
         ctx.clinic_id, section["id"], values["name"], values.get("generic", ""), values.get("strength", ""),
-        values.get("form", ""), values.get("default_dose", ""), values.get("default_note", ""), timezone.now()],
+        values.get("form", ""), values.get("default_dose", ""), values.get("default_note", ""),
+        values.get("form_en", ""), values.get("default_dose_en", ""), values.get("default_note_en", ""), timezone.now()],
         {"medicine_active_name_uniq": _duplicate_medicine()})
     return medicine_row(found)
 
@@ -270,15 +337,17 @@ def _fill_from_library(ctx, lines, section_id):
         for field, source in (("name", "name"), ("generic", "generic"), ("strength", "strength"), ("form", "form"),
                               ("dose", "default_dose"), ("note", "default_note")):
             if not line[field]:
-                line[field] = medicine[source]
+                line[field] = medicine.get(f"{source}_ar", medicine[source])  # the typed text, as before G3
     return lines
 
 
-def create_template(ctx, section, name, notes, lines):
+def create_template(ctx, section, name, notes, lines, name_en="", notes_en=""):
     lines = _fill_from_library(ctx, lines, section["id"])
     found = _savepoint_insert(ctx, """
-        INSERT INTO "clinical_prescription_template" (clinic_id, section_id, name, notes, is_active, version, created_at)
-        VALUES (%s, %s, %s, %s, true, 1, %s) RETURNING id""", [ctx.clinic_id, section["id"], name, notes, timezone.now()],
+        INSERT INTO "clinical_prescription_template" (clinic_id, section_id, name, notes, name_en, notes_en, is_active,
+                                                      version, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, true, 1, %s) RETURNING id""",
+        [ctx.clinic_id, section["id"], name, notes, name_en, notes_en, timezone.now()],
         {"rx_template_active_name_uniq": _duplicate_template()})
     _insert_template_items(ctx, found[0], lines)
     return found[0]
@@ -298,7 +367,7 @@ def _insert_template_items(ctx, template_id, lines):
                  f"strength, form, dose, note) VALUES {', '.join(values)}", params)
 
 
-def update_template(ctx, template_id, version, name, notes, lines, is_active=True):
+def update_template(ctx, template_id, version, name, notes, lines, is_active=True, name_en="", notes_en=""):
     """Replace a template's name, notes and lines, conditional on the version it was read at (If-Match)."""
     current = sql.row(ctx, 'SELECT section_id, version, is_active FROM "clinical_prescription_template" '
                            "WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE", [ctx.clinic_id, template_id])
@@ -308,9 +377,9 @@ def update_template(ctx, template_id, version, name, notes, lines, is_active=Tru
         raise ApiError("stale", _("Someone changed this template meanwhile. Reload and try again."), 409,
                        fields={"version": current[1]})
     lines = _fill_from_library(ctx, lines, current[0])
-    _savepoint_insert(ctx, 'UPDATE "clinical_prescription_template" SET name = %s, notes = %s, is_active = %s, '
-                           "version = version + 1 WHERE clinic_id = %s AND id = %s RETURNING id",
-                      [name, notes, is_active, ctx.clinic_id, template_id],
+    _savepoint_insert(ctx, 'UPDATE "clinical_prescription_template" SET name = %s, notes = %s, name_en = %s, '
+                           "notes_en = %s, is_active = %s, version = version + 1 WHERE clinic_id = %s AND id = %s "
+                           "RETURNING id", [name, notes, name_en, notes_en, is_active, ctx.clinic_id, template_id],
                       {"rx_template_active_name_uniq": _duplicate_template()})
     sql.run(ctx, 'DELETE FROM "clinical_prescription_template_item" WHERE clinic_id = %s AND template_id = %s',
             [ctx.clinic_id, template_id])
@@ -590,13 +659,20 @@ def add_attachment(ctx, patient_id, appointment_id, title, upload):
 
 # --- Procedure catalogue (design E3) ---------------------------------------------------------------------------
 
-PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500}
+PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500, "description_en": 500}
 PROCEDURE_COLUMNS = ("id, section_id, name_ar, name_en, category, unit, price, typical_min, typical_max, description, "
-                     "internal_cost, condition, is_active, sort")
+                     "internal_cost, condition, is_active, sort, description_en")
 
 
 def procedure_row(values):
-    return dict(zip([c.strip() for c in PROCEDURE_COLUMNS.split(",")], values))
+    """The raw columns, plus `name` and `description` in the request's language (design G3)."""
+    from core.i18n import pick
+
+    row = dict(zip([c.strip() for c in PROCEDURE_COLUMNS.split(",")], values))
+    row["name"] = pick(row["name_ar"], row["name_en"])
+    row["description_ar"] = row["description"]
+    row["description"] = pick(row["description_ar"], row["description_en"])
+    return row
 
 
 def clean_procedure(data, partial=False):
@@ -637,10 +713,12 @@ def create_procedure(ctx, section, values):
     _check_range(values)
     found = _savepoint_insert(ctx, f"""
         INSERT INTO "clinical_procedure" (clinic_id, section_id, name_ar, name_en, category, unit, price, typical_min,
-                                          typical_max, description, internal_cost, condition, is_active, sort, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
+                                          typical_max, description, description_en, internal_cost, condition,
+                                          is_active, sort, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
         ctx.clinic_id, section["id"], values["name_ar"], values["name_en"], values["category"], values["unit"],
-        values["price"], values["typical_min"], values["typical_max"], values["description"], values["internal_cost"],
+        values["price"], values["typical_min"], values["typical_max"], values["description"],
+        values.get("description_en", ""), values["internal_cost"],
         values["condition"], values.get("sort", 1000), timezone.now()],
         {"procedure_active_name_uniq": _duplicate_procedure(),
          "procedure_typical_range_valid": ApiError("invalid", _("The typical range is upside down."),
@@ -766,10 +844,13 @@ def record_procedure(ctx, appointment_id, request):
     Returns (record, invoice, tooth state or None, version of the visit's day).
     """
     appointment = billing.lock_appointment(ctx, appointment_id)
+    from scheduling.rules import check_scope
+
+    procedure = _procedure(ctx, request["procedure_id"])  # another place's id is 404 before any other answer
+    check_scope(ctx, appointment["section_id"], appointment["doctor_id"], own=True)
     status = appointment["status"]
     if status in ("booked", "cancelled", "no_show"):
         raise ApiError("visit_closed", _("Record procedures on a visit that has arrived."), 409, fields={"status": status})
-    procedure = _procedure(ctx, request["procedure_id"])
     if procedure["section_id"] != appointment["section_id"]:
         raise ApiError("invalid", _("This procedure belongs to another section."), fields={"procedure_id": "section"})
     tooth, surfaces = request["tooth"], request["surfaces"]

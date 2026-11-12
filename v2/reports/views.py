@@ -28,9 +28,23 @@ def _tag(request):
     return validate.ident(tag, "tag") if tag else None
 
 
+MONEY_FIELDS = ("revenue_this_month", "revenue_per_patient", "collected", "refunded", "revenue")
+
+
+def _money_for(ctx, body):
+    """reports.view isn't owner-only: the money in a report goes only to holders of finances.view."""
+    hidden = not ctx.can("finances.view")
+    body["money_hidden"] = hidden
+    if hidden:
+        for row in [body, *body.get("items", [])]:
+            for field in MONEY_FIELDS:
+                row.pop(field, None)
+    return body
+
+
 @api("GET", perm="reports.view")
 def insights_view(request, ctx, data):
-    return selectors.insights(ctx, business_day(ctx.clinic))
+    return _money_for(ctx, selectors.insights(ctx, business_day(ctx.clinic)))
 
 
 @api("GET", perm="reports.view")
@@ -46,9 +60,17 @@ def patient_list_view(request, ctx, data, name):
 
 @api("GET", perm=("reports.view", "patients.export"))
 def export_view(request, ctx, data, name):
-    """The whole list as CSV (at most 5,000 rows), and an access event (export) for each patient in it."""
+    """The whole list as CSV, and an access event (export) for each patient in it.
+
+    A list longer than EXPORT_LIMIT (5,000) is refused with 409 export_too_large, never cut short silently.
+    """
     name = _list_name(name)
-    items = selectors.patient_list(ctx, name, business_day(ctx.clinic), _tag(request), 0, selectors.EXPORT_LIMIT)
+    limit = selectors.EXPORT_LIMIT
+    items = selectors.patient_list(ctx, name, business_day(ctx.clinic), _tag(request), 0, limit + 1)
+    if len(items) > limit:
+        raise ApiError("export_too_large",
+                       _("This list has more than %(limit)s patients. Choose a tag to narrow it, then export again.")
+                       % {"limit": f"{limit:,}"}, 409, extra={"limit": limit})
     now = timezone.now()
     AuditAccess.objects.bulk_create([
         AuditAccess(clinic_id=ctx.clinic_id, at=now, membership_id=ctx.membership_id, patient_id=i["patient"]["id"],
@@ -81,15 +103,18 @@ def performance_view(request, ctx, data):
     if by not in ("day", "month"):
         raise ApiError("invalid", "by must be day or month", fields={"by": "choice"})
     first, last = _dates(request, ctx, by)
-    return {"by": by, "from": first.isoformat(), "to": last.isoformat(),
-            "items": selectors.performance(ctx, first, last, by)}
+    return _money_for(ctx, {"by": by, "from": first.isoformat(), "to": last.isoformat(),
+                            "items": selectors.performance(ctx, first, last, by)})
 
 
 @api("GET", perm="reports.view")
 def staff_performance_view(request, ctx, data):
     """?from=&to=: staff performance (F8)."""
     first, last = _dates(request, ctx, "doctor")
-    return {"from": first.isoformat(), "to": last.isoformat(), "items": selectors.staff_performance(ctx, first, last)}
+    items = selectors.staff_performance(ctx, first, last)
+    if not ctx.can("finances.view"):
+        items.sort(key=lambda i: (-i["visits"], i["membership_id"]))  # the revenue order would show the revenue
+    return _money_for(ctx, {"from": first.isoformat(), "to": last.isoformat(), "items": items})
 
 
 def _dates(request, ctx, by):

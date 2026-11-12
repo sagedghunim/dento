@@ -345,12 +345,18 @@ Platform admins hold no memberships. This is checked when a member is added and 
 5. the patient (`patients_patient`), only in a patient edit (a conditional `UPDATE` on the expected values);
 6. the clinic row (`clinics_clinic`, `FOR NO KEY UPDATE`), only in a settings change;
 7. the invoice;
+   - 7a. the patient package (`billing_patient_package`, `FOR NO KEY UPDATE`, M3). Recording a procedure takes it **before** the invoice (plan item → package → invoice); void and remove-line take it **after** (invoice → package). No cycle: a recording waits only for its own visit's invoice, which every other flow reaches through that visit's appointment (held by the recording), except E3's finish, which locks other invoices but never a package;
 8. payment rows;
+   - 8a. the open cash shift (`finance_shift`, M3). Payments, refunds, cash movements, expenses and payouts take it `FOR SHARE`. Cash never fails for want of a shift: when none is open, the cash entry opens one in its own transaction (`INSERT … ON CONFLICT (clinic_id) WHERE status = 'open' DO NOTHING` on the one-open-shift index, float 0, `auto_opened`, the actor as opener), then selects it again if another request won. Two first entries therefore wait on each other through that index, so every cash flow takes the shift **after** the invoice counter (11) and **before** any summary row, item or expense: booking with cash takes it right after its counters, before the doctor-day. Only close takes it `FOR NO KEY UPDATE`, then sums and updates it, and takes nothing after it. A cash entry that waited behind a close re-checks `status = 'open'`, finds none and opens a fresh shift, so a closed shift never gains an entry after its count;
 9. inventory items;
 10. expenses;
 11. counter rows, in the order `patient_file`, `invoice`, `prescription`;
+   - 11a. `summaries_patient` rows (finish, sweep; M3);
 12. `summaries_doctor_day` rows;
+   - 12a. `summaries_money_day` rows, written just before the clinic-days (M3);
 13. `summaries_clinic_day` rows.
+
+One exception to the numbering: recording a procedure takes the invoice counter (11) **before** its stock items (9). No flow takes stock items and then the invoice counter, so this cannot cycle.
 
 A flow writes **all** its changes to one summary table in **one statement**, in key order (doctor-days by (day, doctor_id), clinic-days by day), for example a payment on a past day's visit that changes the payment day's `collected` and the visit day's version.
 
@@ -358,26 +364,28 @@ Several rows of one table are locked in one statement in key order (`ORDER BY id
 
 | Flow | Locks, in order |
 |---|---|
-| Booking (5.1), with optional arrive and payment | key → doctor membership `FOR SHARE` → [new patient: counter patient_file] → [payment: counter invoice, taken here and kept for `ensure_invoice`] → doctor_day (one upsert: turn, booked, collected) → clinic_day (one upsert) |
-| Status change (5.2) | key → appointment (conditional UPDATE) → doctor_day → clinic_day |
+| Booking (5.1), with optional arrive and payment | key → doctor membership `FOR SHARE` → [new patient: counter patient_file] → [payment: counter invoice, taken here and kept for `ensure_invoice`] → [cash: open shift `FOR SHARE`, or opened] → doctor_day (one upsert: turn, booked, collected) → money_day → clinic_day (one upsert) |
+| Status change (5.2) | key → appointment (conditional UPDATE) → [finish: summaries_patient] → doctor_day → clinic_day |
 | Finish with payment | key → appointment → invoice (or counter invoice for a new one) → doctor_day → clinic_day |
 | Reschedule | key → appointment → target doctor membership `FOR SHARE` → both doctor_day rows in one statement → both clinic_day rows in one statement |
 | Cancel | key → appointment → invoice (read; void if empty) → doctor_day → clinic_day |
-| Payment, line, discount, void (5.3) | key → appointment → invoice (or counter invoice) → doctor_day → clinic_day |
-| Refund | key → appointment → invoice → the payment → doctor_day (refund day) → clinic_day (refund day and the appointment's day, one statement) |
+| Payment, line, discount, void (5.3) | key → appointment → invoice (or counter invoice) → [payment: open shift `FOR SHARE` (other methods: in the INSERT, if one is open; cash: opened if none is)] → [void, remove a package line: its patient packages; remove a procedure line that used a session: that package, to give the session back] → doctor_day → money_day → clinic_day |
+| Refund | key → appointment → invoice → the payment → [open shift `FOR SHARE`; cash: opened if none is] → doctor_day (refund day) → money_day → clinic_day (refund day and the appointment's day, one statement) |
 | Stock use, several items (5.4) | key → items in one statement by id → clinic_day (only if an item crosses its threshold) |
-| Purchase, adjustment | key → item → clinic_day (purchase: expenses) |
-| Expense and its void | key → expense → clinic_day |
+| Purchase, adjustment | key → [purchase from the drawer: open shift `FOR SHARE`, opened if none is] → item → [purchase: expense insert] → clinic_day (purchase: expenses) |
+| Expense and its void | key → [from the drawer: open shift `FOR SHARE`, opened if none is] → expense → clinic_day |
+| Cash in or out, payout (F1, F4) | key → [cash: open shift `FOR SHARE`, opened if none is] → the row |
+| Close the shift (F1) | key → open shift `FOR NO KEY UPDATE` → sum what it holds (no locks) → update; nothing after it |
 | Prescription (5.5) | key → [medicines added from it: insert, `ON CONFLICT DO NOTHING` on the active-name index] → counter prescription |
 | Visit note (5.6) | key → note (`FOR NO KEY UPDATE`, then conditional on version) → [after the visit day: revision insert] |
 | Finish with earlier balance and next visit (E3) | key → appointment (conditional UPDATE) → the visit's invoice and the patient's other open invoices with something owed, one statement by id → [counter invoice] → next visit's doctor membership `FOR SHARE` → doctor_day (one upsert: done, collected, the next visit's turn) → clinic_day (one upsert). The membership comes after the invoices here; no cycle, because schedule changes (the only `FOR NO KEY UPDATE` holders of a membership) never lock an invoice. Older invoices are locked without their appointments; flows that lock an appointment then its invoice never wait on this visit's appointment afterwards |
 | Vitals (E3) | key → vitals row (insert `ON CONFLICT DO NOTHING`, or UPDATE conditional on version) |
-| Record a procedure (E3) | key → appointment → plan item (`FOR NO KEY UPDATE`) → invoice (or counter invoice) → tooth row (upsert) → clinic_day |
+| Record a procedure (E3, F2, F7) | key → appointment → plan item (`FOR NO KEY UPDATE`) → [a session: patient package] → invoice (or counter invoice) → stock items in one statement by id → tooth row (upsert) → doctor_day → clinic_day |
 | Tooth state (E3) | key → tooth row (`FOR NO KEY UPDATE`, then upsert) |
 | Treatment plan (E3) | key → plan row (`FOR NO KEY UPDATE`, for new items' positions) → its items; a status move is one conditional UPDATE on the item |
 | Library rows: medicines, prescription templates, procedures (E3) | key → the row (template: `FOR NO KEY UPDATE`, conditional on version, then its lines replaced) |
 | End-of-day sweep (5.10) | the day's open appointments in one statement by id → for in-room visits without an invoice, counter invoice → that clinic-day's doctor_day rows in one statement → clinic_day |
-| Recompute (5.10) | that clinic-day's doctor_day rows `FOR UPDATE` in one statement → clinic_day `FOR UPDATE` → aggregate the source rows (no locks) → write |
+| Recompute (5.10) | that clinic-day's doctor_day rows `FOR UPDATE` in one statement → its money_day rows `FOR UPDATE` → clinic_day `FOR UPDATE` → aggregate the source rows, the day's non-voided expenses included (no locks) → write |
 | Schedule change (create, update, delete) | key → doctor membership(s) `FOR NO KEY UPDATE` in id order → the session row → read the doctor's future bookings (no locks, every one, in keyset pages) → clinic_day (today's version) |
 | Patient edit | key → patient (conditional on the expected values) → clinic_day (today's version) |
 | Settings change | key → clinic row → [time zone or day end: the directory's copy after the shard commits] |
@@ -1082,7 +1090,7 @@ Saged's scope of 2026-11-12, taken from the TabeebHub screens he sent. Only the 
 ### F1. Cash register (per place)
 - **Shifts.** A shift opens with a counted opening float, carries every cash payment and refund taken in it, and closes with a counted amount. Closing records the difference from what the shift expected.
 - **One open shift per place.** One person opens it, and anyone with `cash.collect` can use it.
-- **Cash needs an open shift.** A cash payment or refund made while no shift is open answers 409 `register_closed`. Card, transfer and wallet are always allowed.
+- **Cash never fails for want of a shift** (changed 2026-11-12: a solo doctor never opens a register, and booking with cash was refused). When no shift is open, a cash payment, refund, cash movement, expense from the drawer or payout opens one in the same transaction: the actor is the opener, the opening float is 0, and the shift is marked `auto_opened`. Two first entries share one shift (the one-open-shift unique index, `ON CONFLICT DO NOTHING`, then select). An entry that waited behind a close opens a fresh shift, so a counted shift never gains an entry. Explicit open (with a counted float) and close stay for places that want counted handovers; closing a shift that is already closed is 409 `shift_closed`. `register_closed` is gone. Card, transfer and wallet join the open shift when there is one and never need one.
 - **Linked to the shift.** Payments record `shift_id`.
 - **Cash movements.** Cash in and cash out, such as petty expenses or a bank deposit, each with a reason.
 - **Report.** The shift report shows totals by method and the movements.
@@ -1095,7 +1103,7 @@ Saged's scope of 2026-11-12, taken from the TabeebHub screens he sent. Only the 
 
 ### F3. Expenses
 - An expense has a category, an amount, a date, a note, and optionally the shift it was paid from.
-- Categories are editable. The defaults are rent, salaries, materials, lab, utilities and other.
+- Categories are editable. The defaults are rent, materials, lab, utilities and other. There is no default "salaries" category: staff pay reaches profit through pay rules (F4, F5), so a seeded salaries expense would count it twice (M3 review). A place that pays staff outside pay rules can add its own category.
 
 ### F4. Staff pay
 - **Pay rules per member.** A rule is a percentage of the revenue they produce, a fixed amount per visit or procedure, a monthly salary, or a mix of these.
@@ -1121,3 +1129,51 @@ Saged's scope of 2026-11-12, taken from the TabeebHub screens he sent. Only the 
 - **Clinic performance.** Visits, no-shows, average wait and doctor time, and revenue per day and per month.
 - **Staff performance.** Visits, revenue and average doctor time per member.
 - All of these read from the summaries, never from a scan of visits.
+- `reports.view` is not owner-only, so the money in these reports and in the F6 counts (`collected`, `refunded`, `revenue`, `revenue_this_month`, `revenue_per_patient`) goes only to holders of `finances.view`. Others get the counts with `money_hidden: true`, and staff performance is ordered by visits instead of revenue.
+
+### F9. Decisions from the M3 review (2026-11-12)
+- **Packages cover procedures only in M3.** F7 says "procedure or service"; a package points at a procedure and a session is used by recording that procedure. Packages for services come later.
+- **Removing a procedure line gives its session back.** Under the invoice lock (invoice, then package, as void does), `used = used - 1 … AND used > 0`, the record's package and line links are cleared, and it is audited (`package.session_return`).
+- **The recompute repairs expenses.** `clinic_day.expenses` is checked against the day's non-voided `finance_expense` rows (purchases included) and fixed like the other totals.
+- **Adding an expense is audited** (`expense.add`), as its void is, because a back-dated expense changes a closed month's profit.
+- **The CSV export never cuts silently.** A list longer than 5,000 rows answers 409 `export_too_large` and asks for a tag filter; nothing is exported or logged.
+- **Seeded stock may go below zero until counted.** Default items added by `POST inventory/defaults` start at zero with `allow_negative = true`, so an uncounted material never refuses a recording (409 `out_of_stock`). The place turns it off per item after its first count; doing that automatically needs a "counted" marker column, planned later.
+
+## Appendix G: team, places and English names
+
+Saged asked on 2026-11-12 for the demo's "Who can do what" table, for one person working in several places of one owner, for assistants limited to sections, and for English names everywhere in English mode. 5.8 and 5.12 still hold; this appendix adds to them.
+
+### G1. Team and permissions (shard)
+
+- `clinics_membership` gains `display_name_en`, `sections bigint[]` (empty = every section, at most 20) and `version` (every team write is a conditional `UPDATE … WHERE version = %s`, 409 `stale` otherwise).
+- **Groups.** `clinics/permissions.py` `GROUPS` splits every code into the side navigation's eight groups: today, patients, visit, money, stock, reports, settings, team. A test checks they partition `CODES`. `GET team` answers `{groups: [{key, label, description, codes: [{code, label, owner_only}]}], members: [{…, codes, groups: {key: "on" | "off" | "partial"}, editable}]}`: rows are groups, columns are members.
+- **Writes** all go through `check_change` (5.8): `PUT team/members/{id}/permissions` takes `{version, groups: {key: bool}, codes: {code: bool}}` (codes after groups) and stores the result as `granted = wanted − template`, `revoked = template − wanted`. `PATCH team/members/{id}` takes `{version, role?, is_active?, sections?, display_name?, display_name_en?, title?}`. A role change resets the person to the new role's template. Deactivating counts as removing every code the person holds, so a non-owner can only deactivate someone whose codes they hold. A person may change only their own names, never their role, codes, sections or status.
+- **Adding** (`POST team/members`): `mode: "new"` creates the account in the directory first; the account stores the clinic and request key that created it, so a retry of the same request reuses it (B6) and shows no password; any other taken username is 409 `username_taken`, as at public sign-up (D2), which already tells. `mode: "invite"` answers 202 whatever the username: an existing account gets a `directory_invitation` (7 days), listed by `GET me/invitations` and accepted by `POST me/invitations/{id}/accept` (shard membership, then `user_clinic`). Invitations live in the directory, not on the shard (4.2 said shard): the invitee has no shard to look in. `POST team/members/{id}/temporary-password` reissues a temporary password only for an account this place created that has never signed in.
+- **Lock order:** key → the target membership (conditional `UPDATE`). It conflicts with a booking's `FOR SHARE` on a doctor, which only makes them take turns.
+- **Sections.** Only assistants carry `sections`; each id must be an active section of the place (checked in the service; an array can't hold a composite key, and a section is never deleted). For a limited assistant Today, the queue fragment, the sections, services and doctors lists, slots and booking show only those sections; an appointment of another section answers 404, like another place's. Doctors keep their sections from their sessions. Today's ETag includes the limit.
+
+### G2. One person in several places (directory, then each shard)
+
+- Only the owner, and only across places they own (`user_clinic.role = owner`), confirmed on each shard by their owner membership there.
+- `GET team/members/{id}/places` reads the directory only: the owner's places and this person's links (two queries).
+- `PUT team/members/{id}/places` takes `{places: [{clinic_id, role?}], copy: bool}`: a ticked place gets a membership for the **same** account (insert `ON CONFLICT (clinic_id, user_id) DO NOTHING`, or reactivate); an unticked one is deactivated, never deleted. `copy` copies this place's role and codes; otherwise `role` per place, or this place's role with its template. Sections are never copied (ids are per place). The current place is changed only through `PATCH`.
+- Each place is its own step: on another shard its own transaction, then its `user_clinic` row; on the request's shard a savepoint with `app.clinic_id` switched and restored, and its `user_clinic` written after the request commits. Each step writes absolute values, so it is idempotent and needs no request key of its own; each place's log gets its own `audit_change`.
+- **Failure:** if any place fails (shard down, lock timeout, the place moving), the answer is 503 `places_incomplete` with each place's result and `Retry-After`. The request's own transaction rolls back with its key, so the client resends the same key; steps that committed on other shards find their rows already right and change nothing. A lost `user_clinic` write leaves the picker stale until the next run or the nightly reconciliation; the shard stays the authority.
+
+### G3. English names
+
+- Optional English text beside the typed text: `clinic.name_en`, `section.name_en`, `membership.display_name_en`, `service.name_en`, `medicine.form_en / default_dose_en / default_note_en`, `prescription_template.name_en / notes_en`, `procedure.description_en` (its `name_en` exists), `inventory_item.name_en`, `finance_category.name_en`, `patients_tag.name_en`, and the directory's `clinic.name_en` for the picker. Patients, visits, prescriptions and invoices stay as typed.
+- Seeds fill both languages from `clinics/catalogue/` (`english.py` holds the English of every Arabic catalogue phrase; a test fails on a missing one). Sign-up names sections in both languages.
+- Reads return each text in the request's language, falling back to the other when empty (`core.i18n.pick`), and also return the raw pair (`name_ar`, `name_en`, and so on) for edit screens. Edit APIs accept both.
+
+### G4. A doctor's own visits
+
+- New code `appointments.others` ("Handle other doctors' patients", group today): off in the doctor template; the owner holds every code.
+- A member with role `doctor` without it may call in, finish, undo a call and write clinical data (note, vitals, prescription, attachment, tooth, recorded procedure) only on visits whose `doctor_id` is their membership: 403 `not_your_patient` otherwise. Arrive, the assistant's stages, booking, cancel, reschedule and payments stay the desk's. Plans and the chart without a visit stay with their codes. Reading the patient's shared file stays with `clinical.view`.
+- Checked in the services (`scheduling.rules.guard` / `check_scope`), with one extra read only for a bound doctor or a limited assistant. Today answers `own_only`, `my_doctor_id` and a `can_act` flag per visit; its ETag includes the membership.
+
+### G5. Walk-in ("دخول فوري")
+
+- `POST appointments/walk-in` (`appointments.book` and `appointments.queue`) takes the patient (`patient_id` or `new_patient`) and optional `doctor_id`, `service_id`, `section_id`, `payment` and `note`.
+- The doctor defaults to: a bound doctor themselves when they work today; else the only doctor working today; else the one with the fewest waiting, then the lowest id; only doctors working today in the member's sections count. The service defaults to the first active consultation of the doctor's first section today.
+- It books today at the next turn with no time, even for a slot doctor, marked arrived, through the same booking code and lock order (5.0), in one request under its key. It answers the visit, `turn` and `ahead` (how many wait for that doctor before it).

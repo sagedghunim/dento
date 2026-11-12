@@ -1,0 +1,67 @@
+{% load i18n hamada %}{# The item cards (design F2). Rendered with the page and again by GET /inventory/items after a save. #}
+{% if low and not removed %}
+<p class="notice low-line" role="status"><svg class="icon"><use href="#i-alert"/></svg> <strong>{% translate "Low stock:" %}</strong>
+  {% if low|length == 1 %}<bdi dir="auto">{{ low.0.name }}</bdi>{% else %}<bdi class="ltr num">{{ low|length|digits }}</bdi> {% translate "items" %}{% endif %}
+  <button type="button" class="link-btn" data-show-low>{% translate "Show them" %}</button></p>
+{% endif %}
+{% if items %}
+<ul class="inv-grid" data-grid>
+  {% for item in items %}
+  <li class="inv-item{% if item.low and item.is_active %} is-low{% endif %}" data-item="{{ item.json }}" data-low="{% if item.low %}1{% endif %}" data-search="{{ item.name }} {{ item.name_ar }} {{ item.name_en }} {{ item.category }} {{ item.sku }}">
+    <div class="inv-top">
+      <div class="inv-title">
+        <h3 class="inv-name"><bdi dir="auto">{{ item.name }}</bdi></h3>
+        <p class="inv-meta">{% if item.category %}<bdi dir="auto">{{ item.category }}</bdi>{% endif %}{% if item.category and item.section_name %} · {% endif %}{% if item.section_name %}<bdi dir="auto">{{ item.section_name }}</bdi>{% endif %}</p>
+      </div>
+      {% if not item.is_active %}<span class="pill grey">{% translate "Removed" %}</span>
+      {% elif item.low %}<span class="pill red"><svg class="icon"><use href="#i-alert"/></svg>{% translate "Low stock" %}</span>
+      {% else %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "In stock" %}</span>{% endif %}
+    </div>
+    <p class="inv-stock"><bdi class="ltr num">{{ item.quantity|digits }}</bdi> <small><bdi dir="auto">{{ item.unit }}</bdi></small></p>
+    <p class="inv-meta">{% if item.unit_cost %}{% translate "Unit cost:" %} {{ item.unit_cost|money }} · {% endif %}{% translate "Alert at:" %} <bdi class="ltr num">{{ item.threshold|digits }}</bdi></p>
+    <progress class="inv-bar{% if item.low %} low{% endif %}" max="{{ item.bar_max }}" value="{{ item.bar_value }}" aria-hidden="true"></progress>
+    <div class="inv-actions">
+      {% if item.is_active %}
+        {% if perms.use %}<button type="button" class="btn ghost" data-inv="use">{% translate "Use" %}</button>{% endif %}
+        {% if perms.manage %}<button type="button" class="btn" data-inv="purchase">{% translate "Add stock" %}</button>{% endif %}
+        <details class="menu more">
+          <summary aria-label="{% translate "More actions" %}" title="{% translate "More actions" %}"><svg class="icon"><use href="#i-more"/></svg></summary>
+          <div class="menu-panel">
+            <button type="button" class="menu-item" data-inv="history">{% translate "History" %}</button>
+            {% if perms.manage %}
+            <button type="button" class="menu-item" data-inv="count">{% translate "Count the stock" %}</button>
+            <button type="button" class="menu-item" data-inv="waste">{% translate "Expired or broken" %}</button>
+            <button type="button" class="menu-item" data-inv="edit">{% translate "Edit" %}</button>
+            <button type="button" class="menu-item danger" data-inv="remove">{% translate "Remove" %}</button>
+            {% endif %}
+          </div>
+        </details>
+      {% else %}
+        <button type="button" class="btn ghost" data-inv="history">{% translate "History" %}</button>
+        {% if perms.manage %}<button type="button" class="btn" data-inv="restore">{% translate "Restore" %}</button>{% endif %}
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="empty-note" data-no-match hidden>{% translate "No item matches this search." %}</p>
+{% if perms.manage and not removed %}
+<p class="list-foot"><span class="muted">{% translate "Only the items you don't have yet are added." %}</span>
+  <button type="button" class="btn ghost" data-defaults>{% translate "Add the starter list for my specialty" %}</button></p>
+{% endif %}
+{% elif removed %}
+<p class="empty-note">{% translate "No removed items." %}</p>
+{% else %}
+<div class="locked inv-empty">
+  <h2>{% translate "No items yet" %}</h2>
+  {% if perms.manage %}
+  <p>{% translate "Start with the usual list for your specialty, then change it as you like. Or add your own items one by one." %}</p>
+  <p class="inv-empty-actions">
+    <button type="button" class="btn" data-defaults>{% translate "Add the starter list for my specialty" %}</button>
+    <button type="button" class="btn ghost" data-new-item><svg class="icon"><use href="#i-plus"/></svg>{% translate "New item" %}</button>
+  </p>
+  {% else %}
+  <p>{% translate "Someone who manages the stock adds the items first." %}</p>
+  {% endif %}
+</div>
+{% endif %}

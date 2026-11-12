@@ -54,6 +54,10 @@ class Medicine(models.Model):
     form = models.CharField(max_length=60, blank=True, default="")
     default_dose = models.CharField(max_length=200, blank=True, default="")
     default_note = models.CharField(max_length=200, blank=True, default="")
+    # English beside the typed text, shown in English mode (design G3).
+    form_en = models.CharField(max_length=60, blank=True, default="", db_default="")
+    default_dose_en = models.CharField(max_length=200, blank=True, default="", db_default="")
+    default_note_en = models.CharField(max_length=200, blank=True, default="", db_default="")
     is_active = models.BooleanField(default=True)
     sort = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
@@ -74,7 +78,9 @@ class PrescriptionTemplate(models.Model):
     clinic = _clinic()
     section = _ref("clinics.Section")
     name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True, default="", db_default="")  # design G3
     notes = models.CharField(max_length=1000, blank=True, default="")
+    notes_en = models.CharField(max_length=1000, blank=True, default="", db_default="")
     is_active = models.BooleanField(default=True)
     version = models.IntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now)
@@ -122,6 +128,7 @@ class Procedure(models.Model):
     typical_min = models.BigIntegerField(null=True, blank=True)  # the market range, a hint only
     typical_max = models.BigIntegerField(null=True, blank=True)
     description = models.CharField(max_length=500, blank=True, default="")
+    description_en = models.CharField(max_length=500, blank=True, default="", db_default="")  # design G3
     internal_cost = models.BigIntegerField(default=0)
     condition = models.CharField(max_length=20, blank=True, default="")  # the tooth state it sets, if any
     is_active = models.BooleanField(default=True)

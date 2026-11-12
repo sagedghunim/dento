@@ -16,9 +16,9 @@ from core.days import business_day
 from core.errors import ApiError
 from summaries.services import Deltas
 
-ITEM_COLUMNS = ("id, section_id, name, category, sku, unit, quantity, threshold, unit_cost, notes, allow_negative, "
+ITEM_COLUMNS = ("id, section_id, name, name_en, category, sku, unit, quantity, threshold, unit_cost, notes, allow_negative, "
                 "is_active")
-ITEM_TEXT = {"name": 120, "category": 40, "sku": 40, "unit": 20, "notes": 500}
+ITEM_TEXT = {"name": 120, "name_en": 120, "category": 40, "sku": 40, "unit": 20, "notes": 500}
 LOW_STOCK_LIMIT = 20
 
 
@@ -27,7 +27,11 @@ def _cols(columns):
 
 
 def item_row(values):
+    from core.i18n import pick
+
     row = dict(zip(_cols(ITEM_COLUMNS), values))
+    row["name_ar"] = row["name"]
+    row["name"] = pick(row["name_ar"], row["name_en"])  # design G3
     row["low"] = row["quantity"] <= row["threshold"]
     return row
 
@@ -94,8 +98,10 @@ def items(ctx, section_id=None, include_inactive=False, low_only=False):
 
 def low_stock(ctx, limit=LOW_STOCK_LIMIT):
     """Today's banner (F2): active items at or below their minimum. One statement over the place's items."""
-    return [{"id": r[0], "name": r[1], "unit": r[2], "quantity": r[3], "threshold": r[4]} for r in sql.rows(ctx, """
-        SELECT id, name, unit, quantity, threshold FROM "inventory_item"
+    from core.i18n import pick
+
+    return [{"id": r[0], "name": pick(r[1], r[5]), "unit": r[2], "quantity": r[3], "threshold": r[4]} for r in sql.rows(ctx, """
+        SELECT id, name, unit, quantity, threshold, name_en FROM "inventory_item"
          WHERE clinic_id = %s AND is_active AND quantity <= threshold ORDER BY quantity - threshold, name LIMIT %s""",
                                                                                          [ctx.clinic_id, limit])]
 
@@ -111,10 +117,10 @@ def get_item(ctx, item_id):
 def create_item(ctx, values, quantity=0):
     """A new item; a starting quantity is recorded as a count (an `adjust` movement)."""
     found = _savepoint(ctx, f"""
-        INSERT INTO "inventory_item" (clinic_id, section_id, name, category, sku, unit, quantity, threshold, unit_cost,
-                                      notes, allow_negative, is_active, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s) RETURNING {ITEM_COLUMNS}""", [
-        ctx.clinic_id, values.get("section_id"), values["name"], values.get("category", ""), values.get("sku", ""),
+        INSERT INTO "inventory_item" (clinic_id, section_id, name, name_en, category, sku, unit, quantity, threshold,
+                                      unit_cost, notes, allow_negative, is_active, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s) RETURNING {ITEM_COLUMNS}""", [
+        ctx.clinic_id, values.get("section_id"), values["name"], values.get("name_en", ""), values.get("category", ""), values.get("sku", ""),
         values.get("unit") or "unit", quantity, values.get("threshold", 0), values.get("unit_cost", 0),
         values.get("notes", ""), values.get("allow_negative", False), timezone.now()])
     item = item_row(found)
@@ -408,7 +414,9 @@ def seed_place(clinic_id, sections, language="ar"):
     """The default stock items and dental materials a place doesn't have yet (by name). Never edits its rows.
 
     Runs inside the clinic's transaction after the sections' procedures are copied. Items start at zero
-    stock: the place counts what it has. `sections` are the place's section rows.
+    stock with allow_negative on, so an uncounted material never refuses a recording (409 out_of_stock); the
+    place counts what it has and turns allow_negative off per item (Appendix F). `sections` are the place's
+    section rows.
     """
     from clinical.models import Procedure
 
@@ -426,8 +434,10 @@ def seed_place(clinic_id, sections, language="ar"):
     for section_id, (key, arabic, english, category, unit, minimum, pounds) in wanted:
         label = name(arabic, english)
         if label not in have:
-            have[label] = Item.objects.create(clinic_id=clinic_id, section_id=section_id, name=label, category=category,
-                                              unit=unit, threshold=minimum, unit_cost=pounds * 100).id
+            have[label] = Item.objects.create(clinic_id=clinic_id, section_id=section_id, name=label, name_en=english,
+                                              category=category,
+                                              unit=unit, threshold=minimum, unit_cost=pounds * 100,
+                                              allow_negative=True).id
         keys[key] = have[label]
     for section in dental:
         procedures = dict(Procedure.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)

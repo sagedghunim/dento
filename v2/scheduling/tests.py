@@ -554,9 +554,10 @@ class QueryCountTests(M1TestCase):
         self.assertEqual(small[1], 3)
         self.assertLessEqual(small[0], 6)
         # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4), plus the
-        # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0). The register's
-        # open-shift lock (F1) rides inside the payment INSERT, so it adds none.
-        self.assertLessEqual(small[2], 14)
+        # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0), plus the open
+        # cash shift taken before the doctor-day (F1, 8a: cash opens a shift when none is, and that INSERT can
+        # wait on another, so it must come before any summary row). Fixed: it never grows with the day.
+        self.assertLessEqual(small[2], 15)
 
 
 class FinishTests(M1TestCase):

@@ -266,3 +266,50 @@ def stranded(clinic, bookings, sessions):
         if not covered:
             out.append(booking)
     return out
+
+
+# --- Who may act on which visit (design G1, G4) -----------------------------------------------------------------
+
+
+def section_scope(ctx):
+    """The sections an assistant is limited to (design G1), or None for every section."""
+    member = ctx.membership
+    if member is None or member.role != "assistant" or not member.sections:
+        return None
+    return frozenset(member.sections)
+
+
+def own_only(ctx):
+    """A doctor without appointments.others calls in, finishes, undoes and writes clinical data only on their own
+    visits (design G4). The owner holds every code."""
+    member = ctx.membership
+    return member is not None and member.role == "doctor" and not ctx.can("appointments.others")
+
+
+def can_act(ctx, doctor_id):
+    return not own_only(ctx) or doctor_id == ctx.membership_id
+
+
+def not_yours():
+    message = _("This visit belongs to another doctor. Ask the owner for permission to handle other doctors' patients.")
+    return ApiError("not_your_patient", message, 403)
+
+
+def check_scope(ctx, section_id, doctor_id, own=False):
+    """A visit outside the member's sections is not found, like another place's; another doctor's is 403."""
+    scope = section_scope(ctx)
+    if scope is not None and section_id not in scope:
+        raise not_found("appointment")
+    if own and not can_act(ctx, doctor_id):
+        raise not_yours()
+
+
+def guard(ctx, appointment_id, own=False):
+    """check_scope for an action by id. Reads the visit only for a limited member, so others pay no query."""
+    if section_scope(ctx) is None and not (own and own_only(ctx)):
+        return
+    found = sql.row(ctx, 'SELECT section_id, doctor_id FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                    [ctx.clinic_id, appointment_id])
+    if found is None:
+        raise not_found("appointment")
+    check_scope(ctx, found[0], found[1], own)

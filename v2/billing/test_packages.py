@@ -80,6 +80,28 @@ class PackageTests(M2TestCase):
                  {"kind": "package", "description": "x", "qty": 1, "unit_price": 1})
         self.assertEqual(r.status_code, 400)
 
+    def test_removing_a_procedure_line_that_used_a_session_gives_the_session_back(self):
+        package, proc = self.package(sessions=3)
+        visit = self.in_room()
+        patient = visit["patient"]["id"]
+        self.assertEqual(self.sell(visit, package).status_code, 201)
+        r = self.record(visit, proc)
+        self.assertEqual(r.status_code, 201, r.content)
+        line_id, invoice_id = r.json()["procedure"]["invoice_line_id"], r.json()["invoice"]["id"]
+        packages = f"/api/v1/patients/{patient}/packages"
+        self.assertEqual(call(self.desk, "GET", packages).json()["items"][0]["left"], 2)
+        r = call(self.doc, "DELETE", f"/api/v1/invoices/{invoice_id}/lines/{line_id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(call(self.desk, "GET", packages).json()["items"][0]["left"], 3)
+        with clinic_transaction(self.a.id, self.a.shard):
+            from audit.models import AuditChange
+            from clinical.models import VisitProcedure
+
+            procedure = VisitProcedure.objects.get(clinic_id=self.a.id, appointment_id=visit["id"])
+            self.assertIsNone(procedure.patient_package_id)
+            self.assertIsNone(procedure.invoice_line_id)
+            self.assertTrue(AuditChange.objects.filter(clinic_id=self.a.id, action="package.session_return").exists())
+
     def test_codes_sections_and_another_place(self):
         r = call(self.desk, "POST", "/api/v1/packages", {"procedure_id": 1, "name": "x", "sessions": 1, "price": 1})
         self.assertEqual(r.status_code, 403)

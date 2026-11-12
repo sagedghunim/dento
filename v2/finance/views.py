@@ -118,17 +118,20 @@ def _replay_category(ctx, stored):
 
 @api("POST", perm="expenses.manage", replay=_replay_category)
 def create_category_view(request, ctx, data):
-    category = services.create_category(ctx, validate.text(data, "name", 60))
+    category = services.create_category(ctx, validate.text(data, "name", 60),
+                                        validate.text(data, "name_en", 60, required=False))
     return Result({"category": category}, status=201, target_type="category", target_id=category["id"])
 
 
 @api("PATCH", perm="expenses.manage", replay=_replay_category)
 def update_category_view(request, ctx, data, category_id):
-    """PATCH {name?, is_active?, sort?}."""
+    """PATCH {name?, name_en?, is_active?, sort?}."""
     category_id = _category_id(category_id)
     values = {}
     if "name" in data:
         values["name"] = validate.text(data, "name", 60)
+    if "name_en" in data:
+        values["name_en"] = validate.text(data, "name_en", 60, required=False)
     if "is_active" in data:
         values["is_active"] = validate.boolean(data, "is_active")
     if "sort" in data:

@@ -122,7 +122,8 @@ def tags_view(request, ctx, data):
 @api("POST", perm="patients.tags", replay=_replay_tag)
 def create_tag_view(request, ctx, data):
     """POST {name, color?}."""
-    tag = tags.create_tag(ctx, text(data, "name", 40), tags.check_color(data.get("color", "") or ""))
+    tag = tags.create_tag(ctx, text(data, "name", 40), tags.check_color(data.get("color", "") or ""),
+                          text(data, "name_en", 40, required=False))
     return Result({"tag": tag}, status=201, target_type="tag", target_id=tag["id"])
 
 
@@ -135,6 +136,8 @@ def update_tag_view(request, ctx, data, tag_id):
     values = {}
     if "name" in data:
         values["name"] = text(data, "name", 40)
+    if "name_en" in data:
+        values["name_en"] = text(data, "name_en", 40, required=False)
     if "color" in data:
         values["color"] = tags.check_color(data.get("color") or "")
     if "is_active" in data:

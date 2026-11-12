@@ -27,16 +27,39 @@ class RegisterTests(M2TestCase):
         return call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/payments",
                     {"amount": amount, "method": method})
 
-    def test_cash_needs_an_open_shift_other_methods_never_do(self):
+    def test_cash_with_no_open_shift_opens_one_by_itself(self):
         visit = self.in_room()
+        closed = current_shift(self.a)
         self.assertEqual(self.close(0).status_code, 200)
-        r = self.pay(visit, 100, "cash")
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "register_closed"), r.content)
-        r = self.pay(visit, 100, "card")
+        r = self.pay(visit, 100, "card")  # other methods never need a shift
+        self.assertEqual(r.status_code, 201, r.content)
+        r = self.pay(visit, 100, "cash")  # cash never fails for want of a shift: it opens one
         self.assertEqual(r.status_code, 201, r.content)
         with clinic_transaction(self.a.id, self.a.shard):
-            self.assertEqual(list(Payment.objects.filter(clinic_id=self.a.id).values_list("method", "shift_id")),
-                             [("card", None)])
+            opened = Shift.objects.get(clinic_id=self.a.id, status="open")
+            self.assertEqual((opened.auto_opened, opened.opening_float, opened.opened_by_id),
+                             (True, 0, self.a.membership("assistant").id))
+            self.assertNotEqual(opened.id, closed)
+            self.assertEqual(list(Payment.objects.filter(clinic_id=self.a.id).order_by("id")
+                                  .values_list("method", "shift_id")), [("card", None), ("cash", opened.id)])
+        # The opened shift is an ordinary one: an explicit close still works, and a second close is a clear 409.
+        self.assertEqual(self.close(100).status_code, 200)
+        r = call(self.owner, "POST", f"/api/v1/register/shifts/{opened.id}/close", {"counted": 100})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "shift_closed"))
+
+    def test_a_cash_booking_in_a_place_that_never_opened_a_shift(self):
+        with clinic_transaction(self.a.id, self.a.shard):
+            with connections[self.a.shard].cursor() as cursor:  # a scoped delete (the ORM's cascade isn't)
+                cursor.execute('DELETE FROM "finance_shift" WHERE clinic_id = %s', [self.a.id])
+        r = self.book(service_id=self.services_a["procedure"].id, arrive=True,
+                      payment={"amount": 100, "method": "cash"})
+        self.assertEqual(r.status_code, 201, r.content)
+        with clinic_transaction(self.a.id, self.a.shard):
+            shifts = list(Shift.objects.filter(clinic_id=self.a.id).values_list("id", "status", "auto_opened"))
+            self.assertEqual(len(shifts), 1)
+            self.assertEqual(shifts[0][1:], ("open", True))
+            self.assertEqual(list(Payment.objects.filter(clinic_id=self.a.id).values_list("shift_id", flat=True)),
+                             [shifts[0][0]])
 
     def test_a_shift_closes_with_the_expected_cash_and_the_difference(self):
         call(self.owner, "POST", f"/api/v1/register/shifts/{current_shift(self.a)}/close", {"counted": 0})
@@ -68,9 +91,11 @@ class RegisterTests(M2TestCase):
     def test_a_cash_refund_needs_the_register_too(self):
         visit = self.in_room()
         payment = self.pay(visit, 1000, "cash").json()["payment"]
+        closed = current_shift(self.a)
         self.close(1000)
         r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "register_closed"))
+        self.assertEqual(r.status_code, 201, r.content)  # into a shift that opened by itself
+        self.assertNotIn(current_shift(self.a), (None, closed))
         r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500, "method": "card"})
         self.assertEqual(r.status_code, 201, r.content)
 
@@ -95,7 +120,8 @@ class RegisterTests(M2TestCase):
 class ExpenseTests(M2TestCase):
     def test_default_categories_editable_and_another_places_404(self):
         items = call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]
-        self.assertEqual([c["code"] for c in items], ["rent", "salaries", "materials", "lab", "utilities", "other"])
+        # No "salaries": staff pay reaches profit through pay rules, so an expense category for it would count it twice.
+        self.assertEqual([c["code"] for c in items], ["rent", "materials", "lab", "utilities", "other"])
         r = call(self.owner, "POST", "/api/v1/expense-categories", {"name": "Marketing"})
         self.assertEqual(r.status_code, 201, r.content)
         dup = call(self.owner, "POST", "/api/v1/expense-categories", {"name": "Marketing"})
@@ -114,6 +140,11 @@ class ExpenseTests(M2TestCase):
         r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": rent, "amount": 150000, "note": "Nov"})
         self.assertEqual(r.status_code, 201, r.content)
         expense = r.json()["expense"]
+        with clinic_transaction(self.a.id, self.a.shard):
+            from audit.models import AuditChange
+
+            added = AuditChange.objects.get(clinic_id=self.a.id, action="expense.add", target_id=expense["id"])
+            self.assertEqual(added.details["after"]["amount"], 150000)
         tomorrow = day.fromordinal(day.toordinal() + 1).isoformat()
         r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": rent, "amount": 1, "day": tomorrow})
         self.assertEqual(r.status_code, 400)
@@ -159,12 +190,14 @@ class StaffPayTests(M2TestCase):
         self.assertEqual(call(self.owner, "GET", f"/api/v1/finances/pay/{other}/statement").status_code, 404)
         self.assertEqual(call(self.owner, "PUT", f"/api/v1/finances/pay/{other}", {"version": 0}).status_code, 404)
 
-    def test_a_cash_payout_needs_the_register(self):
+    def test_a_cash_payout_opens_the_register_when_it_is_closed(self):
         doctor = self.a.membership("doctor").id
-        call(self.owner, "POST", f"/api/v1/register/shifts/{current_shift(self.a)}/close", {"counted": 0})
+        closed = current_shift(self.a)
+        call(self.owner, "POST", f"/api/v1/register/shifts/{closed}/close", {"counted": 0})
         month = today(self.a).isoformat()[:7]
         r = call(self.owner, "POST", f"/api/v1/finances/pay/{doctor}/payouts", {"month": month, "amount": 1, "method": "cash"})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "register_closed"))
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertNotIn(current_shift(self.a), (None, closed))
         r = call(self.owner, "POST", f"/api/v1/finances/pay/{doctor}/payouts",
                  {"month": month, "amount": 1, "method": "transfer"})
         self.assertEqual(r.status_code, 201, r.content)
@@ -200,6 +233,25 @@ class MoneyReportTests(M2TestCase):
         call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/payments", {"amount": 700, "method": "cash"})
         self.act(visit["id"], "finish", "in_room")
         self.assertEqual(recompute_day(self.a.id, self.a.shard, today(self.a)), [])
+
+    def test_the_recompute_repairs_the_days_expenses(self):
+        from scheduling.jobs import recompute_day
+        from summaries.models import ClinicDay
+
+        rent = call(self.owner, "GET", "/api/v1/expense-categories").json()["items"][0]["id"]
+        kept = call(self.owner, "POST", "/api/v1/expenses", {"category_id": rent, "amount": 150000})
+        voided = call(self.owner, "POST", "/api/v1/expenses", {"category_id": rent, "amount": 999})
+        self.assertEqual(call(self.owner, "POST", f"/api/v1/expenses/{voided.json()['expense']['id']}/void").status_code,
+                         200)
+        day = today(self.a)
+        self.assertEqual(recompute_day(self.a.id, self.a.shard, day), [])  # the live deltas agree
+        with clinic_transaction(self.a.id, self.a.shard):
+            ClinicDay.objects.filter(clinic_id=self.a.id, day=day).update(expenses=7)  # drift
+        found = recompute_day(self.a.id, self.a.shard, day)
+        self.assertEqual([(f["had"]["expenses"], f["fixed"]["expenses"]) for f in found], [(7, 150000)])
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(ClinicDay.objects.get(clinic_id=self.a.id, day=day).expenses,
+                             kept.json()["expense"]["amount"])
 
 
 class RegisterConcurrencyTests(TransactionTestCase):
@@ -247,11 +299,33 @@ class RegisterConcurrencyTests(TransactionTestCase):
                                  {"counted": 0}))
         results = self.run_together(jobs)
         codes = [r.status_code if hasattr(r, "status_code") else repr(r) for r in results]
-        self.assertEqual(codes[-1], 200, codes)
-        self.assertTrue(all(c in (201, 409) for c in codes[:-1]), codes)
+        self.assertEqual(codes, [201, 201, 201, 200], codes)  # cash never fails: a late one opens a new shift
         with clinic_transaction(self.a.id, self.a.shard):
             shift = Shift.objects.get(clinic_id=self.a.id, id=shift_id)
             taken = sum(Payment.objects.filter(clinic_id=self.a.id, shift_id=shift_id).values_list("amount", flat=True))
             self.assertEqual(Payment.objects.filter(clinic_id=self.a.id, shift__isnull=True, method="cash").count(), 0)
-        self.assertEqual(taken, 100 * codes[:-1].count(201))
+            later = set(Payment.objects.filter(clinic_id=self.a.id, method="cash").exclude(shift_id=shift_id)
+                        .values_list("shift_id", flat=True))
+            self.assertLessEqual(len(later), 1)  # the late payments share one new shift
+            self.assertTrue(all(s.auto_opened and s.status == "open" for s in Shift.objects.filter(id__in=later)))
         self.assertEqual(shift.expected, taken)  # the count saw every payment the shift holds
+
+    def test_two_first_cash_payments_open_one_shift(self):
+        with clinic_transaction(self.a.id, self.a.shard):
+            with connections[self.a.shard].cursor() as cursor:  # a scoped delete (the ORM's cascade isn't)
+                cursor.execute('DELETE FROM "finance_shift" WHERE clinic_id = %s', [self.a.id])
+        desk = self.a.client("assistant")
+        owner_id = self.a.membership("owner").id
+        visits = [call(desk, "POST", "/api/v1/appointments", {
+            "doctor_id": owner_id, "service_id": self.services["procedure"].id,
+            "new_patient": {"full_name": "First Cash"}}).json()["appointment"] for _ in range(2)]
+        jobs = [lambda v=v: call(self.a.client("assistant"), "POST", f"/api/v1/appointments/{v['id']}/payments",
+                                 {"amount": 100, "method": "cash"}) for v in visits]
+        results = self.run_together(jobs)
+        self.assertEqual([getattr(r, "status_code", repr(r)) for r in results], [201, 201])
+        with clinic_transaction(self.a.id, self.a.shard):
+            shifts = list(Shift.objects.filter(clinic_id=self.a.id).values_list("id", "auto_opened"))
+            self.assertEqual(len(shifts), 1)
+            self.assertTrue(shifts[0][1])
+            self.assertEqual(set(Payment.objects.filter(clinic_id=self.a.id).values_list("shift_id", flat=True)),
+                             {shifts[0][0]})

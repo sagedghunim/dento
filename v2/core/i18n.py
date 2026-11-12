@@ -36,3 +36,13 @@ def extract_msgids(base=None):
 
 def catalogue_path(language="ar"):
     return Path(settings.BASE_DIR) / "locale" / language / "LC_MESSAGES" / "django.po"
+
+
+def pick(primary, english):
+    """A text in the request's language (design G3): English mode shows the English text when there is one; Arabic
+    mode shows the typed text. Either falls back to the other when empty."""
+    from django.utils.translation import get_language
+
+    if (get_language() or "ar").startswith("en"):
+        return english or primary
+    return primary or english

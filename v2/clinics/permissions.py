@@ -5,6 +5,8 @@ from django.utils.translation import gettext_lazy as _
 CODES = {
     "appointments.book": _("Book, reschedule and cancel"),
     "appointments.queue": _("Arrive, call in and finish"),
+    # A doctor calls in, finishes, undoes and writes clinical data only on their own visits without it (design G4).
+    "appointments.others": _("Handle other doctors' patients"),
     "patients.view": _("Search and open patient details"),
     "patients.edit": _("Create and edit patient files"),
     "clinical.view": _("Read visit notes and prescriptions"),
@@ -96,3 +98,71 @@ def check_change(actor, target, new_role, new_granted, new_revoked):
     if not changed <= actor_codes:
         raise GrantRefused("not_held", ", ".join(sorted(changed - actor_codes)))
     return before, after
+
+
+# The "Who can do what" table (design G1): one row per side-navigation section, each a set of codes.
+# Every code is in exactly one group (a test checks it).
+GROUPS = (
+    ("today", _("Today"), _("The day's list, booking and the queue"),
+     ("appointments.book", "appointments.queue", "appointments.others")),
+    ("patients", _("Patients"), _("Patient files, tags and exports"),
+     ("patients.view", "patients.edit", "patients.tags", "patients.export")),
+    ("visit", _("The visit"), _("Clinical notes, vital signs, prescriptions, procedures and online consultations"),
+     ("clinical.view", "clinical.write", "visits.vitals", "visits.notes", "prescriptions.write", "procedures.record",
+      "consults.manage")),
+    ("money", _("Money and cash"), _("Payments, discounts, refunds, the register, expenses, packages and staff pay"),
+     ("billing.collect", "billing.discount", "billing.refund", "cash.collect", "cash.shift", "expenses.manage",
+      "packages.manage", "finances.view", "finances.pay")),
+    ("stock", _("Inventory"), _("Stock use, items, purchases and counts"), ("inventory.use", "inventory.manage")),
+    ("reports", _("Reports"), _("Clinic and staff performance and patient insights"), ("reports.view",)),
+    ("settings", _("Settings"), _("The clinic profile, services, prices, schedules and medicines"),
+     ("settings.manage", "settings.medicines")),
+    ("team", _("Team"), _("Members, permissions and the logs"), ("team.manage", "audit.view")),
+)
+GROUP_CODES = {key: frozenset(codes) for key, _label, _description, codes in GROUPS}
+
+
+def group_state(codes, group_key):
+    """"on" when the person holds every code of the group, "off" when none, else "partial"."""
+    held = len(GROUP_CODES[group_key] & codes)
+    return "on" if held == len(GROUP_CODES[group_key]) else "off" if held == 0 else "partial"
+
+
+def wanted_codes(current, groups=None, codes=None):
+    """The codes after switching whole groups, then single codes: {group: bool}, {code: bool}.
+
+    Raises GrantRefused("unknown_group" / "unknown_code") for names it doesn't know.
+    """
+    wanted = set(current)
+    for key, on in (groups or {}).items():
+        if key not in GROUP_CODES:
+            raise GrantRefused("unknown_group", key)
+        wanted = wanted | GROUP_CODES[key] if on else wanted - GROUP_CODES[key]
+    for code, on in (codes or {}).items():
+        if code not in ALL:
+            raise GrantRefused("unknown_code", code)
+        wanted = wanted | {code} if on else wanted - {code}
+    return frozenset(wanted)
+
+
+def lists_for(role, wanted):
+    """(granted, revoked) that give `role` exactly `wanted`, relative to its template, sorted."""
+    template = TEMPLATES.get(role, frozenset())
+    return sorted(wanted - template), sorted(template - wanted)
+
+
+def check_add(actor, role):
+    """A new member's role: never owner; a non-owner gives only codes they hold and no owner-only code (5.8)."""
+    actor_codes = effective_codes(actor.role, actor.granted, actor.revoked)
+    if "team.manage" not in actor_codes:
+        raise GrantRefused("forbidden")
+    if role not in ("doctor", "assistant"):
+        raise GrantRefused("owner_fixed" if role == "owner" else "unknown_role")
+    after = TEMPLATES[role]
+    if actor.role == "owner":
+        return after
+    if after & OWNER_ONLY:
+        raise GrantRefused("owner_only_code", ", ".join(sorted(after & OWNER_ONLY)))
+    if not after <= actor_codes:
+        raise GrantRefused("not_held", ", ".join(sorted(after - actor_codes)))
+    return after

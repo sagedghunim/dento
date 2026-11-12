@@ -425,6 +425,12 @@ def medicine_remove_view(request, ctx, data, medicine_id):
 # --- Prescription templates ------------------------------------------------------------------------------------
 
 
+def _template_english(data):
+    """The optional English name and notes (design G3)."""
+    return {"name_en": validate.text(data, "name_en", 120, required=False),
+            "notes_en": validate.text(data, "notes_en", 1000, required=False)}
+
+
 @api("GET")
 def templates_view(request, ctx, data):
     _any(ctx, "prescriptions.write", "settings.medicines")
@@ -441,7 +447,7 @@ def template_create_view(request, ctx, data):
     section = services.default_section(ctx, data)
     template_id = services.create_template(ctx, section, validate.text(data, "name", 120),
                                            validate.text(data, "notes", 1000, required=False),
-                                           services.clean_rx_lines(data))
+                                           services.clean_rx_lines(data), **_template_english(data))
     return Result(_replay_template(ctx, {"target_id": template_id}), status=201, target_type="template",
                   target_id=template_id)
 
@@ -453,7 +459,7 @@ def template_update_view(request, ctx, data, template_id):
     version = _if_match(request)
     services.update_template(ctx, template_id, version, validate.text(data, "name", 120),
                              validate.text(data, "notes", 1000, required=False), services.clean_rx_lines(data),
-                             validate.boolean(data, "is_active", default=True))
+                             validate.boolean(data, "is_active", default=True), **_template_english(data))
     return Result(_replay_template(ctx, {"target_id": template_id}), target_type="template", target_id=template_id)
 
 

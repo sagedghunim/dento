@@ -11,6 +11,7 @@ import hashlib
 from django.utils import timezone
 
 from core import paging, sql
+from core.i18n import pick
 from core.days import business_day, local_iso, next_rollover
 from summaries import selectors as summaries
 
@@ -25,7 +26,7 @@ ROW_SQL = """
     SELECT a.id, a.day, a.queue_no, a.status, a.starts_at, a.ends_at, a.is_extra, a.source, a.fee, a.is_follow_up,
            a.is_new, a.auto_closed, a.note, a.arrived_at, a.with_assistant_at, a.ready_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
-           p.file_no AS patient_file_no, a.service_id, s.name AS service_name,
+           p.file_no AS patient_file_no, a.service_id, s.name AS service_name, s.name_en AS service_name_en,
            i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid
       FROM "scheduling_appointment" a
       JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
@@ -72,7 +73,7 @@ def payload(clinic, r):
         "doctor_id": r["doctor_id"], "section_id": r["section_id"],
         "patient": {"id": r["patient_id"], "name": r["patient_name"], "phone": r["patient_phone"],
                     "file_no": r["patient_file_no"]},
-        "service": {"id": r["service_id"], "name": r["service_name"]},
+        "service": {"id": r["service_id"], "name": pick(r["service_name"], r.get("service_name_en", ""))},
         "invoice": invoice, "due": due,
     }
 
@@ -119,7 +120,10 @@ def today_section(raw):
 
 def today_etag(ctx, day, version, language, section_id=None):
     """"<clinic>.<day>.<version>.<hash of the person's codes, language and section filter>"."""
-    key = ",".join(sorted(ctx.codes)) + "|" + (language or "") + "|" + str(section_id or "")
+    # A limited assistant's sections and a doctor's own-visits rule change the body too (design G1, G4).
+    member = ctx.membership
+    scope = f"{member.id}:{member.role}:{sorted(member.sections)}" if member is not None else ""
+    key = ",".join(sorted(ctx.codes)) + "|" + (language or "") + "|" + str(section_id or "") + "|" + scope
     digest = hashlib.sha256(key.encode()).hexdigest()[:12]
     return f'"{ctx.clinic_id}.{day.isoformat()}.{version}.{digest}"'
 
@@ -145,23 +149,25 @@ def today_data(ctx, day, state, section_id=None):
     clinic = ctx.clinic
     now = timezone.now()
     doctors, sections, low_stock = {}, [], []
-    for kind, row_id, name, starts, ends, mode, minutes, cap, session_section, sort, specialty in sql.rows(ctx, """
+    for kind, row_id, name, starts, ends, mode, minutes, cap, session_section, sort, specialty, name_en in sql.rows(ctx, """
             SELECT 'doctor' AS row_kind, m.id, m.display_name, s.starts, s.ends, s.mode, s.slot_minutes, s.max_bookings,
-                   s.section_id, 0 AS sort, NULL::varchar AS specialty_code
+                   s.section_id, 0 AS sort, NULL::varchar AS specialty_code, m.display_name_en
               FROM "clinics_membership" m
               LEFT JOIN "clinics_schedule" s ON s.clinic_id = m.clinic_id AND s.doctor_id = m.id AND s.weekday = %s
              WHERE m.clinic_id = %s AND m.is_active AND m.role IN ('owner', 'doctor')
             UNION ALL
-            SELECT 'section', c.id, c.name, NULL, NULL, NULL, NULL, NULL, NULL, c.sort, c.specialty_code
+            SELECT 'section', c.id, c.name, NULL, NULL, NULL, NULL, NULL, NULL, c.sort, c.specialty_code, c.name_en
               FROM "clinics_section" c
              WHERE c.clinic_id = %s AND c.is_active
             UNION ALL
-            (SELECT 'low', i.id, i.name, NULL, NULL, i.unit, i.quantity, i.threshold, NULL, i.quantity - i.threshold, NULL
+            (SELECT 'low', i.id, i.name, NULL, NULL, i.unit, i.quantity, i.threshold, NULL, i.quantity - i.threshold, NULL,
+                    i.name_en
                FROM "inventory_item" i
               WHERE i.clinic_id = %s AND %s AND i.is_active AND i.quantity <= i.threshold
               ORDER BY i.quantity - i.threshold, i.name LIMIT %s)
              ORDER BY 1, 10, 2, 4""", [day.weekday(), ctx.clinic_id, ctx.clinic_id, ctx.clinic_id,
                                        ctx.can("inventory.use"), LOW_STOCK_LIMIT]):
+        name = pick(name, name_en)
         if kind == "low":
             low_stock.append({"id": row_id, "name": name, "unit": mode, "quantity": minutes, "threshold": cap})
             continue
@@ -173,6 +179,12 @@ def today_data(ctx, day, state, section_id=None):
             doctor["sessions"].append({"starts": starts.strftime("%H:%M"), "ends": ends.strftime("%H:%M"),
                                        "mode": mode, "slot_minutes": minutes, "max_bookings": cap,
                                        "section_id": session_section})
+    scope = rules.section_scope(ctx)
+    if scope is not None:
+        # A limited assistant sees only their sections' doctors' sessions and visits (design G1).
+        sections = [s for s in sections if s["id"] in scope]
+        for doctor in doctors.values():
+            doctor["sessions"] = [s for s in doctor["sessions"] if s["section_id"] in scope]
     if section_id is not None:
         if section_id not in {s["id"] for s in sections}:
             raise rules.not_found("section")
@@ -183,9 +195,13 @@ def today_data(ctx, day, state, section_id=None):
     truncated = len(rows) >= TODAY_LIMIT
     if section_id is not None:
         rows = [r for r in rows if r["section_id"] == section_id]
+    elif scope is not None:
+        rows = [r for r in rows if r["section_id"] in scope]
     # By slot time, then turn; never by status (design 7.4).
     rows.sort(key=lambda r: (r["doctor_id"], r["starts_at"] is None, r["starts_at"] or now, r["queue_no"]))
     appointments = [payload(clinic, r) for r in rows]
+    for a in appointments:
+        a["can_act"] = rules.can_act(ctx, a["doctor_id"])  # another doctor's visit is read-only for them (G4)
     day_rows = {r["doctor_id"]: r for r in summaries.doctor_days(ctx, day)}
     show_money = ctx.can("finances.view")
 
@@ -210,6 +226,9 @@ def today_data(ctx, day, state, section_id=None):
         "business_day": business_day(clinic, now).isoformat(), "next_rollover": local_iso(clinic, next_rollover(clinic, now)),
         "kind": clinic.kind, "sections": sections, "section_id": section_id,
         "queues": queues, "recent": _recent(appointments), "low_stock": low_stock,
+        # A doctor's screens open on their own queue; the others stay readable (design G4).
+        "my_doctor_id": ctx.membership_id if ctx.membership.role in ("owner", "doctor") else None,
+        "own_only": rules.own_only(ctx),
         "truncated": truncated,
     }
     if show_money:
@@ -250,8 +269,9 @@ def patient_visits(ctx, patient_id, size, after):
 
 def slots(ctx, doctor_id, day, section_id=None):
     """The doctor's slot grid that day (in one section, if given) with what is taken, and the day's limit."""
-    if section_id is not None and not sql.row(ctx, 'SELECT 1 FROM "clinics_section" WHERE clinic_id = %s AND id = %s',
-                                              [ctx.clinic_id, section_id]):
+    scope = rules.section_scope(ctx)
+    if section_id is not None and ((scope is not None and section_id not in scope) or not sql.row(
+            ctx, 'SELECT 1 FROM "clinics_section" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, section_id])):
         raise rules.not_found("section")
     doctor = rules.doctor_day(ctx, doctor_id, day)
     taken = {r[0] for r in sql.rows(ctx, 'SELECT starts_at FROM "scheduling_appointment" '

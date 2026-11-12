@@ -204,16 +204,20 @@ def expected_summaries(ctx, day):
                               "collected": m.get("collected", 0), "refunded": m.get("refunded", 0),
                               "max_queue_no": c.get("max_queue_no") or 0,
                               **{name: c.get(name, 0) for name in REPORT_FIELDS}}
+    expenses = sql.row(ctx, 'SELECT coalesce(sum(amount), 0)::bigint FROM "finance_expense" WHERE clinic_id = %s '
+                            "AND day = %s AND voided_at IS NULL", [ctx.clinic_id, day])[0]
     clinic = {"done": sum(c["done"] for c in counts.values()),
               "collected": sum(m["collected"] for m in money.values()),
-              "refunded": sum(m["refunded"] for m in money.values())}
+              "refunded": sum(m["refunded"] for m in money.values()),
+              "expenses": expenses}
     return doctors, clinic
 
 
 def recompute_day(clinic_id, alias, day):
     """One clinic-day in one transaction: lock the summary rows first, then aggregate, then write.
 
-    Returns a list of differences found (and fixed). Expenses are left alone until M3 adds them.
+    Returns a list of differences found (and fixed), the clinic-day's expenses included (the day's non-voided
+    finance_expense rows, stock purchases among them).
     """
     differences = []
     unlocked = []
@@ -229,7 +233,7 @@ def recompute_day(clinic_id, alias, day):
         money_locked = {(r[0], r[1]): {"collected": r[2], "refunded": r[3]} for r in sql.rows(
             ctx, 'SELECT section_id, method, collected, refunded FROM "summaries_money_day" WHERE clinic_id = %s '
                  "AND day = %s ORDER BY section_id, method FOR UPDATE", [clinic_id, day])}
-        current = sql.row(ctx, 'SELECT done, collected, refunded FROM "summaries_clinic_day" '
+        current = sql.row(ctx, 'SELECT done, collected, refunded, expenses FROM "summaries_clinic_day" '
                                "WHERE clinic_id = %s AND day = %s FOR UPDATE", [clinic_id, day])
         if current is None:
             return differences
@@ -272,12 +276,13 @@ def recompute_day(clinic_id, alias, day):
                         [want["collected"], want["refunded"], clinic_id, day, *key])
         if money_missing:
             unlocked.append(None)
-        have_totals = dict(zip(("done", "collected", "refunded"), current))
+        have_totals = dict(zip(("done", "collected", "refunded", "expenses"), current))
         if have_totals != totals:
             differences.append({"day": day.isoformat(), "had": have_totals, "fixed": totals})
-        sql.run(ctx, 'UPDATE "summaries_clinic_day" SET done = %s, collected = %s, refunded = %s, '
+        sql.run(ctx, 'UPDATE "summaries_clinic_day" SET done = %s, collected = %s, refunded = %s, expenses = %s, '
                      "version = version + %s, changed_since_recompute = %s WHERE clinic_id = %s AND day = %s",
-                [totals["done"], totals["collected"], totals["refunded"], 1 if differences else 0, bool(unlocked),
+                [totals["done"], totals["collected"], totals["refunded"], totals["expenses"], 1 if differences else 0,
+                 bool(unlocked),
                  clinic_id, day])
     if unlocked:
         # Rows with source data but no summary row: create them empty in their own transaction (no other

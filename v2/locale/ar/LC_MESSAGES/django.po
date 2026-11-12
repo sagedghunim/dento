@@ -1764,9 +1764,6 @@ msgstr "المخزون مش كفاية."
 msgid "Open and close the register and record cash in and out"
 msgstr "فتح وقفل الخزنة وتسجيل الفلوس الداخلة والخارجة"
 
-msgid "Open the cash register first."
-msgstr "افتح الخزنة الأول."
-
 msgid "Opening stock"
 msgstr "رصيد أول المدة"
 
@@ -1853,3 +1850,549 @@ msgstr "التصنيف ده موجود في القائمة بالفعل."
 
 msgid "This list wasn't found."
 msgstr "القائمة دي مش موجودة."
+
+msgid "Handle other doctors' patients"
+msgstr "التعامل مع مرضى الأطباء الآخرين"
+
+msgid "The day's list, booking and the queue"
+msgstr "قائمة اليوم والحجز والدور"
+
+msgid "Patient files, tags and exports"
+msgstr "ملفات المرضى والتصنيفات والتصدير"
+
+msgid "The visit"
+msgstr "الكشف"
+
+msgid ""
+"Clinical notes, vital signs, prescriptions, procedures and online "
+"consultations"
+msgstr ""
+"ملاحظات الكشف والعلامات الحيوية والروشتات والإجراءات والاستشارات أونلاين"
+
+msgid "Money and cash"
+msgstr "الفلوس والخزنة"
+
+msgid ""
+"Payments, discounts, refunds, the register, expenses, packages and staff pay"
+msgstr ""
+"التحصيل والخصومات والمرتجعات والخزنة والمصروفات والباقات ومستحقات الفريق"
+
+msgid "Stock use, items, purchases and counts"
+msgstr "صرف المخزون والأصناف والمشتريات والجرد"
+
+msgid "Reports"
+msgstr "التقارير"
+
+msgid "Clinic and staff performance and patient insights"
+msgstr "أداء العيادة والفريق ومؤشرات المرضى"
+
+msgid "Settings"
+msgstr "الإعدادات"
+
+msgid "The clinic profile, services, prices, schedules and medicines"
+msgstr "بيانات العيادة والخدمات والأسعار والمواعيد والأدوية"
+
+msgid "Team"
+msgstr "الفريق"
+
+msgid "Members, permissions and the logs"
+msgstr "الأعضاء والصلاحيات والسجلات"
+
+msgid "This team member wasn't found."
+msgstr "عضو الفريق ده مش موجود."
+
+msgid "Someone changed this person meanwhile. Reload and try again."
+msgstr "حد تاني عدّل بيانات الشخص ده في نفس الوقت. حدّث الصفحة وحاول تاني."
+
+msgid "You can't change your own role, permissions or status."
+msgstr "مينفعش تغيّر دورك أو صلاحياتك أو حالتك بنفسك."
+
+msgid "The owner's role and permissions can't be changed."
+msgstr "دور المالك وصلاحياته مينفعش تتغير."
+
+msgid "Only the owner can change someone who manages the team."
+msgstr "المالك بس هو اللي يقدر يعدّل لحد بيدير الفريق."
+
+msgid "Only the owner gives or removes this permission."
+msgstr "المالك بس هو اللي يدّي الصلاحية دي أو يشيلها."
+
+msgid "You can only give or remove permissions you hold yourself."
+msgstr "تقدر تدّي أو تشيل الصلاحيات اللي معاك أنت بس."
+
+msgid "Pick up to 20 sections."
+msgstr "اختار لحد 20 قسم."
+
+msgid "Only assistants can be limited to some sections."
+msgstr "المساعدين بس هما اللي ينفع يتحددوا بأقسام معينة."
+
+msgid "Activate this person first."
+msgstr "فعّل الشخص ده الأول."
+
+msgid "This person has already signed in. They change their own password."
+msgstr "الشخص ده دخل قبل كده. هو اللي يغيّر كلمة السر بتاعته."
+
+msgid "This invitation wasn't found or has expired."
+msgstr "الدعوة دي مش موجودة أو انتهت."
+
+msgid "Only the owner manages a person's places."
+msgstr "المالك بس هو اللي يحدد أماكن شغل الشخص."
+
+msgid "This place wasn't found."
+msgstr "المكان ده مش موجود."
+
+msgid "Some places couldn't be updated now. Trying again."
+msgstr "في أماكن مكانش ينفع تتحدث دلوقتي. بنحاول تاني."
+
+msgid "Send the version you read."
+msgstr "ابعت رقم النسخة اللي قريتها."
+
+msgid "Someone changed this section meanwhile. Reload and try again."
+msgstr "حد تاني عدّل القسم ده في نفس الوقت. حدّث الصفحة وحاول تاني."
+
+msgid ""
+"This visit belongs to another doctor. Ask the owner for permission to handle"
+" other doctors' patients."
+msgstr ""
+"الكشف ده تبع دكتور تاني. اطلب من المالك صلاحية التعامل مع مرضى الأطباء "
+"الآخرين."
+
+msgid "No doctor works today."
+msgstr "مفيش دكتور شغال النهارده."
+
+msgid "This doctor has no consultation service. Pick the service."
+msgstr "الدكتور ده مالوش خدمة كشف. اختار الخدمة."
+
+msgid "A set of medicines with their instructions, written in one tap."
+msgstr "مجموعة أدوية بتعليماتها، تُكتب بلمسة واحدة."
+
+msgid "Active ingredient"
+msgstr "المادة الفعالة"
+
+msgid "Add a medicine"
+msgstr "إضافة دواء"
+
+msgid "Add an item"
+msgstr "إضافة صنف"
+
+msgid "Add it to the clinic's expenses"
+msgstr "أضفه إلى مصروفات العيادة"
+
+msgid "Add stock"
+msgstr "إضافة مخزون"
+
+msgid "Add the starter list for my specialty"
+msgstr "أضف القائمة الأساسية لتخصصي"
+
+msgid "After an extraction"
+msgstr "بعد الخلع"
+
+msgid "After meals, for 5 days"
+msgstr "بعد الأكل، لمدة 5 أيام"
+
+msgid "Alert at:"
+msgstr "تنبيه عند:"
+
+msgid "Unit cost:"
+msgstr "تكلفة الوحدة:"
+
+msgid "Patient:"
+msgstr "المريض:"
+
+msgid "Alert when this many or fewer are left"
+msgstr "نبّهني عندما يتبقى هذا العدد أو أقل"
+
+msgid "Allow use when the stock shows zero"
+msgstr "اسمح بالصرف حتى لو الرصيد صفر"
+
+msgid "An item is on two lines. Keep one."
+msgstr "صنف مكرر في سطرين. اترك سطرًا واحدًا."
+
+msgid "An item no longer in the list"
+msgstr "صنف لم يعد في القائمة"
+
+msgid "Another medicine (type its name)"
+msgstr "دواء آخر (اكتب اسمه)"
+
+msgid "Brand name"
+msgstr "الاسم التجاري"
+
+msgid "Brand, active ingredient, form and the usual dose."
+msgstr "الاسم التجاري والمادة الفعالة والشكل والجرعة المعتادة."
+
+msgid "Capsules"
+msgstr "كبسولات"
+
+msgid "Category"
+msgstr "الفئة"
+
+msgid "Code (SKU)"
+msgstr "الكود (SKU)"
+
+msgid "Cost of one unit (EGP)"
+msgstr "تكلفة الوحدة (ج.م)"
+
+msgid "Count"
+msgstr "جرد"
+
+msgid "Count saved: {name}"
+msgstr "تم حفظ الجرد: {name}"
+
+msgid "Count the stock"
+msgstr "جرد المخزون"
+
+msgid "Cream"
+msgstr "كريم"
+
+msgid "Dose"
+msgstr "الجرعة"
+
+msgid "Drops"
+msgstr "نقط"
+
+msgid "Edit the item"
+msgstr "تعديل الصنف"
+
+msgid "Edit the medicine"
+msgstr "تعديل الدواء"
+
+msgid "Edit the ready prescription"
+msgstr "تعديل الروشتة الجاهزة"
+
+msgid "Enter a name for the ready prescription."
+msgstr "اكتب اسمًا للروشتة الجاهزة."
+
+msgid "Enter the item's name."
+msgstr "اكتب اسم الصنف."
+
+msgid "Enter the medicine's name."
+msgstr "اكتب اسم الدواء."
+
+msgid "Expired or broken"
+msgstr "منتهي الصلاحية أو تالف"
+
+msgid "Expired, broken…"
+msgstr "منتهي الصلاحية، مكسور…"
+
+msgid "For a patient (optional)"
+msgstr "لمريض (اختياري)"
+
+msgid "Form"
+msgstr "الشكل"
+
+msgid "Form in English"
+msgstr "الشكل بالإنجليزية"
+
+msgid "Gel"
+msgstr "جل"
+
+msgid "How many are on the shelf?"
+msgstr "كم العدد الموجود على الرف؟"
+
+msgid "In English, for English prescriptions (optional)"
+msgstr "بالإنجليزية، للروشتات الإنجليزية (اختياري)"
+
+msgid "In stock"
+msgstr "متوفر"
+
+msgid "In stock: {n} {unit}"
+msgstr "الرصيد: {n} {unit}"
+
+msgid "Injection"
+msgstr "حقن"
+
+msgid "Instructions (optional)"
+msgstr "التعليمات (اختياري)"
+
+msgid "Instructions in English"
+msgstr "التعليمات بالإنجليزية"
+
+msgid ""
+"It leaves the list. Its history stays, and you can restore it from Removed "
+"items."
+msgstr "سيُحذف من القائمة. يبقى سجله، ويمكنك استرجاعه من الأصناف المحذوفة."
+
+msgid "Item saved: {name}"
+msgstr "تم حفظ الصنف: {name}"
+
+msgid "Keep it"
+msgstr "اتركه"
+
+msgid "Left:"
+msgstr "المتبقي:"
+
+msgid "Low stock"
+msgstr "رصيد منخفض"
+
+msgid "Low stock only"
+msgstr "الرصيد المنخفض فقط"
+
+msgid "Low stock:"
+msgstr "رصيد منخفض:"
+
+msgid "Medicine"
+msgstr "الدواء"
+
+msgid "Medicine name"
+msgstr "اسم الدواء"
+
+msgid "Medicine saved: {name}"
+msgstr "تم حفظ الدواء: {name}"
+
+msgid "Medicines"
+msgstr "الأدوية"
+
+msgid "More details"
+msgstr "تفاصيل أكثر"
+
+msgid "Mouthwash"
+msgstr "غسول فم"
+
+msgid "Name in English"
+msgstr "الاسم بالإنجليزية"
+
+msgid "Name in English (optional)"
+msgstr "الاسم بالإنجليزية (اختياري)"
+
+msgid "New item"
+msgstr "صنف جديد"
+
+msgid "New ready prescription"
+msgstr "روشتة جاهزة جديدة"
+
+msgid "No item matches this search."
+msgstr "لا يوجد صنف يطابق البحث."
+
+msgid "No items yet"
+msgstr "لا توجد أصناف بعد"
+
+msgid "No medicine matches this search."
+msgstr "لا يوجد دواء يطابق البحث."
+
+msgid "No medicines yet. Add the ones you prescribe most."
+msgstr "لا توجد أدوية بعد. أضف الأدوية التي تكتبها كثيرًا."
+
+msgid ""
+"No ready prescriptions yet. Save the ones you write often, and write them in"
+" one tap."
+msgstr ""
+"لا توجد روشتات جاهزة بعد. احفظ الروشتات التي تكتبها كثيرًا، واكتبها بلمسة "
+"واحدة."
+
+msgid "No removed items."
+msgstr "لا توجد أصناف محذوفة."
+
+msgid "Note"
+msgstr "ملاحظة"
+
+msgid ""
+"Nothing is written from scratch. Keep the clinic's medicines and ready "
+"prescriptions here; doctors pick from them when they write a prescription in"
+" the visit."
+msgstr ""
+"لا شيء يُكتب من الصفر. احفظ هنا أدوية العيادة والروشتات الجاهزة، ويختار منها"
+" الأطباء عند كتابة الروشتة في الزيارة."
+
+msgid "Nothing recorded for this item yet."
+msgstr "لم يُسجل شيء لهذا الصنف بعد."
+
+msgid "Nothing taken from stock"
+msgstr "لا يُخصم شيء من المخزون"
+
+msgid "One tablet every 8 hours"
+msgstr "قرص كل 8 ساعات"
+
+msgid "Only the items you don't have yet are added."
+msgstr "تُضاف فقط الأصناف غير الموجودة عندك."
+
+msgid "Paid from the cash drawer now"
+msgstr "مدفوع من درج الخزنة الآن"
+
+msgid "Pick a medicine on every line, or remove the empty line."
+msgstr "اختر دواءً في كل سطر، أو احذف السطر الفارغ."
+
+msgid "Pick the item"
+msgstr "اختر الصنف"
+
+msgid "Pick the item on every line."
+msgstr "اختر الصنف في كل سطر."
+
+msgid "Pick the medicine"
+msgstr "اختر الدواء"
+
+msgid "Prescriptions already written keep it as they are."
+msgstr "الروشتات المكتوبة من قبل تبقى كما هي."
+
+msgid "Price of one unit (EGP)"
+msgstr "سعر الوحدة (ج.م)"
+
+msgid "Purchase"
+msgstr "شراء"
+
+msgid "Quantity bought"
+msgstr "الكمية المشتراة"
+
+msgid "Quantity in stock now"
+msgstr "الكمية الموجودة الآن"
+
+msgid "Quantity thrown away"
+msgstr "الكمية المستبعدة"
+
+msgid "Quantity used"
+msgstr "الكمية المستخدمة"
+
+msgid "Ready prescription saved: {name}"
+msgstr "تم حفظ الروشتة الجاهزة: {name}"
+
+msgid "Ready prescriptions"
+msgstr "الروشتات الجاهزة"
+
+msgid "Reason"
+msgstr "السبب"
+
+msgid "Record use"
+msgstr "تسجيل استخدام"
+
+msgid "Recording a procedure takes these from stock on its own."
+msgstr "عند تسجيل الإجراء تُخصم هذه من المخزون تلقائيًا."
+
+msgid "Remove from the list?"
+msgstr "حذف من القائمة؟"
+
+msgid "Remove the item?"
+msgstr "حذف الصنف؟"
+
+msgid "Removed"
+msgstr "محذوف"
+
+msgid "Removed items"
+msgstr "الأصناف المحذوفة"
+
+msgid "Removed: {name}"
+msgstr "تم الحذف: {name}"
+
+msgid "Restore"
+msgstr "استرجاع"
+
+msgid "Restored: {name}"
+msgstr "تم الاسترجاع: {name}"
+
+msgid "Save the count"
+msgstr "حفظ الجرد"
+
+msgid "Saved: {name}"
+msgstr "تم الحفظ: {name}"
+
+msgid "Search by brand or ingredient"
+msgstr "ابحث بالاسم التجاري أو المادة الفعالة"
+
+msgid "Search the items"
+msgstr "ابحث في الأصناف"
+
+msgid "Shared by all sections"
+msgstr "مشترك بين كل الأقسام"
+
+msgid "Someone who manages the stock adds the items first."
+msgstr "يضيف مسؤول المخزون الأصناف أولًا."
+
+msgid ""
+"Start with the usual list for your specialty, then change it as you like. Or"
+" add your own items one by one."
+msgstr ""
+"ابدأ بالقائمة المعتادة لتخصصك ثم عدّلها كما تحب، أو أضف أصنافك واحدًا "
+"واحدًا."
+
+msgid "Stock added. {name}: {n} {unit} now"
+msgstr "تمت إضافة المخزون. {name}: {n} {unit} الآن"
+
+msgid "Stock added: {qty} of {name}"
+msgstr "إضافة مخزون: {qty} من {name}"
+
+msgid "Strength"
+msgstr "التركيز"
+
+msgid "Syrup"
+msgstr "شراب"
+
+msgid "Tablets"
+msgstr "أقراص"
+
+msgid "Tablets, syrup, gel…"
+msgstr "أقراص، شراب، جل…"
+
+msgid "Take out of stock"
+msgstr "خصم من المخزون"
+
+msgid "Taken out of stock: {name}"
+msgstr "تم الخصم من المخزون: {name}"
+
+msgid "The procedures list is empty."
+msgstr "قائمة الإجراءات فارغة."
+
+msgid "The starter list was added. Change it as you like."
+msgstr "تمت إضافة القائمة الأساسية. عدّلها كما تحب."
+
+msgid "Total: {amount}"
+msgstr "الإجمالي: {amount}"
+
+msgid "Unit"
+msgstr "الوحدة"
+
+msgid "Use"
+msgstr "استخدام"
+
+msgid "Use recorded. {name}: {n} {unit} left"
+msgstr "تم تسجيل الاستخدام. {name}: متبقي {n} {unit}"
+
+msgid "Use recorded: {qty} of {name}"
+msgstr "تسجيل استخدام: {qty} من {name}"
+
+msgid "Used"
+msgstr "استخدام"
+
+msgid "Usual dose"
+msgstr "الجرعة المعتادة"
+
+msgid "Usual dose in English"
+msgstr "الجرعة المعتادة بالإنجليزية"
+
+msgid "Usual note (optional)"
+msgstr "الملاحظة المعتادة (اختياري)"
+
+msgid "Usual note in English"
+msgstr "الملاحظة المعتادة بالإنجليزية"
+
+msgid "What each procedure uses"
+msgstr "ما يستهلكه كل إجراء"
+
+msgid ""
+"What the clinic bought, what is left, and what each patient used. Stock goes"
+" down on its own when use is recorded."
+msgstr ""
+"ما اشترته العيادة، وما تبقى، وما استخدمه كل مريض. يقل المخزون تلقائيًا عند "
+"تسجيل الاستخدام."
+
+msgid "What this procedure uses"
+msgstr "ما يستهلكه هذا الإجراء"
+
+msgid "Write the reason."
+msgstr "اكتب السبب."
+
+msgid "box, piece, syringe…"
+msgstr "علبة، قطعة، سرنجة…"
+
+#, python-format
+msgid ""
+"This list has more than %(limit)s patients. Choose a tag to narrow it, then "
+"export again."
+msgstr ""
+"القائمة دي فيها أكتر من %(limit)s مريض. اختار علامة (تاج) تضيّقها، وبعدين "
+"صدّر تاني."
+
+msgid "The register is busy. Try again."
+msgstr "الخزنة مشغولة دلوقتي. جرّب تاني."
+
+msgid "items"
+msgstr "أصناف"
+
+msgid "Show them"
+msgstr "اعرضها"

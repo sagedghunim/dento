@@ -1,0 +1,201 @@
+{% load i18n hamada %}
+{% if perms.use %}
+<dialog class="sheet small" id="use-dialog" aria-labelledby="use-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="use-title">{% translate "Record use" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong> · <span class="muted" data-stock></span></p>
+    <label class="field">{% translate "Quantity used" %}<input name="qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="1" data-autofocus></label>
+    {% if perms.view_patients %}
+    <div class="field" data-patient-pick>
+      <label for="use-patient-q">{% translate "For a patient (optional)" %}</label>
+      <div class="picked" data-picked hidden><bdi class="who" dir="auto" data-picked-name></bdi><button type="button" class="btn ghost" data-unpick>{% translate "Change" %}</button></div>
+      <input id="use-patient-q" type="search" data-patient-q autocomplete="off" dir="auto" maxlength="60" placeholder="{% translate "Name, mobile or file number" %}">
+      <div data-patient-results></div>
+    </div>
+    {% endif %}
+    <label class="field">{% translate "Note (optional)" %}<input name="reason" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Record use" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="history-dialog" aria-labelledby="history-title">
+  <div class="sheet-inner">
+  <header class="dialog-head">
+    <h2 id="history-title">{% translate "History" %} · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <ol class="moves" data-moves></ol>
+    <p class="muted" data-moves-status role="status"></p>
+    <button type="button" class="btn ghost" data-moves-more hidden>{% translate "Load more" %}</button>
+  </div>
+  </div>
+</dialog>
+{% endif %}
+
+{% if perms.manage %}
+<dialog class="sheet" id="item-dialog" aria-labelledby="item-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="item-title"><span data-title-new>{% translate "New item" %}</span><span data-title-edit hidden>{% translate "Edit the item" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div class="grid-form">
+      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+      <label class="field">{% translate "Unit" %}<input name="unit" maxlength="20" dir="auto" autocomplete="off" placeholder="{% translate "box, piece, syringe…" %}"></label>
+      <label class="field" data-new-only>{% translate "Quantity in stock now" %}<input name="quantity" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
+      <label class="field">{% translate "Alert when this many or fewer are left" %}<input name="threshold" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
+      <label class="field">{% translate "Cost of one unit (EGP)" %}<input name="unit_cost" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    </div>
+    <details class="more-fields">
+      <summary>{% translate "More details" %}</summary>
+      <div class="grid-form">
+        <label class="field">{% translate "Name in English (optional)" %}<input name="name_en" maxlength="120" dir="ltr" lang="en" autocomplete="off"></label>
+        <label class="field">{% translate "Category" %}<input name="category" maxlength="40" dir="auto" autocomplete="off"></label>
+        <label class="field">{% translate "Code (SKU)" %}<input name="sku" maxlength="40" dir="ltr" autocomplete="off"></label>
+        {% if sections %}
+        <label class="field">{% translate "Section" %}<select name="section_id">
+          <option value="">{% translate "Shared by all sections" %}</option>
+          {% for s in sections %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select></label>
+        {% endif %}
+      </div>
+      <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="500" dir="auto"></textarea></label>
+      <label class="check"><input type="checkbox" name="allow_negative">{% translate "Allow use when the stock shows zero" %}</label>
+    </details>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="purchase-dialog" aria-labelledby="purchase-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="purchase-title">{% translate "Add stock" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong> · <span class="muted" data-stock></span></p>
+    <div class="grid-form">
+      <label class="field">{% translate "Quantity bought" %}<input name="qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" data-autofocus></label>
+      <label class="field">{% translate "Price of one unit (EGP)" %}<input name="unit_price" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    </div>
+    <p class="muted" data-total></p>
+    <label class="check"><input type="checkbox" name="record_expense" checked>{% translate "Add it to the clinic's expenses" %}</label>
+    <label class="check" data-shift-wrap><input type="checkbox" name="from_shift">{% translate "Paid from the cash drawer now" %}</label>
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Add stock" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="count-dialog" aria-labelledby="count-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="count-title">{% translate "Count the stock" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong> · <span class="muted" data-stock></span></p>
+    <label class="field">{% translate "How many are on the shelf?" %}<input name="counted" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="8" data-autofocus></label>
+    <label class="field">{% translate "Reason (optional)" %}<input name="reason" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save the count" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="waste-dialog" aria-labelledby="waste-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="waste-title">{% translate "Expired or broken" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong> · <span class="muted" data-stock></span></p>
+    <label class="field">{% translate "Quantity thrown away" %}<input name="qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" data-autofocus></label>
+    <label class="field">{% translate "Reason" %}<input name="reason" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "Expired, broken…" %}"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Take out of stock" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="remove-dialog" aria-labelledby="remove-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="remove-title">{% translate "Remove the item?" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong></p>
+    <p class="muted">{% translate "It leaves the list. Its history stays, and you can restore it from Removed items." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Keep it" %}</button>
+    <button type="submit" class="btn solid-danger" data-submit>{% translate "Remove" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="materials-dialog" aria-labelledby="materials-dialog-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="materials-dialog-title">{% translate "What this procedure uses" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p><strong class="who" data-name></strong></p>
+    <ul class="edit-lines" data-lines></ul>
+    <p><button type="button" class="btn ghost" data-add-line><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add an item" %}</button></p>
+    <template data-line-template>
+      <li class="edit-line">
+        <label class="field">{% translate "Item" %}<select name="item_id">
+          <option value="">{% translate "Pick the item" %}</option>
+          {% for item in items %}{% if item.is_active %}<option value="{{ item.id }}">{{ item.name }}{% if item.unit %} ({{ item.unit }}){% endif %}</option>{% endif %}{% endfor %}
+        </select></label>
+        <label class="field qty-field">{% translate "Quantity" %}<input name="qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="5" value="1"></label>
+        <button type="button" class="icon-btn" data-remove-line aria-label="{% translate "Remove" %}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+      </li>
+    </template>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}

@@ -9,6 +9,9 @@ They cover what Django's test client can't: the M1 decisions R2, R7 and R8.
 | `e2_no_double_booking.mjs` | R7: a booking whose answer is lost can't be closed away, "Try again" books once, and a page change lists it instead of resending it |
 | `e3_finish_collect.mjs` | R2: "Finish and collect" after another screen finished the visit says nothing was collected, and "Collect now" takes the payment once |
 | `e4_dental_chart.mjs` | The dental chart, as a doctor (`HAMADA_BT_USER=ahmed`): a double-clicked finding and procedure save once, a dropped connection keeps the save for "Try again", Add to plan marks the tooth in progress, an expired session goes to sign-in. Not in `run.mjs` (it needs a doctor). `HAMADA_BT_SHOTS=<folder>` takes the 1280 and 390 px screenshots |
+| `e5_inventory_rx.mjs` | Inventory and Prescription, as someone with `inventory.manage` and `settings.medicines` (`HAMADA_BT_USER=ahmed` after granting him `inventory.manage`, see below): the starter list, a new item, a double-clicked purchase raises the stock once, a dropped connection keeps the purchase for "Try again", use lowers the stock, the item's history, a medicine added once, a ready prescription that picks it, 390 px without sideways scrolling, an expired session goes to sign-in. Not in `run.mjs`. `HAMADA_BT_SHOTS=<folder>` takes the 1280 and 390 px screenshots |
+
+For `e5`, grant the demo doctor `inventory.manage` once (development data only): in `manage.py shell`, `Membership.objects.filter(clinic_id=<clinic id>, user_id=<ahmed's user id>).update(granted=["inventory.manage"])` inside `clinic_transaction(<clinic id>, <shard>)`. The demo owner can't be used: owners need the two-step code.
 
 ## Run
 

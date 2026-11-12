@@ -110,7 +110,9 @@ def quote_view(request, ctx, data):
 @api("GET")
 def appointment_view(request, ctx, data, appointment_id):
     _any_queue_code(ctx)
-    return selectors.answer(ctx, _appointment_id(appointment_id))
+    appointment_id = _appointment_id(appointment_id)
+    rules.guard(ctx, appointment_id)  # another section's visit is 404 for a limited assistant (design G1)
+    return selectors.answer(ctx, appointment_id)
 
 
 @api("GET", perm="appointments.book")
@@ -223,3 +225,41 @@ def reschedule_view(request, ctx, data, appointment_id):
         ctx, appointment_id, seen, validate.ident(data.get("doctor_id"), "doctor_id"), validate.iso_day(data.get("day")),
         rules.parse_instant(starts_at) if starts_at else None, validate.boolean(data, "extra"))
     return Result(selectors.answer(ctx, appointment_id, version), target_type="appointment", target_id=appointment_id)
+
+
+# --- Walk-in (design G5) ---------------------------------------------------------------------------------------
+
+
+def _walk_in_answer(appointment, version, ahead):
+    return {"appointment": appointment, "version": version, "turn": appointment["queue_no"], "ahead": ahead}
+
+
+def _replay_walk_in(ctx, stored):
+    body = selectors.answer(ctx, stored["target_id"])
+    return _walk_in_answer(body["appointment"], body["version"], services.waiting_ahead(ctx, body["appointment"]))
+
+
+def _optional_id(data, name):
+    return validate.ident(data[name], name) if data.get(name) is not None else None
+
+
+@api("POST", perm=("appointments.book", "appointments.queue"), replay=_replay_walk_in)
+def walk_in_view(request, ctx, data):
+    """{patient_id | new_patient, doctor_id?, service_id?, section_id?, payment?, note?}: a patient who walks in now.
+
+    No time is needed; the doctor and the service default on the server (design G5).
+    """
+    patient_id, new_patient = data.get("patient_id"), data.get("new_patient")
+    if (patient_id is None) == (new_patient is None):
+        raise ApiError("invalid", _("Pick a patient or enter a new one."), fields={"patient_id": "required"})
+    if new_patient is not None and not isinstance(new_patient, dict):
+        raise ApiError("invalid", "new_patient must be an object", fields={"new_patient": "object"})
+    body = {
+        "patient_id": validate.ident(patient_id, "patient_id") if patient_id is not None else None,
+        "new_patient": new_patient, "doctor_id": _optional_id(data, "doctor_id"),
+        "service_id": _optional_id(data, "service_id"), "section_id": _optional_id(data, "section_id"),
+        "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
+    }
+    appointment, version, ahead = services.walk_in(ctx, body)
+    return Result(_walk_in_answer(appointment, version, ahead), status=201, target_type="appointment",
+                  target_id=appointment["id"])

@@ -1,8 +1,10 @@
 """Invoices and payments (design 5.3). Every function runs inside the request's shard transaction.
 
-Lock order (design 5.0): the appointment, then the invoice, then the payment row, then the
-open cash shift (8a, FOR SHARE), then the invoice counter, then doctor-days, then money-days,
-then clinic-days. Invoice endpoints read the invoice without a lock first only to learn its
+Lock order (design 5.0): the appointment, then the invoice, then [void, remove-line: its patient
+packages (7a)], then the payment row, then the invoice counter, then the open cash shift (8a: FOR
+SHARE, or opened by a cash entry when none is open), then doctor-days, then money-days, then
+clinic-days. Recording a procedure takes the package before the invoice (7a); its appointment lock
+keeps that from cycling. Invoice endpoints read the invoice without a lock first only to learn its
 appointment, which never changes.
 """
 
@@ -92,11 +94,12 @@ def ensure_invoice(ctx, appointment, number=None, paid=0):
     return create_invoice(ctx, appointment, number, paid), True
 
 
-def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=None, today=None):
+def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=None, today=None, shift_id=None):
     """Take a payment for a locked appointment and record its summary changes in `deltas`.
 
     `today` is the request's business day when the caller already worked it out, so one request
-    never straddles two days. Returns (payment dict, invoice dict).
+    never straddles two days. `shift_id` is the open cash shift when the caller already took it (booking takes
+    it before its doctor-day, design 5.0 8a). Returns (payment dict, invoice dict).
     """
     if amount <= 0:
         raise ApiError("invalid", _("Enter an amount."), fields={"amount": "range"})
@@ -119,7 +122,7 @@ def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=No
     if section_id is None and "section_id" not in appointment:
         section_id = _section_of(ctx, appointment["id"])
     payment = _insert_payment(ctx, invoice, appointment["patient_id"], appointment["doctor_id"], "payment", method,
-                              amount, today, note, section_id=section_id)
+                              amount, today, note, section_id=section_id, shift_id=shift_id)
     deltas.doctor_day(today, appointment["doctor_id"], collected=amount)
     deltas.money_day(today, section_id, method, collected=amount)
     deltas.clinic_day(today, collected=amount)
@@ -141,17 +144,30 @@ def _section_of(ctx, appointment_id):
 
 
 def _insert_payment(ctx, invoice, patient_id, doctor_id, kind, method, amount, day, note, refund_of=None,
-                    section_id=None):
+                    section_id=None, shift_id=None):
     """Every payment and refund row comes through here, so the register rule (F1) holds in one place:
-    cash needs an open shift (409 register_closed) and joins it; other methods join one when it is open.
+    cash always joins an open shift, opening one when none is open (finance.services.shift_for); other
+    methods join one when it is open.
 
-    The open shift is locked FOR SHARE inside the INSERT itself (lock order 8a), so the rule costs no extra
-    statement. A close holds the shift FOR NO KEY UPDATE: this waits for it, re-checks `status = 'open'`, finds
-    no shift and refuses cash, so a closed shift never gains a payment after its count.
+    For other methods the open shift is locked FOR SHARE inside the INSERT itself (lock order 8a). A close
+    holds the shift FOR NO KEY UPDATE: a cash entry waits for it, re-checks `status = 'open'`, and opens a
+    new shift, so a closed shift never gains a payment after its count.
     """
-    if method == "cash":
-        ctx.require("cash.collect")
     now = timezone.now()
+    if method == "cash":
+        from finance.services import shift_for
+
+        shift_id = shift_id or shift_for(ctx, "cash")
+        payment_id = sql.row(ctx, """
+            INSERT INTO "billing_payment" (clinic_id, invoice_id, patient_id, doctor_id, kind, method, amount,
+                                           refunded, refund_of_id, received_at, day, received_by_id, note, shift_id,
+                                           section_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+            ctx.clinic_id, invoice["id"], patient_id, doctor_id, kind, method, amount, refund_of, now, day,
+            ctx.membership_id, note, shift_id, section_id])[0]
+        return {"id": payment_id, "invoice_id": invoice["id"], "patient_id": patient_id, "doctor_id": doctor_id,
+                "kind": kind, "method": method, "amount": amount, "refunded": 0, "refund_of_id": refund_of,
+                "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id}
     payment_id, shift_id = sql.row(ctx, """
         INSERT INTO "billing_payment" (clinic_id, invoice_id, patient_id, doctor_id, kind, method, amount, refunded,
                                        refund_of_id, received_at, day, received_by_id, note, shift_id, section_id)
@@ -161,10 +177,6 @@ def _insert_payment(ctx, invoice, patient_id, doctor_id, kind, method, amount, d
         RETURNING id, shift_id""", [
         ctx.clinic_id, invoice["id"], patient_id, doctor_id, kind, method, amount, refund_of, now, day,
         ctx.membership_id, note, section_id, ctx.clinic_id])
-    if shift_id is None and method == "cash":
-        from finance.services import register_closed
-
-        raise register_closed()  # the request rolls back, the row with it
     return {"id": payment_id, "invoice_id": invoice["id"], "patient_id": patient_id, "doctor_id": doctor_id,
             "kind": kind, "method": method, "amount": amount, "refunded": 0, "refund_of_id": refund_of,
             "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id}
@@ -314,6 +326,8 @@ def remove_line(ctx, invoice_id, line_id):
         raise ApiError("discount_exceeds", _("Lower the discount before removing this line."), 409)
     if line[1] == "package":
         void_packages(ctx, invoice["id"], line_id)  # F7: refused once a session was used
+    elif line[1] == "procedure" and appointment:
+        _return_package_session(ctx, appointment["id"], line_id)
     sql.run(ctx, 'UPDATE "billing_invoice" SET subtotal = subtotal - %s, total = total - %s WHERE clinic_id = %s AND id = %s',
             [amount, amount, ctx.clinic_id, invoice["id"]])
     sql.run(ctx, 'DELETE FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, line_id])
@@ -321,6 +335,22 @@ def remove_line(ctx, invoice_id, line_id):
                   before={"line": line[0], "kind": line[1], "service_id": line[2], "description": line[3],
                           "qty": line[4], "unit_price": line[5], "amount": amount, "from_list": line[7]})
     return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
+
+
+def _return_package_session(ctx, appointment_id, line_id):
+    """Under the invoice's lock (invoice, then package, as void does): a removed procedure line that used a prepaid
+    session gives it back, and the record keeps no link to the line or the package. Audited."""
+    procedure = sql.row(ctx, 'SELECT id, patient_package_id FROM "clinical_visit_procedure" WHERE clinic_id = %s '
+                             "AND appointment_id = %s AND invoice_line_id = %s AND patient_package_id IS NOT NULL",
+                        [ctx.clinic_id, appointment_id, line_id])
+    if procedure is None:
+        return
+    returned = sql.run(ctx, 'UPDATE "billing_patient_package" SET used = used - 1 WHERE clinic_id = %s AND id = %s '
+                            "AND used > 0", [ctx.clinic_id, procedure[1]])
+    sql.run(ctx, 'UPDATE "clinical_visit_procedure" SET patient_package_id = NULL, invoice_line_id = NULL '
+                 "WHERE clinic_id = %s AND id = %s", [ctx.clinic_id, procedure[0]])
+    record_change(ctx, "package.session_return", "patient_package", procedure[1],
+                  visit_procedure=procedure[0], line=line_id, returned=bool(returned))
 
 
 def _paid_exceeds():

@@ -11,28 +11,31 @@ Data, not tables: they never vary per clinic until copied, and a clinic edits it
 """
 
 from .catalogue import dental, others
+from .catalogue.english import DENTAL_DESCRIPTIONS, english
 
 CARDS = ["dental", "pediatrics", "dermatology", "obgyn", "ent", "ophthalmology", "orthopedics", "cardiology",
          "physiotherapy", "veterinary"]
 
 
-def _build(name, services, procedures, medicines, templates=(), descriptions=None):
-    descriptions = descriptions or {}
+def _build(name, services, procedures, medicines, templates=(), descriptions=None, descriptions_en=None):
+    descriptions, descriptions_en = descriptions or {}, descriptions_en or {}
     return {
         "name": name,
         "services": [(ar, en, kind, price * 100, minutes) for ar, en, kind, price, minutes in services],
         "procedures": [{"name_ar": ar, "name_en": en, "category": category, "unit": unit, "price": price * 100,
                         "typical_min": low * 100, "typical_max": high * 100, "condition": condition,
-                        "description": descriptions.get(en, "")}
+                        "description": descriptions.get(en, ""), "description_en": descriptions_en.get(en, "")}
                        for ar, en, category, unit, price, low, high, condition in procedures],
         "medicines": [{"name": name_, "generic": generic, "strength": strength, "form": form, "default_dose": dose,
-                       "default_note": note} for name_, generic, strength, form, dose, note in medicines],
+                       "default_note": note, "form_en": english(form), "default_dose_en": english(dose),
+                       "default_note_en": english(note)}
+                      for name_, generic, strength, form, dose, note in medicines],
         "templates": list(templates),
     }
 
 
 SPECIALTIES = {"dental": _build(dental.NAME, dental.SERVICES, dental.PROCEDURES, dental.MEDICINES, dental.TEMPLATES,
-                               dental.DESCRIPTIONS)}
+                               dental.DESCRIPTIONS, DENTAL_DESCRIPTIONS)}
 for _code in [*CARDS[1:], "internal"]:
     _spec = others.SPECIALTIES[_code]
     SPECIALTIES[_code] = _build(_spec["name"], _spec["services"], _spec["procedures"], _spec["medicines"])

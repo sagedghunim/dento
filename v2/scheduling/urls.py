@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/v1/today", views.today_view),
     path("api/v1/appointments", views.book_view),
     path("api/v1/appointments/quote", views.quote_view),
+    path("api/v1/appointments/walk-in", views.walk_in_view),
     path("api/v1/appointments/<int:appointment_id>", views.appointment_view),
     path("api/v1/appointments/<int:appointment_id>/arrive", views.arrive_view),
     path("api/v1/appointments/<int:appointment_id>/undo-arrive", views.undo_arrive_view),

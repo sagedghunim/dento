@@ -6,6 +6,7 @@ Views that return clinical data write an access event (design 4.10); these funct
 import datetime as dt
 
 from core import paging, sql
+from core.i18n import pick
 from core.days import local_iso, zone
 
 from . import services
@@ -54,9 +55,12 @@ def templates(ctx, section_id=None, include_inactive=False, template_id=None):
     where, params = _section_filter(section_id, include_inactive)
     if template_id is not None:
         where, params = " AND id = %s", [template_id]
-    rows = sql.dicts(ctx, 'SELECT id, section_id, name, notes, is_active, version FROM "clinical_prescription_template" '
-                          f"WHERE clinic_id = %s{where} ORDER BY section_id, name, id LIMIT %s",
-                     [ctx.clinic_id, *params, LIST_LIMIT])
+    rows = sql.dicts(ctx, 'SELECT id, section_id, name, notes, name_en, notes_en, is_active, version '
+                          f'FROM "clinical_prescription_template" WHERE clinic_id = %s{where} '
+                          "ORDER BY section_id, name, id LIMIT %s", [ctx.clinic_id, *params, LIST_LIMIT])
+    for r in rows:  # the request's language, and both raw texts for editing (design G3)
+        r["name_ar"], r["notes_ar"] = r["name"], r["notes"]
+        r["name"], r["notes"] = pick(r["name_ar"], r["name_en"]), pick(r["notes_ar"], r["notes_en"])
     if template_id is not None and not rows:
         raise services.not_found("template")
     lines = {}

@@ -1,0 +1,51 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Inventory" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head head-row wide-head">
+  <div>
+    <h1>{% translate "Inventory" %}</h1>
+    <p>{% translate "What the clinic bought, what is left, and what each patient used. Stock goes down on its own when use is recorded." %}</p>
+  </div>
+  {% if perms.manage %}<button type="button" class="btn" data-new-item><svg class="icon"><use href="#i-plus"/></svg>{% translate "New item" %}</button>{% endif %}
+</div>
+
+<div class="pending-bar" data-pending-bar hidden></div>
+
+<section class="card" aria-labelledby="items-title">
+  <h2 id="items-title" class="visually-hidden">{% translate "Items" %}</h2>
+  <div class="list-tools">
+    <label class="field grow-field">{% translate "Search the items" %}
+      <input type="search" data-filter autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search">
+    </label>
+    <div class="chips">
+      <button type="button" class="chip-btn" data-low-only aria-pressed="false">{% translate "Low stock only" %}</button>
+      {% if perms.manage %}<button type="button" class="chip-btn" data-removed aria-pressed="false">{% translate "Removed items" %}</button>{% endif %}
+    </div>
+  </div>
+  <div data-items aria-live="polite">{% include "web/_inventory_items.html" %}</div>
+</section>
+
+{% if perms.manage %}
+<section class="card" aria-labelledby="materials-title">
+  <h2 id="materials-title">{% translate "What each procedure uses" %}</h2>
+  <p class="card-sub">{% translate "Recording a procedure takes these from stock on its own." %}</p>
+  {% if procedures %}
+  <ul class="lines mat-list">
+    {% for p in procedures %}
+    <li data-procedure="{{ p.json }}">
+      <div class="mat-main">
+        <strong><bdi dir="auto">{{ p.name }}</bdi></strong>{% if p.section_name %} <span class="pill grey"><bdi dir="auto">{{ p.section_name }}</bdi></span>{% endif %}
+        <p class="muted" data-mat-text>{% for line in p.lines %}<bdi dir="auto">{{ line.name }}</bdi> × <bdi class="ltr num">{{ line.qty|digits }}</bdi>{% if not forloop.last %} · {% endif %}{% empty %}{% translate "Nothing taken from stock" %}{% endfor %}</p>
+      </div>
+      <button type="button" class="btn ghost" data-materials>{% translate "Edit" %}</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty-note">{% translate "The procedures list is empty." %}</p>{% endif %}
+</section>
+{% endif %}
+
+{% include "web/_inventory_dialogs.html" %}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/inventory.js' %}"></script>{% endblock %}
