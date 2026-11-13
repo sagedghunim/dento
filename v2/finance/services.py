@@ -269,12 +269,14 @@ def update_category(ctx, category_id, values):
 
 
 def _active_category(ctx, category_id):
-    found = sql.row(ctx, 'SELECT is_active FROM "finance_category" WHERE clinic_id = %s AND id = %s',
+    """The active category's default code ('' for one the place made)."""
+    found = sql.row(ctx, 'SELECT is_active, code FROM "finance_category" WHERE clinic_id = %s AND id = %s',
                     [ctx.clinic_id, category_id])
     if found is None:
         raise not_found("category")
     if not found[0]:
         raise ApiError("invalid", _("This category isn't used any more."), fields={"category_id": "inactive"})
+    return found[1]
 
 
 def category_by_code(ctx, code):
@@ -293,15 +295,16 @@ def category_by_code(ctx, code):
 
 def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False, deltas=None):
     """An expense on a day (not after today), optionally paid from the open shift's drawer (lock order 8a, 10).
+    The "other" category is money that fits no category, so it needs a note saying what it was; the rest don't.
 
     With `deltas` the caller writes the clinic-day; otherwise this does. Returns the expense.
     """
     today = business_day(ctx.clinic)
     if day > today:
         raise ApiError("invalid", _("An expense can't be dated after today."), fields={"day": "future"})
+    if not purchase and _active_category(ctx, category_id) == "other" and not note.strip():
+        raise ApiError("invalid", _("Write what this money was for."), fields={"note": "required"})
     shift_id = shift_for(ctx, "cash") if from_shift else None
-    if not purchase:
-        _active_category(ctx, category_id)
     found = sql.row(ctx, f"""
         INSERT INTO "finance_expense" (clinic_id, category_id, amount, day, note, shift_id, purchase, created_at,
                                        created_by_id)

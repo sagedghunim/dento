@@ -72,7 +72,9 @@ class CenterBookingTests(ShardTestCase):
         kids = call(self.desk, "GET", f"/api/v1/doctors/{self.doctor}/slots?section={self.kids.id}").json()
         skin = call(self.desk, "GET", f"/api/v1/doctors/{self.doctor}/slots?section={self.skin.id}").json()
         self.assertEqual((len(kids["slots"]), kids["queue"]), (12, False))
-        self.assertEqual((len(skin["slots"]), skin["queue"]), (0, True))
+        # A queue session offers times too, at the clinic's booking step (Saged, 2026-11-13), and keeps "next turn".
+        self.assertEqual(skin["queue"], True)
+        self.assertGreater(len(skin["slots"]), 0)
         with clinic_transaction(self.a.id, self.a.shard):
             foreign = Section.objects.get(clinic_id=self.a.id).id
         self.assertEqual(call(self.desk, "GET", f"/api/v1/doctors/{self.doctor}/slots?section={foreign}").status_code, 404)

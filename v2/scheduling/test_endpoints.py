@@ -129,6 +129,7 @@ def reads(test, o):
                          f"&day={day}", ["appointments.book"], None),
         "appointment": ("GET", f"/api/v1/appointments/{o.booked}", ["appointments.book", "appointments.queue"], None),
         "slots": ("GET", f"/api/v1/doctors/{o.doctor}/slots?day={day}", ["appointments.book"], None),
+        "month": ("GET", f"/api/v1/doctors/{o.doctor}/month?month={day[:7]}", ["appointments.book"], None),
         "invoice": ("GET", f"/api/v1/invoices/{o.invoice}", ["billing.collect"], "invoice"),
     }
 

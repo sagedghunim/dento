@@ -1,0 +1,2 @@
+{% load i18n hamada %}
+<li><span><span class="pill {% if m.kind == 'in' %}teal{% elif m.kind == 'expense' %}grey{% else %}amber{% endif %}">{% if m.kind == "in" %}{% translate "In" %}{% elif m.kind == "expense" %}{% translate "Expense" %}{% else %}{% translate "Out" %}{% endif %}</span> <bdi dir="auto">{{ m.reason }}</bdi>{% if m.note %} <span class="muted">· <bdi dir="auto">{{ m.note }}</bdi></span>{% endif %} <span class="muted">· {{ m.when.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}</span></span><span class="amt">{{ m.amount|money }}</span></li>

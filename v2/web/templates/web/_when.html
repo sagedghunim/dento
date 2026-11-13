@@ -3,15 +3,21 @@
   <legend>{% translate "Doctor" %}</legend>
   <div class="chips" data-doctors>{% for d in config.doctors %}<label class="chip" data-sections="{{ d.sections|join:',' }}"><input type="radio" name="doctor" value="{{ d.id }}"><span><bdi dir="auto">{{ d.name }}</bdi></span></label>{% endfor %}</div>
 </fieldset>
-<fieldset class="group">
+{# The day: a month calendar from today, any month up to a year ahead; the doctor's days off are greyed (Saged, 2026-11-13). #}
+<fieldset class="group cal" data-cal data-today="{{ config.today }}" data-last="{{ config.last_day }}">
   <legend>{% translate "Day" %}</legend>
-  <div class="chips">
-    {% for c in day_choices %}<label class="chip"><input type="radio" name="day" value="{{ c.value }}"{% if forloop.first %} checked{% endif %}><span>{{ c.label }}</span></label>{% endfor %}
-    <label class="chip"><input type="radio" name="day" value="other"><span>{% translate "Another day" %}</span></label>
+  <span hidden data-cal-months>{{ cal.months|join:"|" }}</span>
+  <span hidden data-cal-weekdays>{{ cal.weekdays|join:"|" }}</span>
+  <span hidden data-cal-days>{{ cal.days|join:"|" }}</span>
+  <input type="hidden" name="day" value="{{ config.today }}">
+  <div class="cal-head">
+    <button type="button" class="icon-btn cal-prev" data-cal-move="-1" aria-label="{% translate "Previous month" %}"><svg class="icon"><use href="#i-chev"/></svg></button>
+    <strong class="cal-title" data-cal-title aria-live="polite"></strong>
+    <button type="button" class="icon-btn cal-next" data-cal-move="1" aria-label="{% translate "Next month" %}"><svg class="icon"><use href="#i-chev"/></svg></button>
+    <button type="button" class="btn ghost cal-today" data-cal-today>{% translate "Today" %}</button>
   </div>
-  <label class="field" data-other-day hidden>{% translate "Date" %}
-    <input type="date" name="other_day" min="{{ config.today }}" max="{{ config.last_day }}">
-  </label>
+  <div class="cal-grid" data-cal-grid></div>
+  <p class="muted" data-cal-status role="status"></p>
 </fieldset>
 <fieldset class="group" data-time>
   <legend>{% translate "Time" %}</legend>

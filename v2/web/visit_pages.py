@@ -78,7 +78,10 @@ def _last_visit(ctx, patient_id, appointment_id):
 def _procedures(ctx, section_id):
     from clinical.selectors import procedures
 
-    return [{"id": p["id"], "name": pick(p["name_ar"], p["name_en"]), "price": p["price"], "unit": p["unit"]}
+    return [{"id": p["id"], "name": pick(p["name_ar"], p["name_en"]), "price": p["price"], "unit": p["unit"],
+             # Its follow-up recipe, offered once it is recorded: the days and each session's name.
+             "follow_up": [{"days": step["days"], "label": pick(step["label"], step.get("label_en", ""))}
+                           for step in p["follow_up"] or []]}
             for p in procedures(ctx, section_id)["items"]]
 
 
@@ -87,6 +90,7 @@ def _procedures(ctx, section_id):
 @page(perm=NOTE_CODE)
 @clinic_page
 def visit_page(request, ctx, appointment_id):
+    from clinical import followups
     from clinical.selectors import visit_record
     from patients import selectors as patients
 
@@ -113,10 +117,18 @@ def visit_page(request, ctx, appointment_id):
         "called_at": visit["called_at"], "server_time": local_iso(ctx.clinic, timezone.now()),
         "note": {k: note[k] for k in ("complaint", "diagnosis", "notes", "version")},
         "procedures": _procedures(ctx, visit["section_id"]) if perms["record"] else [],
+        "upcoming": followups.upcoming(ctx, patient_id, today), "today": today.isoformat(),
     }
+    # The doctor's six most used procedures are one tap each; the rest are found by typing (Saged, 2026-11-13).
+    by_id = {p["id"]: p for p in config["procedures"]}
+    top = [by_id[i] for i in followups.top_procedures(ctx, visit["doctor_id"], visit["section_id"], today) if i in by_id]         if by_id else []
+    config["top"] = [p["id"] for p in top]
+    done = sum(p["amount"] for p in record["procedures"])
+    # The small bill: the consultation, then each procedure. The invoice's own total once it has one.
+    bill = {"fee": visit["fee"], "total": record["invoice"]["total"] if record["invoice"] else visit["fee"] + done}
     return render(request, "web/visit.html", {
         "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms,
-        "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config,
+        "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
         "dental": perms["chart"] and teeth.is_dental(ctx, visit["section_id"]),
     })
 

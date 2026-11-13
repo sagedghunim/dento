@@ -1,14 +1,24 @@
-{% load i18n hamada %}{% spaceless %}<li class="appt {{ a.status }}" data-id="{{ a.id }}" data-status="{{ a.status }}" data-name="{{ a.patient.name }}" data-doctor="{{ a.doctor_id }}" data-section="{{ a.section_id|default_if_none:'' }}" data-due="{{ a.due }}" data-fee="{{ a.fee }}" data-paid="{{ a.invoice.paid|default:0 }}" data-invoice="{{ a.invoice.id|default_if_none:'' }}" data-patient="{{ a.patient.id }}" data-file="{{ a.patient.file_no }}" data-phone="{{ a.patient.phone|default:'' }}" data-earlier="{{ a.earlier|default:0 }}" data-day="{{ a.day }}" data-queue="{{ a.queue_no }}">
-  <div class="appt-time">{% if a.starts_at %}{{ a.starts_at|clock }}<small>{% translate "Turn" %} {{ a.queue_no|num }}</small>{% else %}{{ a.queue_no|num }}<small>{% translate "Turn" %}</small>{% endif %}</div>
+{% load i18n hamada %}{% spaceless %}{% if a.status == "no_show" or a.status == "cancelled" %}{# Minimal (Saged, 2026-11-13): name, time, status and undo; no money, no other actions. #}<li class="appt {{ a.status }} closed" data-id="{{ a.id }}" data-status="{{ a.status }}" data-name="{{ a.patient.name }}" data-doctor="{{ a.doctor_id }}" data-section="{{ a.section_id|default_if_none:'' }}" data-due="0" data-fee="{{ a.fee }}" data-paid="{{ a.invoice.paid|default:0 }}" data-invoice="{{ a.invoice.id|default_if_none:'' }}" data-patient="{{ a.patient.id }}" data-file="{{ a.patient.file_no }}" data-phone="" data-earlier="0" data-day="{{ a.day }}" data-queue="{{ a.queue_no }}">
+  <div class="appt-time">{% if a.starts_at %}{{ a.starts_at|clock }}{% else %}{{ a.queue_no|num }}<small>{% translate "Turn" %}</small>{% endif %}</div>
+  <div class="appt-body">
+  <div class="appt-main"><div class="who"><span>{% if perms.view_patients %}<a href="/patients/{{ a.patient.id }}"><bdi dir="auto">{{ a.patient.name }}</bdi></a>{% else %}<bdi dir="auto">{{ a.patient.name }}</bdi>{% endif %}</span></div></div>
+  <div class="appt-side">
+    {% include "web/_status_pill.html" with status=a.status %}
+    <div class="appt-actions">{% if is_today and perms.queue and a.status == "no_show" and not a.auto_closed %}<button type="button" class="btn ghost" data-act="undo-no-show">{% translate "Undo: didn't come" %}</button>{% endif %}</div>
+  </div>
+  </div>
+</li>{% else %}<li class="appt {{ a.status }}" data-id="{{ a.id }}" data-status="{{ a.status }}" data-name="{{ a.patient.name }}" data-doctor="{{ a.doctor_id }}" data-section="{{ a.section_id|default_if_none:'' }}" data-due="{{ a.due }}" data-fee="{{ a.fee }}" data-paid="{{ a.invoice.paid|default:0 }}" data-invoice="{{ a.invoice.id|default_if_none:'' }}" data-patient="{{ a.patient.id }}" data-file="{{ a.patient.file_no }}" data-phone="{{ a.patient.phone|default:'' }}" data-earlier="{{ a.earlier|default:0 }}" data-day="{{ a.day }}" data-queue="{{ a.queue_no }}">
+  {# A visit with a booked time shows its time; only a queue visit with no time shows its turn (Saged, 2026-11-13). #}
+  <div class="appt-time">{% if a.starts_at %}{{ a.starts_at|clock }}{% else %}{{ a.queue_no|num }}<small>{% translate "Turn" %}</small>{% endif %}</div>
   <div class="appt-body">
   <div class="appt-main">
     <div class="who"><span>{% if perms.view_patients %}<a href="/patients/{{ a.patient.id }}"><bdi dir="auto">{{ a.patient.name }}</bdi></a>{% else %}<bdi dir="auto">{{ a.patient.name }}</bdi>{% endif %}</span>{% if a.is_new %}<span class="pill new">{% translate "New" %}</span>{% endif %}{% if a.is_follow_up %}<span class="pill grey">{% translate "Follow-up" %}</span>{% endif %}{% if a.is_extra %}<span class="pill grey">{% translate "Extra" %}</span>{% endif %}</div>
     <div class="what"><bdi dir="auto">{{ a.service.name }}</bdi>{% if show_doctor %} · <bdi dir="auto">{{ g.name }}</bdi>{% endif %}{% if a.patient.phone %} · <a class="tel" href="tel:{{ a.patient.phone }}" aria-label="{% translate "Call" %} {{ a.patient.phone }}">{{ a.patient.phone|phone }}</a>{% with wa=a.patient.phone|whatsapp %}{% if wa %} · <a class="tel wa" href="https://wa.me/{{ wa }}" target="_blank" rel="noopener noreferrer">{% translate "WhatsApp" %}</a>{% endif %}{% endwith %}{% endif %} · {% translate "File" %} {{ a.patient.file_no|num }}</div>
-    {% if a.earlier > 0 %}<div class="earlier">{% translate "Owed from before:" %} {{ a.earlier|money }}</div>{% endif %}
+    {% if a.earlier > 0 %}<div class="earlier">{% translate "From earlier visits:" %} {{ a.earlier|money }}</div>{% endif %}
   </div>
   <div class="appt-side">
-    {% include "web/_status_pill.html" with status=a.status arrived_at=a.arrived_at %}
-    {% if perms.collect and a.status != "cancelled" and a.status != "no_show" %}{% if a.due > 0 %}<span class="pill amber"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Owes" %} {{ a.due|money }}</span>{% elif a.invoice and a.invoice.paid > 0 %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "Paid" %}</span>{% endif %}{% endif %}
+    {% include "web/_status_pill.html" with status=a.status arrived_at=a.arrived_at wait=a.wait %}
+    {% if perms.collect %}{% if a.due > 0 %}<span class="pill amber"><svg class="icon"><use href="#i-cash"/></svg>{% translate "To pay:" %} {{ a.due|money }}</span>{% elif a.invoice and a.invoice.paid > 0 %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "Paid" %}</span>{% endif %}{% endif %}
     <div class="appt-actions">
       {% if is_today and perms.queue %}
         {% if a.status == "booked" %}<button type="button" class="btn" data-act="arrive">{% translate "Arrived" %}</button>
@@ -17,18 +27,17 @@
         {% elif a.status == "in_room" %}<button type="button" class="btn" data-act="finish">{% translate "Finish visit" %}</button>{% endif %}
       {% endif %}
       {% if a.dental and a.status == "in_room" %}<a class="btn ghost" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
-      {% if perms.collect and a.due > 0 and a.status != "cancelled" and a.status != "no_show" %}<button type="button" class="btn{% if a.status != 'done' %} ghost{% endif %}" data-act="pay">{% translate "Collect" %}</button>{% endif %}
+      {% if perms.collect and a.due > 0 %}<button type="button" class="btn{% if a.status != 'done' %} ghost{% endif %}" data-act="pay">{% translate "Collect" %}</button>{% endif %}
       <details class="menu more">
         <summary aria-label="{% translate "More actions" %}" title="{% translate "More actions" %}"><svg class="icon"><use href="#i-more"/></svg></summary>
         <div class="menu-panel">
-          {% if a.dental and a.status != "cancelled" %}<a class="menu-item" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
+          {% if a.dental %}<a class="menu-item" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
           {% if perms.view_patients %}<a class="menu-item" href="/patients/{{ a.patient.id }}">{% translate "Patient file" %}</a>{% endif %}
-          {% if perms.book and a.status != "booked" and a.status != "cancelled" %}<button type="button" class="menu-item" data-act="next">{% translate "Book the next visit" %}</button>{% endif %}
-          {% if perms.collect and a.status != "cancelled" %}<button type="button" class="menu-item" data-act="invoice">{% translate "Bill and payments" %}</button>{% endif %}
+          {% if perms.book and a.status != "booked" %}<button type="button" class="menu-item" data-act="next">{% translate "Book the next visit" %}</button>{% endif %}
+          {% if perms.collect %}<button type="button" class="menu-item" data-act="invoice">{% translate "Bill and payments" %}</button>{% endif %}
           {% if perms.view_patients and a.invoice and a.invoice.paid > 0 %}<button type="button" class="menu-item" data-act="receipt">{% translate "Print receipt" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "waiting" and features.undo_arrive %}<button type="button" class="menu-item" data-act="undo-arrive">{% translate "Undo arrival" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "in_room" and features.undo_call %}<button type="button" class="menu-item" data-act="undo-call">{% translate "Undo call in" %}</button>{% endif %}
-          {% if is_today and perms.queue and a.status == "no_show" and not a.auto_closed %}<button type="button" class="menu-item" data-act="undo-no-show">{% translate "Undo: didn't come" %}</button>{% endif %}
           {% if perms.book and a.status == "booked" %}<button type="button" class="menu-item" data-act="reschedule">{% translate "Change the time" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "booked" %}<button type="button" class="menu-item" data-act="no-show" data-after="{{ a.starts_at|default:'' }}"{% if not a.started %} hidden{% endif %}>{% translate "Didn't come" %}</button>{% endif %}
           {% if perms.book and a.status == "booked" %}<button type="button" class="menu-item danger" data-act="cancel">{% translate "Cancel booking" %}</button>{% endif %}
@@ -37,4 +46,4 @@
     </div>
   </div>
   </div>
-</li>{% endspaceless %}
+</li>{% endif %}{% endspaceless %}

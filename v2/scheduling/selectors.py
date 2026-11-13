@@ -25,6 +25,7 @@ STATUS_KEYS = ("booked", "waiting", "with_assistant", "ready", "in_room", "done"
 ROW_SQL = """
     SELECT a.id, a.day, a.queue_no, a.status, a.starts_at, a.ends_at, a.is_extra, a.source, a.fee, a.is_follow_up,
            a.is_new, a.auto_closed, a.note, a.arrived_at, a.with_assistant_at, a.ready_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
+           a.created_at,
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name, s.name_en AS service_name_en,
            i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid
@@ -70,6 +71,7 @@ def payload(clinic, r):
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
         "timings": timings(r),
         "cancelled_at": _iso(clinic, r["cancelled_at"]), "cancel_reason": r["cancel_reason"],
+        "created_at": _iso(clinic, r.get("created_at")),
         "doctor_id": r["doctor_id"], "section_id": r["section_id"],
         "patient": {"id": r["patient_id"], "name": r["patient_name"], "phone": r["patient_phone"],
                     "file_no": r["patient_file_no"]},
@@ -235,7 +237,7 @@ def today_data(ctx, day, state, section_id=None):
         "day": day.isoformat(), "version": state["version"], "server_time": local_iso(clinic, now),
         "business_day": business_day(clinic, now).isoformat(), "next_rollover": local_iso(clinic, next_rollover(clinic, now)),
         "kind": clinic.kind, "sections": sections, "section_id": section_id,
-        "queues": queues, "recent": _recent(appointments), "low_stock": low_stock,
+        "queues": queues, "recent": _recent(appointments, clinic, day), "low_stock": low_stock,
         # A doctor's screens open on their own queue; own_only: no other doctor's visits are in it.
         "my_doctor_id": ctx.membership_id if ctx.membership.role in ("owner", "doctor") else None,
         "own_only": own_queue is not None,
@@ -247,10 +249,20 @@ def today_data(ctx, day, state, section_id=None):
     return body
 
 
-def _recent(appointments, size=10):
-    """The last changes, worked out from the fetched rows."""
+def _recent(appointments, clinic=None, day=None, size=10):
+    """The last changes, worked out from the fetched rows.
+
+    A booking made on the day itself is a "booked" event with its time (never "arrived"); one booked as the
+    patient arrived (a walk-in, "here now") shows only its arrival.
+    """
     events = []
     for a in appointments:
+        created = a.get("created_at")
+        if created and clinic is not None:
+            made = dt.datetime.fromisoformat(created)
+            arrived = dt.datetime.fromisoformat(a["arrived_at"]) if a["arrived_at"] else None
+            if business_day(clinic, made) == day and not (arrived and (arrived - made).total_seconds() < 5):
+                events.append((created, "booked", a))
         for field, action in (("arrived_at", "arrived"), ("with_assistant_at", "with_assistant"), ("ready_at", "ready"),
                               ("called_at", "called"), ("finished_at", "finished"),
                               ("cancelled_at", "cancelled")):
@@ -258,6 +270,7 @@ def _recent(appointments, size=10):
                 events.append((a[field], action, a))
     events.sort(key=lambda e: e[0], reverse=True)
     return [{"at": at, "action": action, "appointment_id": a["id"], "queue_no": a["queue_no"],
+             "starts_at": a["starts_at"], "day": a["day"],
              "doctor_id": a["doctor_id"], "section_id": a["section_id"], "patient_name": a["patient"]["name"]}
             for at, action, a in events[:size]]
 
@@ -278,13 +291,21 @@ def patient_visits(ctx, patient_id, size, after):
     return paging.page(items, size, lambda a: paging.encode_day(dt.date.fromisoformat(a["day"]), a["id"]))
 
 
-def slots(ctx, doctor_id, day, section_id=None):
-    """The doctor's slot grid that day (in one section, if given) with what is taken, and the day's limit."""
+def _check_section(ctx, section_id):
     scope = rules.section_scope(ctx)
     if section_id is not None and ((scope is not None and section_id not in scope) or not sql.row(
             ctx, 'SELECT 1 FROM "clinics_section" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, section_id])):
         raise rules.not_found("section")
+
+
+def slots(ctx, doctor_id, day, section_id=None):
+    """The doctor's bookable times that day (in one section, if given) with what is taken, and the day's limit.
+
+    `passed`: the time has ended by the server's clock (the browser never works out "now").
+    """
+    _check_section(ctx, section_id)
     doctor = rules.doctor_day(ctx, doctor_id, day)
+    now = timezone.now()
     taken = {r[0] for r in sql.rows(ctx, 'SELECT starts_at FROM "scheduling_appointment" '
                                          "WHERE clinic_id = %s AND day = %s AND doctor_id = %s AND holds_slot",
                                     [ctx.clinic_id, day, doctor_id])}
@@ -292,9 +313,70 @@ def slots(ctx, doctor_id, day, section_id=None):
     return {
         "doctor_id": doctor_id, "day": day.isoformat(), "section_id": section_id,
         "queue": doctor.has_queue(section_id), "max_bookings": doctor.cap,
-        "slots": [{"starts_at": local_iso(clinic, start), "ends_at": local_iso(clinic, end), "taken": start in taken}
+        "slots": [{"starts_at": local_iso(clinic, start), "ends_at": local_iso(clinic, end), "taken": start in taken,
+                   "passed": end <= now}
                   for start, end in rules.grid(clinic, day, doctor, section_id)],
     }
+
+
+MONTH_SQL = """
+    SELECT m.id, m.role, m.is_active, m.display_name, s.weekday, s.starts, s.ends, s.mode, s.slot_minutes,
+           s.max_bookings, s.section_id
+      FROM "clinics_membership" m
+      LEFT JOIN "clinics_schedule" s ON s.clinic_id = m.clinic_id AND s.doctor_id = m.id
+     WHERE m.clinic_id = %s AND m.id = %s
+     ORDER BY s.weekday, s.starts"""
+
+
+def month(ctx, doctor_id, first, section_id=None):
+    """The Book calendar's hints for one month: per day, whether the doctor works and how many times are free.
+
+    Two statements: the doctor's sessions on every weekday, and the month's bookings (index appointment_turn_uniq,
+    clinic and day range). Days before today or past the booking horizon are not bookable.
+    """
+    import calendar
+
+    _check_section(ctx, section_id)
+    clinic = ctx.clinic
+    rows = sql.rows(ctx, MONTH_SQL, [ctx.clinic_id, doctor_id])
+    first_row = rows[0] if rows else None
+    if first_row is None or not first_row[2] or first_row[1] not in ("owner", "doctor"):
+        raise rules.not_found("doctor")
+    by_weekday = {}
+    for r in rows:
+        if r[4] is not None:
+            by_weekday.setdefault(r[4], []).append(rules.Session(r[5], r[6], r[7], r[8], r[9], r[10], r[4]))
+    last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+    taken, active = {}, {}
+    for day, starts_at, holds, counts in sql.rows(ctx, """
+            SELECT day, starts_at, holds_slot, status NOT IN ('cancelled', 'no_show')
+              FROM "scheduling_appointment"
+             WHERE clinic_id = %s AND day BETWEEN %s AND %s AND doctor_id = %s""",
+                                                  [ctx.clinic_id, first, last, doctor_id]):
+        if holds:
+            taken.setdefault(day, set()).add(starts_at)
+        if counts:
+            active[day] = active.get(day, 0) + 1
+    today = business_day(clinic)
+    horizon = today + dt.timedelta(days=rules.BOOKING_HORIZON_DAYS)
+    now = timezone.now()
+    days = []
+    day = first
+    while day <= last:
+        doctor = rules.DoctorDay(doctor_id, "", by_weekday.get(day.weekday(), []))
+        works = bool(doctor.sessions_in(section_id)) and today <= day <= horizon
+        entry = {"day": day.isoformat(), "works": works}
+        if works:
+            times = [(start, end) for start, end in rules.grid(clinic, day, doctor, section_id) if end > now]
+            free = sum(1 for start, _end in times if start not in taken.get(day, ()))
+            cap = doctor.cap
+            full = (bool(times) and free == 0 and not doctor.has_queue(section_id)) or (
+                cap is not None and active.get(day, 0) >= cap)
+            entry.update({"free": 0 if full else free, "full": full})
+        days.append(entry)
+        day += dt.timedelta(days=1)
+    return {"doctor_id": doctor_id, "month": first.strftime("%Y-%m"), "section_id": section_id,
+            "today": today.isoformat(), "days": days}
 
 
 def quote(ctx, doctor_id, service_id, day, patient_id=None):

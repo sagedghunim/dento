@@ -134,7 +134,8 @@ def chart_context(ctx, patient, visit=None):
     open_items = [{"id": i["id"], "plan_id": p["id"], "tooth": i["tooth"], "procedure_id": i["procedure_id"],
                    "status": i["status"], "price": i["price"], "name": names.get(i["procedure_id"])
                    or (i["name_en"] if english and i["name_en"] else i["name_ar"])}
-                  for p in patient_plans for i in p["items"] if i["status"] in ("planned", "in_progress")]
+                  for p in patient_plans for i in p["items"]
+                  if i["status"] in ("planned", "in_progress") and i["procedure_id"] and not i["due_on"]]  # no follow-ups
     can_record = perms["record"] and visit is not None and visit["status"] in OPEN_VISIT
     config = {
         "patient_id": patient["id"], "appointment_id": visit["id"] if visit else None, "section_id": section_id,

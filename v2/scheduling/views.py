@@ -123,6 +123,23 @@ def slots_view(request, ctx, data, doctor_id):
     return selectors.slots(ctx, doctor_id, day, validate.ident(section, "section") if section else None)
 
 
+@api("GET", perm="appointments.book")
+def month_view(request, ctx, data, doctor_id):
+    """GET /doctors/{id}/month?month=YYYY-MM[&section=]: the Book calendar's working days and free times."""
+    import datetime as dt
+
+    doctor_id = validate.path_id(doctor_id, rules.not_found("doctor"))
+    raw = request.GET.get("month") or ""
+    try:
+        first = dt.date.fromisoformat(raw + "-01") if len(raw) == 7 else None
+    except ValueError:
+        first = None
+    if first is None or not validate.DAY_MIN <= first <= validate.DAY_MAX:
+        raise ApiError("invalid", "month must be YYYY-MM", fields={"month": "invalid"})
+    section = request.GET.get("section")
+    return selectors.month(ctx, doctor_id, first, validate.ident(section, "section") if section else None)
+
+
 # --- Status changes ------------------------------------------------------------------------------------------
 
 

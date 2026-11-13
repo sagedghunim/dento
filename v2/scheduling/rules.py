@@ -152,22 +152,30 @@ def require_working(doctor, section_id=None):
                        fields={"doctor_id": "wrong_section"})
 
 
-def grid(clinic, day, doctor, section_id=None):
-    """Every slot of the doctor's slot sessions that business day (in one section, if given), as (starts, ends) in UTC.
+def step_minutes(clinic, session):
+    """A session's booking step: its own slot length in slots mode, else the clinic's booking step (default 60)."""
+    if session.mode == "slots" and session.slot_minutes:
+        return session.slot_minutes
+    return clinic_settings.effective(clinic.settings)["booking_step_minutes"]
 
+
+def grid(clinic, day, doctor, section_id=None):
+    """Every bookable time of the doctor's sessions that business day (in one section, if given), as (starts, ends) in UTC.
+
+    Slot sessions step by their slot length; queue sessions offer times too, at the clinic's booking step
+    (Saged, 2026-11-13), and still take bookings with no time ("next turn") and walk-ins. A timed booking
+    holds its time in either mode (holds_slot), so the same constraints refuse a double booking.
     A session that starts before the clinic's day end (after midnight) is on the next calendar
     day. Slots step in real minutes, so a clock change inside a session can't make a slot twice.
     """
     tz = zone(clinic)
     slots = []
     for session in doctor.sessions_in(section_id):
-        if session.mode != "slots" or not session.slot_minutes:
-            continue
         start_date = day if session.starts >= clinic.day_ends_at else day + dt.timedelta(days=1)
         end_date = start_date if session.ends > session.starts else start_date + dt.timedelta(days=1)
         start = dt.datetime.combine(start_date, session.starts, tzinfo=tz).astimezone(dt.UTC)
         end = dt.datetime.combine(end_date, session.ends, tzinfo=tz).astimezone(dt.UTC)
-        step = dt.timedelta(minutes=session.slot_minutes)
+        step = dt.timedelta(minutes=step_minutes(clinic, session))
         at = start
         while at + step <= end:
             slots.append((at, at + step))

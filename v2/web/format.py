@@ -138,3 +138,28 @@ def day(value, with_weekday=True, with_year=True):
 
 def age(years):
     return "" if years is None else digits(years)
+
+
+WAIT_CAP_MINUTES = 240
+
+
+def wait_text(minutes):
+    """How long a patient has waited: "25 min", "1 h 20 min", "over 4 h".
+
+    web/static/js/today.js keeps it ticking with the same strings (in _strings.html), so the placeholders
+    are {h} and {m}, as the scripts use.
+    """
+    minutes = max(0, int(minutes))
+    hours, rest = divmod(minutes, 60)
+    if minutes >= WAIT_CAP_MINUTES:
+        text = _("over {h} h")
+        hours = WAIT_CAP_MINUTES // 60
+    elif minutes < 1:
+        text = _("under a minute")
+    elif not hours:
+        text = _("{m} min")
+    elif hours == 1:
+        text = _("1 h {m} min") if rest else _("1 h")
+    else:
+        text = _("{h} h {m} min") if rest else _("{h} h")
+    return text.replace("{h}", digits(hours)).replace("{m}", digits(rest))

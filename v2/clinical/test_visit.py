@@ -220,7 +220,8 @@ class RecordProcedureTests(M2TestCase):
 
     def test_bad_teeth_and_surfaces_are_400(self):
         crown = self.procedure("Zirconia crown")
-        for body, field in (({"procedure_id": self.filling["id"]}, "tooth"),
+        # No tooth at all is fine (Saged, 2026-11-13: one tap on the visit screen); a wrong one is not.
+        for body, field in (({"procedure_id": self.filling["id"], "surfaces": ["O"]}, "tooth"),
                             ({"procedure_id": self.filling["id"], "tooth": 19}, "tooth"),
                             ({"procedure_id": self.filling["id"], "tooth": 86}, "tooth"),
                             ({"procedure_id": self.filling["id"], "tooth": 36, "surfaces": ["X"]}, "surfaces"),

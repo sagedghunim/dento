@@ -21,6 +21,7 @@ class Section:
 
 SECTIONS = (
     Section("today", _("Today"), "/", ("appointments.book", "appointments.queue"), True),
+    Section("followups", _("Follow-ups"), "/follow-ups", ("appointments.book",), True),                    # plans
     Section("overview", _("Overview"), "/overview", ("reports.view",), True),                              # M3
     Section("patients", _("Patients"), "/patients", ("patients.view",), True),
     Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True),        # M3

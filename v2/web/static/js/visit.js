@@ -143,7 +143,7 @@ export function initVisitDialogs({ onChanged } = {}) {
     if (!moving.unknown) {
       if (!body.doctor_id || !body.day) { moving.say(t("need_doctor")); return; }
       if (when.slot()) { body.starts_at = when.slot(); body.extra = when.isExtra(); }
-      else if (when.needsTime()) { moving.say(t("need_time")); return; }
+      else if (when.needsTime() && !when.picked()) { moving.say(t("need_time")); return; }
     }
     const result = await moving.run("POST", `/api/v1/appointments/${visit.id}/reschedule`, body, `${t("move")} · ${visit.name}`);
     await done(moveDialog, moving, result, t("moved", { name: visit.name }));
@@ -182,8 +182,9 @@ export function initVisitDialogs({ onChanged } = {}) {
       moveForm.reset();
       moving.reset();
       named(moveDialog, v.name);
+      when.reset();
       when.setDoctor(v.doctorId);
-      when.setDay(v.day);
+      when.setDay(v.day < when.today ? when.today : v.day);
       openDialog(moveDialog, opener);
       when.refresh();
     },

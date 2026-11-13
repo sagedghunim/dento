@@ -586,9 +586,6 @@ msgstr "أونلاين"
 msgid "WhatsApp"
 msgstr "واتساب"
 
-msgid "Tomorrow"
-msgstr "غدًا"
-
 msgid "Medical center"
 msgstr "مركز طبي"
 
@@ -865,7 +862,7 @@ msgid "Extra"
 msgstr "إضافي"
 
 msgid "Booked"
-msgstr "محجوز"
+msgstr "حاجز"
 
 msgid "Waiting"
 msgstr "في الانتظار"
@@ -1101,9 +1098,6 @@ msgstr "الفاتورة"
 
 msgid "Day"
 msgstr "اليوم"
-
-msgid "Another day"
-msgstr "يوم آخر"
 
 msgid "Date"
 msgstr "التاريخ"
@@ -2606,9 +2600,6 @@ msgstr "%(percent)s٪ من إيراده"
 msgid "salary %(amount)s a month"
 msgstr "مرتب %(amount)s في الشهر"
 
-msgid "Add the expense"
-msgstr "أضف المصروف"
-
 msgid "Bank transfer"
 msgstr "تحويل بنكي"
 
@@ -2624,23 +2615,11 @@ msgstr "حسب القسم"
 msgid "Cash comes out of the register's drawer."
 msgstr "النقدية تُخصم من درج الخزنة."
 
-msgid "Cash in"
-msgstr "إيداع نقدية"
-
-msgid "Cash in and out"
-msgstr "الإيداع والسحب"
-
-msgid "Cash in and out in this shift"
-msgstr "الإيداع والسحب في هذه الوردية"
-
 msgid "Cash in the drawer now (EGP)"
 msgstr "النقدية في الدرج الآن (ج.م)"
 
 msgid "Cash in: {amount}"
 msgstr "إيداع نقدية: {amount}"
-
-msgid "Cash out"
-msgstr "سحب نقدية"
 
 msgid "Cash out: {amount}"
 msgstr "سحب نقدية: {amount}"
@@ -2705,9 +2684,6 @@ msgstr "المستحق"
 msgid "Edit pay"
 msgstr "تعديل الأجر"
 
-msgid "Electricity bill, lab of patient…"
-msgstr "فاتورة كهرباء، معمل مريض…"
-
 msgid "Expected in the drawer"
 msgstr "المفروض في الدرج"
 
@@ -2767,9 +2743,6 @@ msgstr "كشف الشهر"
 
 msgid "New category"
 msgstr "فئة جديدة"
-
-msgid "New expense"
-msgstr "مصروف جديد"
 
 msgid "Next month"
 msgstr "الشهر التالي"
@@ -3237,9 +3210,6 @@ msgstr "جاهز للطبيب:"
 msgid "Add at least one medicine."
 msgstr "أضف دواء واحد على الأقل."
 
-msgid "Add procedure"
-msgstr "إضافة إجراء"
-
 msgid "Allergies:"
 msgstr "حساسية:"
 
@@ -3258,17 +3228,11 @@ msgstr "إنهاء الكشف لم يتأكد بعد. اضغط «حاول مرة
 msgid "First visit"
 msgstr "أول زيارة"
 
-msgid "For example: filling 36, cleaning"
-msgstr "مثلًا: حشو 36، تنظيف"
-
 msgid "In the room"
 msgstr "في الكشف"
 
 msgid "Newest first, with the doctor's notes."
 msgstr "الأحدث أولًا، مع ملاحظات الطبيب."
-
-msgid "No procedures yet."
-msgstr "لا توجد إجراءات بعد."
 
 msgid "Notes (optional)"
 msgstr "ملاحظات (اختياري)"
@@ -3287,9 +3251,6 @@ msgstr "تم حفظ الروشتة {n}"
 
 msgid "Procedure added: {name}"
 msgstr "تمت إضافة الإجراء: {name}"
-
-msgid "Procedures this visit"
-msgstr "إجراءات هذه الزيارة"
 
 msgid "Returning"
 msgstr "متابع"
@@ -3329,3 +3290,278 @@ msgstr "كتابة روشتة"
 
 msgid "Done with this visit"
 msgstr "خلص الكشف"
+
+msgid "Write what this money was for."
+msgstr "اكتب سبب صرف هذا المبلغ."
+
+msgid "Other cash in"
+msgstr "إيداع آخر في الخزنة"
+
+msgid "Other cash out"
+msgstr "سحب آخر من الخزنة"
+
+msgid "Pay an expense"
+msgstr "دفع مصروف"
+
+msgid "Other drawer movement"
+msgstr "حركة أخرى للخزنة"
+
+msgid "Drawer movements in this shift"
+msgstr "حركة الخزنة في هذه الوردية"
+
+msgid "Drawer movements"
+msgstr "حركة الخزنة"
+
+msgid ""
+"Only for cash that isn't a patient's payment or an expense, such as change "
+"the owner adds to the drawer."
+msgstr ""
+"فقط للنقدية التي ليست دفعة من مريض ولا مصروفًا، مثل فكة يضيفها المالك إلى "
+"الخزنة."
+
+msgid "What for"
+msgstr "البند"
+
+msgid "What was it for? (required for Other)"
+msgstr "السبب (مطلوب مع «أخرى»)"
+
+msgid "From earlier visits:"
+msgstr "متبقي من زيارات سابقة:"
+
+msgid "To pay:"
+msgstr "مطلوب:"
+
+msgid "Booked:"
+msgstr "حاجزين:"
+
+msgid "Booked, not here yet"
+msgstr "حاجزين، لم يصلوا بعد"
+
+msgid "New booking:"
+msgstr "حجز:"
+
+msgid "next turn, no time"
+msgstr "بالدور، بدون موعد"
+
+msgid "under a minute"
+msgstr "أقل من دقيقة"
+
+msgid "{m} min"
+msgstr "{m} د"
+
+msgid "1 h"
+msgstr "ساعة"
+
+msgid "1 h {m} min"
+msgstr "ساعة و{m} د"
+
+msgid "{h} h"
+msgstr "{h} ساعات"
+
+msgid "{h} h {m} min"
+msgstr "{h} س و{m} د"
+
+msgid "over {h} h"
+msgstr "أكثر من {h} ساعات"
+
+msgid "Booked: {name}, {day} at {time}"
+msgstr "تم الحجز: {name}، {day} الساعة {time}"
+
+msgid "Booked: {name}, {day}, turn {n}"
+msgstr "تم الحجز: {name}، {day}، الدور {n}"
+
+msgid "passed"
+msgstr "فات"
+
+msgid "{n} free"
+msgstr "{n} متاح"
+
+msgid "Full"
+msgstr "كامل"
+
+msgid "The doctor doesn't work this day"
+msgstr "الدكتور لا يعمل هذا اليوم"
+
+msgid "Day: {day}"
+msgstr "اليوم: {day}"
+
+msgid "Done today"
+msgstr "اللي اتعمل النهارده"
+
+msgid "Another procedure"
+msgstr "إجراء تاني"
+
+msgid "Type part of its name"
+msgstr "اكتب جزء من اسمه"
+
+msgid "Tooth number (optional)"
+msgstr "رقم السن (اختياري)"
+
+msgid "Record"
+msgstr "سجّل"
+
+msgid "Cancel"
+msgstr "إلغاء"
+
+msgid "What comes next"
+msgstr "الجاي"
+
+msgid "The desk books these when the visit is finished."
+msgstr "الاستقبال بيحجزها أول ما الكشف يخلص."
+
+msgid "Nothing planned yet."
+msgstr "مفيش حاجة جاية لسه."
+
+msgid "What"
+msgstr "إيه"
+
+msgid "Follow-up visit"
+msgstr "متابعة"
+
+msgid "Continue the treatment"
+msgstr "استكمال العلاج"
+
+msgid "Something else (optional)"
+msgstr "حاجة تانية (اختياري)"
+
+msgid "When: one tap adds it"
+msgstr "إمتى: ضغطة واحدة تضيفها"
+
+msgid "In 2 days"
+msgstr "بعد يومين"
+
+msgid "In a week"
+msgstr "بعد أسبوع"
+
+msgid "In 2 weeks"
+msgstr "بعد أسبوعين"
+
+msgid "In a month"
+msgstr "بعد شهر"
+
+msgid "In {n} days"
+msgstr "بعد {n} يوم"
+
+msgid "In {n} weeks"
+msgstr "بعد {n} أسابيع"
+
+msgid "In {n} months"
+msgstr "بعد {n} شهور"
+
+msgid "Complaint, exam, what was done, what comes next…"
+msgstr "الشكوى، الفحص، اللي اتعمل، الجاي…"
+
+msgid "No procedure matches."
+msgstr "مفيش إجراء بالاسم ده."
+
+msgid "Follow-ups"
+msgstr "المتابعات"
+
+msgid "One session"
+msgstr "جلسة واحدة"
+
+msgid "Two sessions"
+msgstr "جلستين"
+
+msgid "{n} sessions"
+msgstr "{n} جلسات"
+
+msgid "{a} and {b}"
+msgstr "{a} و{b}"
+
+msgid "{name}: {count}, {when}. Add them?"
+msgstr "{name}: {count}، {when}. أضيف؟"
+
+msgid "Add them"
+msgstr "أضيف"
+
+msgid "Added to what comes next."
+msgstr "اتضافت للجاي."
+
+msgid "Booked for"
+msgstr "محجوز"
+
+msgid "Change when"
+msgstr "غيّر الميعاد"
+
+msgid "Later"
+msgstr "بعدين"
+
+msgid "{name}: put off for a week."
+msgstr "{name}: اتأجلت أسبوع."
+
+msgid "Follow-ups after a procedure"
+msgstr "المتابعات بعد كل إجراء"
+
+msgid ""
+"The sessions the doctor is offered to add after recording a procedure. "
+"Change them, turn them off, or add them to another procedure."
+msgstr ""
+"الجلسات اللي بتتعرض على الدكتور بعد ما يسجّل الإجراء. عدّلها، اقفلها، أو "
+"زوّدها لإجراء تاني."
+
+msgid "Find a procedure"
+msgstr "دوّر على إجراء"
+
+msgid "Add a session"
+msgstr "زوّد جلسة"
+
+msgid "No follow-ups"
+msgstr "من غير متابعات"
+
+msgid "No follow-ups."
+msgstr "مفيش متابعات."
+
+msgid "Add follow-ups"
+msgstr "زوّد متابعات"
+
+msgid "Session"
+msgstr "الجلسة"
+
+msgid "Days after"
+msgstr "بعد كام يوم"
+
+msgid "A follow-up recipe has up to 6 sessions."
+msgstr "أقصى عدد ٦ جلسات متابعة للإجراء."
+
+msgid "Each session needs a name and 1 to 730 days."
+msgstr "كل جلسة محتاجة اسم وعدد أيام من ١ لـ ٧٣٠."
+
+msgid "Follow-ups saved: {name}"
+msgstr "اتحفظت المتابعات: {name}"
+
+msgid "Patients whose doctor asked for another visit that isn't booked yet."
+msgstr "مرضى الدكتور طلب لهم زيارة تانية ولسه ما اتحجزتش."
+
+msgid "Overdue"
+msgstr "متأخرة"
+
+msgid "Further ahead"
+msgstr "قدّام"
+
+msgid "No more follow-ups."
+msgstr "مفيش متابعات تانية."
+
+msgid "No follow-ups are waiting to be booked."
+msgstr "مفيش متابعات مستنية حجز."
+
+msgid "Back to the start"
+msgstr "ارجع للأول"
+
+msgid "The price comes from the clinic's price list."
+msgstr "السعر من قائمة أسعار العيادة."
+
+msgid "Pick what comes next and when."
+msgstr "اختار إيه الجاي وإمتى."
+
+msgid "Follow-ups are added in a visit that has arrived."
+msgstr "المتابعات بتتضاف في كشف المريض حضره."
+
+msgid "This procedure has no follow-up sessions."
+msgstr "الإجراء ده مالوش جلسات متابعة."
+
+msgid "This follow-up was already booked or closed."
+msgstr "المتابعة دي اتحجزت أو اتقفلت خلاص."
+
+msgid "This appointment is for another patient."
+msgstr "الحجز ده لمريض تاني."

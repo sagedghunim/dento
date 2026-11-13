@@ -219,3 +219,27 @@ DESCRIPTIONS = {
     "In-office laser whitening": "تبييض الأسنان في العيادة بالجل والليزر في جلسة واحدة.",
     "Home whitening with trays": "قوالب مفصّلة وجل تبييض يستخدمه المريض في البيت.",
 }
+
+# Follow-up recipes (Saged, 2026-11-13): procedure (English name) -> [(days after, Arabic label, English label)].
+# Offered in the visit when the procedure is recorded; the clinic edits, turns off or adds them in its settings.
+_RCT = [(7, "جلسة عصب تانية", "Root canal, 2nd session"), (14, "جلسة عصب تالتة", "Root canal, 3rd session")]
+_WHITENING = [(2, "متابعة تبييض", "Whitening check"), (7, "متابعة تبييض", "Whitening check")]
+_ORTHO = [(30, "شد تقويم", "Braces adjustment")]
+_EXTRACTION = [(7, "متابعة بعد الخلع", "Check after the extraction")]
+FOLLOW_UPS = {
+    "Root canal treatment, one canal": _RCT,
+    "Root canal treatment, two canals": _RCT,
+    "Root canal treatment, molar": _RCT,
+    "Root canal retreatment": _RCT,
+    "Pulp opening and dressing": [(7, "استكمال علاج العصب", "Continue the root canal")],
+    "In-office laser whitening": _WHITENING,
+    "Home whitening with trays": _WHITENING,
+    "Metal braces, full case": _ORTHO,
+    "Ceramic braces, full case": _ORTHO,
+    "Monthly orthodontic adjustment": _ORTHO,
+    "Implant fixture": [(7, "متابعة الجرح", "Wound check"), (90, "تركيب التاج على الزرعة", "Implant crown fitting")],
+    "Simple extraction": _EXTRACTION,
+    "Surgical extraction": _EXTRACTION,
+    "Impacted wisdom tooth removal": _EXTRACTION,
+    "Scaling and polishing": [(180, "تنظيف دوري", "Routine cleaning")],
+}

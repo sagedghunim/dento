@@ -121,7 +121,8 @@ def _open_visit(appointment):
 # --- Copying a specialty into a section (design E4) ------------------------------------------------------------
 
 
-ENGLISH_COLUMNS = {"clinical_procedure": {"description_en"},
+# Columns added after clinical 0002 (design G3, then the follow-up recipe): that older migration skips them.
+ENGLISH_COLUMNS = {"clinical_procedure": {"description_en", "follow_up"},
                    "clinical_medicine": {"form_en", "default_dose_en", "default_note_en"},
                    "clinical_prescription_template": {"name_en", "notes_en"}}
 
@@ -186,7 +187,8 @@ def copy_specialty(clinic_id, section, language="ar"):
         Procedure(clinic_id=clinic_id, section_id=section.id, name_ar=p["name_ar"], name_en=p["name_en"],
                   category=p["category"], unit=p["unit"], price=p["price"], typical_min=p["typical_min"],
                   typical_max=p["typical_max"], description=p.get("description", ""),
-                  description_en=p.get("description_en", ""), condition=p["condition"], sort=sort)
+                  description_en=p.get("description_en", ""), condition=p["condition"],
+                  follow_up=p.get("follow_up", []), sort=sort)
         for sort, p in enumerate(spec["procedures"]) if p["name_ar"] not in have])
     have = set(Medicine.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)
                .values_list("name", "strength"))
@@ -664,7 +666,7 @@ def add_attachment(ctx, patient_id, appointment_id, title, upload):
 
 PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500, "description_en": 500}
 PROCEDURE_COLUMNS = ("id, section_id, name_ar, name_en, category, unit, price, typical_min, typical_max, description, "
-                     "internal_cost, condition, is_active, sort, description_en")
+                     "internal_cost, condition, is_active, sort, description_en, follow_up")
 
 
 def procedure_row(values):
@@ -672,6 +674,10 @@ def procedure_row(values):
     from core.i18n import pick
 
     row = dict(zip([c.strip() for c in PROCEDURE_COLUMNS.split(",")], values))
+    if isinstance(row["follow_up"], str):  # a raw cursor hands jsonb over as text
+        import json
+
+        row["follow_up"] = json.loads(row["follow_up"])
     row["name"] = pick(row["name_ar"], row["name_en"])
     row["description_ar"] = row["description"]
     row["description"] = pick(row["description_ar"], row["description_en"])
@@ -699,7 +705,21 @@ def clean_procedure(data, partial=False):
         if not isinstance(data["is_active"], bool):
             raise ApiError("invalid", "is_active must be true or false", fields={"is_active": "boolean"})
         values["is_active"] = data["is_active"]
+    if "follow_up" in data:
+        from psycopg.types.json import Jsonb
+
+        from .followups import clean_recipe
+
+        values["follow_up"] = Jsonb(clean_recipe(data["follow_up"]))
     return values
+
+
+def price_locked(ctx):
+    """A doctor records at the clinic's list price (Saged, 2026-11-13): never another price, whatever was granted.
+    The desk and the owner may still change it under billing.discount."""
+    if ctx.membership is not None and ctx.membership.role == "doctor":
+        raise ApiError("price_locked", _("The price comes from the clinic's price list."), 403,
+                       fields={"unit_price": "locked"})
 
 
 def _check_range(row):
@@ -717,12 +737,12 @@ def create_procedure(ctx, section, values):
     found = _savepoint_insert(ctx, f"""
         INSERT INTO "clinical_procedure" (clinic_id, section_id, name_ar, name_en, category, unit, price, typical_min,
                                           typical_max, description, description_en, internal_cost, condition,
-                                          is_active, sort, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
+                                          is_active, sort, created_at, follow_up)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
         ctx.clinic_id, section["id"], values["name_ar"], values["name_en"], values["category"], values["unit"],
         values["price"], values["typical_min"], values["typical_max"], values["description"],
         values.get("description_en", ""), values["internal_cost"],
-        values["condition"], values.get("sort", 1000), timezone.now()],
+        values["condition"], values.get("sort", 1000), timezone.now(), values.get("follow_up", "[]")],
         {"procedure_active_name_uniq": _duplicate_procedure(),
          "procedure_typical_range_valid": ApiError("invalid", _("The typical range is upside down."),
                                                    fields={"typical_max": "range"})})
@@ -876,8 +896,7 @@ def record_procedure(ctx, appointment_id, request):
         if tooth is None:
             tooth = plan_item["tooth"]
         list_price = plan_item["price"]
-    if procedure["unit"] == "tooth" and tooth is None:
-        raise ApiError("invalid", _("Pick the tooth."), fields={"tooth": "required"})
+    # The tooth is optional (Saged, 2026-11-13): the visit screen records in one tap; the chart always names it.
     if surfaces and tooth is None:
         raise ApiError("invalid", _("Pick the tooth."), fields={"tooth": "required"})
     if surfaces and procedure["condition"] and procedure["condition"] not in SURFACE_CONDITIONS:
@@ -893,6 +912,7 @@ def record_procedure(ctx, appointment_id, request):
         unit_price = list_price if request["unit_price"] is None else request["unit_price"]
         from_list = unit_price == list_price
     if not from_list:
+        price_locked(ctx)
         ctx.require("billing.discount")
     description = procedure["name_ar"] + (f" - {tooth}" if tooth else "") + (f" ({''.join(surfaces)})" if surfaces else "")
     if package is not None:
@@ -984,6 +1004,7 @@ def clean_plan_items(ctx, items, section_id, name="items", low=1):
         if item["price"] is None:
             item["price"] = procedure["price"]
         elif item["price"] != procedure["price"]:
+            price_locked(ctx)
             ctx.require("billing.discount")  # a price not from the list, as on an invoice line
     return cleaned
 

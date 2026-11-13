@@ -116,7 +116,8 @@ class QueueOrderTests(M2TestCase):
         in_room = visit(arrive=True)
         self.act(in_room, "call", "waiting")
         html = fragment(self.desk).content.decode()
-        self.assertEqual(self.ids_in(html, "open"), [in_room, ready, waiting, owing, booked])
+        self.assertEqual(self.ids_in(html, "open"), [in_room, ready, waiting, owing])
+        self.assertEqual(self.ids_in(html, "booked"), [booked])  # never among the waiting (Saged, 2026-11-13)
         self.assertEqual(self.ids_in(html, "done"), [paid])
         self.assertIn('<span data-fold-count>1</span>', html)
         self.assertIn("خلصوا", html)
@@ -136,7 +137,7 @@ class EarlierBalanceTests(M2TestCase):
     def test_the_row_and_the_search_show_what_is_owed_from_before(self):
         html = fragment(self.desk).content.decode()
         self.assertIn(f'data-earlier="{self.fee}"', html)
-        self.assertIn("باقي من قبل", html)
+        self.assertIn("متبقي من زيارات سابقة", html)
         found = fragment(self.desk, "/patients/search?pick=1&q=Mohamed").content.decode()
         self.assertIn(f'data-owed="{self.fee}"', found)
 

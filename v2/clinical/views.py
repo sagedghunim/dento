@@ -484,7 +484,7 @@ def _replay_procedure(ctx, stored):
 
 
 PROCEDURE_CHANGES = [*services.PROCEDURE_TEXT, "unit", "condition", "price", "internal_cost", "typical_min",
-                     "typical_max", "sort", "is_active"]
+                     "typical_max", "sort", "is_active", "follow_up"]
 
 
 @api("POST", perm="settings.manage", replay=_replay_procedure)
@@ -509,3 +509,74 @@ def procedure_remove_view(request, ctx, data, procedure_id):
     procedure_id = _id(procedure_id, "procedure")
     procedure = services.update_procedure(ctx, procedure_id, {"is_active": False})
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)
+
+
+# --- Follow-ups (Saged, 2026-11-13) ----------------------------------------------------------------------------
+
+
+def _upcoming(ctx, patient_id):
+    from . import followups
+
+    return {"upcoming": followups.upcoming(ctx, patient_id)}
+
+
+def _replay_follow_ups(ctx, stored):
+    return _upcoming(ctx, services._appointment(ctx, stored["target_id"])["patient_id"])
+
+
+@api("POST", perm="procedures.record", replay=_replay_follow_ups)
+def follow_ups_add_view(request, ctx, data, appointment_id):
+    """POST {items: [{procedure_id | label, days}]} or {recipe_of: procedure id, tooth?}: what comes next, from this
+    visit. Answers the patient's upcoming follow-ups."""
+    from . import followups
+
+    appointment_id = _id(appointment_id, "appointment")
+    recipe_of = data.get("recipe_of")
+    patient_id = followups.add(
+        ctx, appointment_id, items=data.get("items"),
+        recipe_of=validate.ident(recipe_of, "recipe_of") if recipe_of is not None else None,
+        tooth=services.clean_tooth(data["tooth"]) if data.get("tooth") not in (None, "") else None)
+    return Result(_upcoming(ctx, patient_id), status=201, target_type="appointment", target_id=appointment_id)
+
+
+def _replay_follow_up(ctx, stored):
+    found = services.sql.row(ctx, 'SELECT p.patient_id FROM "clinical_plan_item" i JOIN "clinical_plan" p '
+                                  "ON p.clinic_id = i.clinic_id AND p.id = i.plan_id WHERE i.clinic_id = %s AND i.id = %s",
+                             [ctx.clinic_id, stored["target_id"]])
+    return _upcoming(ctx, found[0])
+
+
+@api("POST", perm="procedures.record", replay=_replay_follow_up)
+def follow_up_due_view(request, ctx, data, item_id):
+    """POST {days}: the suggested day, in days after the visit that suggested it."""
+    from . import followups
+
+    item_id = _id(item_id, "plan_item")
+    patient_id = followups.set_due(ctx, item_id, parse_int(data.get("days"), "days", 1, followups.MAX_DAYS))
+    return Result(_upcoming(ctx, patient_id), target_type="plan_item", target_id=item_id)
+
+
+@api("POST", perm="procedures.record", replay=_replay_follow_up)
+def follow_up_drop_view(request, ctx, data, item_id):
+    from . import followups
+
+    item_id = _id(item_id, "plan_item")
+    return Result(_upcoming(ctx, followups.drop(ctx, item_id)), target_type="plan_item", target_id=item_id)
+
+
+@api("POST", perm="appointments.book", replay=lambda ctx, stored: {"ok": True})
+def follow_ups_snooze_view(request, ctx, data):
+    """POST {item_ids}: the desk's "later": off the list for a week."""
+    from . import followups
+
+    followups.snooze(ctx, data.get("item_ids"))
+    return Result({"ok": True})
+
+
+@api("POST", perm="appointments.book", replay=lambda ctx, stored: {"ok": True})
+def follow_ups_booked_view(request, ctx, data):
+    """POST {item_ids, appointment_id}: these follow-ups were booked as this appointment."""
+    from . import followups
+
+    followups.link_booked(ctx, data.get("item_ids"), validate.ident(data.get("appointment_id"), "appointment_id"))
+    return Result({"ok": True})

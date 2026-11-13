@@ -111,7 +111,7 @@ class OverviewPageTests(OverviewCase):
         self.assertIn('data-ov="visits"', html)
         for marker in ('data-ov="revenue"', "/finances?tab=owed", "الربح", "الإيراد"):
             self.assertNotIn(marker, html, marker)
-        self.assertEqual(nav_links(html)[:2], ["/", "/overview"])
+        self.assertEqual(nav_links(html)[:3], ["/", "/follow-ups", "/overview"])
 
     def test_reports_without_a_queue_goes_home_to_the_overview(self):
         viewer = self.codes("assistant", granted=["reports.view"], revoked=["appointments.book", "appointments.queue"])

@@ -23,11 +23,10 @@
   {% endif %}
   {% endif %}
 
-  {% if perms.cash_moves or perms.shift %}
+  {% if perms.expenses or perms.shift %}
   <div class="shift-actions">
-    {% if perms.cash_moves %}
-    <button type="button" class="btn" data-cash="in"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Cash in" %}</button>
-    <button type="button" class="btn" data-cash="out"><svg class="icon"><use href="#i-minus"/></svg>{% translate "Cash out" %}</button>
+    {% if perms.expenses %}
+    <button type="button" class="btn" data-new-expense data-from-drawer><svg class="icon"><use href="#i-minus"/></svg>{% translate "Pay an expense" %}</button>
     {% endif %}
     {% if perms.shift %}
       {% if current %}<button type="button" class="btn ghost" data-close-shift data-expected-amount="{{ current.expected }}">{% translate "Close and count" %}</button>
@@ -35,13 +34,12 @@
     {% endif %}
   </div>
   {% endif %}
+  {% if perms.cash_moves %}<p class="quiet-link"><button type="button" class="link-btn" data-cash="in">{% translate "Other drawer movement" %}</button></p>{% endif %}
 
   {% if current and current.movements %}
-  <h3 class="sub-title">{% translate "Cash in and out in this shift" %}</h3>
+  <h3 class="sub-title">{% translate "Drawer movements in this shift" %}</h3>
   <ul class="lines">
-    {% for m in current.movements %}
-    <li><span><span class="pill {% if m.kind == 'in' %}teal{% else %}amber{% endif %}">{% if m.kind == "in" %}{% translate "In" %}{% else %}{% translate "Out" %}{% endif %}</span> <bdi dir="auto">{{ m.reason }}</bdi> <span class="muted">· {{ m.when.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}</span></span><span class="amt">{{ m.amount|money }}</span></li>
-    {% endfor %}
+    {% for m in current.movements %}{% include "web/_fin_drawer_row.html" %}{% endfor %}
   </ul>
   {% endif %}
 </section>

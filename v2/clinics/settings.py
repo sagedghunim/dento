@@ -13,6 +13,8 @@ DEFAULTS = {
     "letterhead_top_mm": 0,
     "letterhead_bottom_mm": 0,
     "solo": False,              # a single clinic run by its owner alone (no assistant); never a center
+    # The booking times of a queue session (no slot length of its own), in minutes (Saged, 2026-11-13).
+    "booking_step_minutes": 60,
 }
 
 _RULES = {
@@ -24,6 +26,7 @@ _RULES = {
     "letterhead_top_mm": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 120,
     "letterhead_bottom_mm": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 120,
     "solo": lambda v: isinstance(v, bool),
+    "booking_step_minutes": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 120 and v % 5 == 0,
 }
 
 

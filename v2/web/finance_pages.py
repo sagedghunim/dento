@@ -160,23 +160,37 @@ def _shift_rows(ctx, shifts, people):
     return rows
 
 
+def _drawer_expenses(ctx, shift_id):
+    """The expenses paid from this shift's drawer, by their category's name (one indexed read, a day's worth)."""
+    from finance.models import Category, Expense
+
+    found = list(Expense.objects.filter(clinic_id=ctx.clinic_id, shift_id=shift_id, voided_at__isnull=True)
+                 .values("id", "category_id", "amount", "note", "created_at", "created_by_id"))
+    names = {c: pick(n, e) for c, n, e in Category.objects.filter(
+        clinic_id=ctx.clinic_id, id__in={e["category_id"] for e in found}).values_list("id", "name", "name_en")}
+    return [{"kind": "expense", "amount": e["amount"], "reason": names.get(e["category_id"], ""), "note": e["note"],
+             "at": e["created_at"], "by_id": e["created_by_id"]} for e in found]
+
+
 def _shift_report(ctx, shift):
     from finance import services
 
     totals = services.shift_totals(ctx, shift["id"])
-    people = _people(ctx, [shift["opened_by_id"], shift["closed_by_id"], *(m["by_id"] for m in totals["movements"])])
+    spent = _drawer_expenses(ctx, shift["id"]) if totals["expenses"] else []
+    rows = sorted([*totals["movements"], *spent], key=lambda m: m["at"])
+    people = _people(ctx, [shift["opened_by_id"], shift["closed_by_id"], *(m["by_id"] for m in rows)])
     methods = _method_labels()
     cash = totals["methods"].get("cash", {"collected": 0, "refunded": 0, "net": 0})
     lines = [(_("Opening float"), shift["opening_float"], ""), (_("Cash payments"), cash["collected"], "+")]
     if cash["refunded"]:
         lines.append((_("Cash refunds"), cash["refunded"], "-"))
-    for label, amount, sign in ((_("Cash in"), totals["cash_in"], "+"), (_("Cash out"), totals["cash_out"], "-"),
+    for label, amount, sign in ((_("Other cash in"), totals["cash_in"], "+"), (_("Other cash out"), totals["cash_out"], "-"),
                                 (_("Expenses paid from the drawer"), totals["expenses"], "-"),
                                 (_("Staff pay in cash"), totals["payouts"], "-")):
         if amount:
             lines.append((label, amount, sign))
     other = [{"label": methods.get(m, m), "net": v["net"]} for m, v in sorted(totals["methods"].items()) if m != "cash"]
-    movements = [{**m, "when": _local(ctx, m["at"]), "by": people.get(m["by_id"], "")} for m in totals["movements"]]
+    movements = [{**m, "when": _local(ctx, m["at"]), "by": people.get(m["by_id"], "")} for m in rows]
     return {"shift": _shift_rows(ctx, [shift], people)[0], "expected": services.expected_cash(shift["opening_float"], totals),
             "lines": [{"label": label, "amount": -amount if sign == "-" else amount} for label, amount, sign in lines],
             "other": other, "movements": movements}
@@ -197,6 +211,8 @@ def _register_context(ctx, perms):
 
     shift = services.current_shift(ctx)
     context = {"current": _shift_report(ctx, shift) if shift else None}
+    if perms["expenses"]:
+        context.update(_pay_choices(ctx, _categories(ctx)))
     if perms["shift"]:
         context["shifts"], context["shifts_next"] = _shift_page(ctx)
     return context
@@ -213,8 +229,22 @@ def _categories(ctx):
         services.ensure_categories(ctx)  # a place made before M3 gets the defaults on first look, as the API does
         items = services.categories(ctx, include_inactive=True)
     for c in items:
-        c["json"] = json.dumps({k: c[k] for k in ("id", "name", "name_ar", "name_en", "is_active")}, ensure_ascii=False)
+        c["json"] = json.dumps({k: c[k] for k in ("id", "name", "name_ar", "name_en", "code", "is_active")},
+                               ensure_ascii=False)
     return items
+
+
+def _pay_choices(ctx, categories):
+    """What "Pay an expense" offers: the place's active categories as taps, "Other" last. "Other" is the way out
+    for money that fits no category, so a place without one gets it back (named in its language)."""
+    from finance import services
+
+    active = [c for c in categories if c["is_active"]]
+    if not any(c["code"] == "other" for c in active):
+        services.category_by_code(ctx, "other")
+        active = [c for c in _categories(ctx) if c["is_active"]]
+    return {"pay_categories": sorted(active, key=lambda c: c["code"] == "other"),
+            "today": business_day(ctx.clinic).isoformat()}
 
 
 def _expense_rows(ctx, month, request=None, categories=None):
@@ -239,10 +269,12 @@ def _expense_rows(ctx, month, request=None, categories=None):
 def _expenses_context(ctx, month):
     categories = _categories(ctx)
     rows, more, total = _expense_rows(ctx, month, categories=categories)
-    today = business_day(ctx.clinic)
+    choices = _pay_choices(ctx, categories)
+    if len(choices["pay_categories"]) != sum(c["is_active"] for c in categories):
+        categories = _categories(ctx)  # "Other" came back
     return {"categories": categories, "active_categories": [c for c in categories if c["is_active"]],
             "removed_categories": [c for c in categories if not c["is_active"]],
-            "expenses": rows, "expenses_next": more, "expenses_total": total, "today": today.isoformat()}
+            "expenses": rows, "expenses_next": more, "expenses_total": total, **choices}
 
 
 # --- Staff pay -----------------------------------------------------------------------------------------------------

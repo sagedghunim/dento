@@ -240,13 +240,14 @@ def visit_record(ctx, appointment_id):
 
 def open_plan_items(ctx, patient_id):
     rows = sql.dicts(ctx, """
-        SELECT i.id, i.plan_id, i.procedure_id, c.name_ar, c.name_en, i.tooth, i.area, i.price, i.status
+        SELECT i.id, i.plan_id, i.procedure_id, coalesce(c.name_ar, i.label) AS name_ar,
+               coalesce(c.name_en, '') AS name_en, i.tooth, i.area, i.price, i.status, i.due_on
           FROM "clinical_plan" p
           JOIN "clinical_plan_item" i ON i.clinic_id = p.clinic_id AND i.plan_id = p.id
-          JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
+          LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
          WHERE p.clinic_id = %s AND p.patient_id = %s AND i.status IN ('planned', 'in_progress')
          ORDER BY p.created_at, p.id, i.position LIMIT %s""", [ctx.clinic_id, patient_id, HISTORY_LIMIT])
-    return rows
+    return [{**r, "due_on": r["due_on"].isoformat() if r["due_on"] else None} for r in rows]
 
 
 def tooth_payload(ctx, row):
@@ -313,12 +314,14 @@ def plans(ctx, patient_id, plan_id=None):
     items = {}
     if rows:
         for r in sql.dicts(ctx, """
-            SELECT i.plan_id, i.id, i.position, i.procedure_id, c.name_ar, c.name_en, c.unit, i.tooth, i.area, i.price,
-                   i.status, i.done_appointment_id
+            SELECT i.plan_id, i.id, i.position, i.procedure_id, coalesce(c.name_ar, i.label) AS name_ar,
+                   coalesce(c.name_en, '') AS name_en, coalesce(c.unit, 'session') AS unit, i.label, i.tooth, i.area,
+                   i.price, i.status, i.done_appointment_id, i.due_on, i.appointment_id
               FROM "clinical_plan_item" i
-              JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
+              LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
              WHERE i.clinic_id = %s AND i.plan_id = ANY(%s::bigint[]) ORDER BY i.plan_id, i.position""",
                            [ctx.clinic_id, [r["id"] for r in rows]]):
+            r["due_on"] = r["due_on"].isoformat() if r["due_on"] else None
             items.setdefault(r.pop("plan_id"), []).append(r)
     result = []
     for r in rows:

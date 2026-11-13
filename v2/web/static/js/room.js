@@ -140,11 +140,13 @@ document.addEventListener("click", (event) => {
   if (event.target.closest('[data-action="logout"], [data-action="language"]')) leaving = true;
 }, true);
 
-// --- procedures this visit ---
+// --- "Done today": the small bill. The six most used procedures are one tap; the rest are found by typing. ---
+// The price is the clinic's list price: the screen never sends one, and the server refuses a doctor's (price_locked).
 
 const procList = document.querySelector("[data-procedures]");
-const procEmpty = document.querySelector("[data-no-procedures]");
 const procTotal = document.querySelector("[data-procs-total]");
+const offers = document.querySelector("[data-offers]");
+const catalogue = new Map((data.procedures || []).map((p) => [p.id, p]));
 
 function addProcedure(answer) {
   const p = answer.procedure;
@@ -158,40 +160,241 @@ function addProcedure(answer) {
   li.dataset.record = p.id;
   li.append(what, el("span", "num", moneyText(p.amount)));
   procList.append(li);
-  procEmpty.hidden = true;
   if (answer.invoice) procTotal.textContent = moneyText(answer.invoice.total);
+  offerRecipe(catalogue.get(p.procedure_id), p);
 }
 window.addEventListener("hamada:procedure-recorded", (event) => addProcedure(event.detail));
 
 const adder = document.querySelector("[data-add-procedure]");
 if (adder) {
   const form = adder.querySelector("form");
-  const select = form.elements.namedItem("procedure_id");
+  const confirmBox = adder.querySelector("[data-proc-confirm]");
   const toothField = adder.querySelector("[data-tooth-field]");
+  const toothInput = form.elements.namedItem("tooth");
+  const search = adder.querySelector("[data-proc-search]");
+  const results = adder.querySelector("[data-proc-results]");
+  const cancel = adder.querySelector("[data-proc-cancel]");
   const submitter = new Submitter(adder, { label: t("record") });
-  const unit = () => (select.selectedOptions[0] ? select.selectedOptions[0].dataset.unit : "");
-  select.addEventListener("change", () => { toothField.hidden = unit() !== "tooth"; });
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    let body = submitter.unknown ? submitter.unknown.body : null;
-    if (!body) {
-      const procedure = Number(select.value);
-      if (!procedure) { submitter.say(t("need_procedure")); return; }
-      body = { procedure_id: procedure };
-      if (unit() === "tooth") {
-        const tooth = Number(asciiDigits(form.elements.namedItem("tooth").value.trim()));
-        if (!tooth) { submitter.say(t("need_tooth")); return; }
-        body.tooth = tooth;
-      }
+  let chosen = null;
+
+  function closeConfirm() {
+    chosen = null;
+    confirmBox.hidden = true;
+    toothField.hidden = true;
+    toothInput.value = "";
+    cancel.hidden = false;
+    adder.querySelectorAll("[data-run]").forEach((b) => { b.disabled = false; });
+  }
+
+  async function record(body) {
+    const p = catalogue.get(body.procedure_id);
+    const result = await submitter.run("POST", `/api/v1/appointments/${id}/procedures`, body, `${t("record")} · ${p ? p.name : ""}`);
+    if (!result) {  // not confirmed: only "Try again" (the same key and body) or "Discard"
+      adder.querySelector("[data-proc-name]").textContent = p ? p.name : "";
+      confirmBox.hidden = false;
+      toothField.hidden = true;
+      cancel.hidden = true;
+      return;
     }
-    const name = (select.querySelector(`option[value="${body.procedure_id}"]`) || {}).textContent || "";
-    const result = await submitter.run("POST", `/api/v1/appointments/${id}/procedures`, body, `${t("record")} · ${name}`);
-    if (!result || !isOk(result)) return;
+    if (!isOk(result)) return;
+    closeConfirm();
     addProcedure(result.data);
     toast(t("proc_added", { name: nameOf(result.data.procedure) }));
-    form.reset();
-    toothField.hidden = true;
+    search.value = "";
+    results.replaceChildren();
+  }
+
+  function choose(p) {
+    if (submitter.unknown || adder.dataset.busy) return;
+    submitter.say("");
+    if (p.unit !== "tooth") { record({ procedure_id: p.id }); return; }
+    chosen = p;  // a tooth procedure: the number is optional, one more tap records it
+    adder.querySelector("[data-proc-name]").textContent = p.name;
+    confirmBox.hidden = false;
+    toothField.hidden = false;
+    toothInput.focus();
+  }
+
+  adder.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-proc]");
+    if (chip && !chip.disabled) { const p = catalogue.get(Number(chip.dataset.proc)); if (p) choose(p); }
   });
+  cancel.addEventListener("click", closeConfirm);
+  adder.querySelector("[data-discard]").addEventListener("click", closeConfirm);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (submitter.unknown) { record(submitter.unknown.body); return; }
+    if (!chosen) return;
+    const body = { procedure_id: chosen.id };
+    const tooth = Number(asciiDigits(toothInput.value.trim()));
+    if (toothInput.value.trim() && !tooth) { submitter.say(t("need_tooth")); return; }
+    if (tooth) body.tooth = tooth;
+    record(body);
+  });
+
+  const top = new Set(data.top || []);
+  search.addEventListener("input", () => {
+    const q = search.value.trim().toLocaleLowerCase();
+    const found = q ? [...catalogue.values()].filter((p) => !top.has(p.id) && p.name.toLocaleLowerCase().includes(q)).slice(0, 8) : [];
+    results.replaceChildren(...found.map((p) => {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      b.dataset.run = "";
+      b.dataset.proc = p.id;
+      const name = el("bdi", null, p.name);
+      name.dir = "auto";
+      b.append(name, " ", el("span", "count num", moneyText(p.price)));
+      return b;
+    }));
+    if (q && !found.length) results.replaceChildren(el("span", "muted", t("proc_none")));
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const first = results.querySelector("[data-proc]");
+    if (first) first.click();
+  });
+}
+
+// --- "What comes next": the follow-ups. The desk's list shows them once the visit is finished. ---
+
+const nextList = document.querySelector("[data-upcoming]");
+const nextEmpty = document.querySelector("[data-no-upcoming]");
+const PRESETS = [[2, "in_2days"], [7, "in_week"], [14, "in_2weeks"], [30, "in_month"]];
+
+function afterText(days) {
+  const preset = PRESETS.find(([n]) => n === days);
+  if (preset) return t(preset[1]);
+  if (days > 0 && days % 30 === 0) return t("in_months", { n: localDigits(days / 30) });
+  if (days > 0 && days % 7 === 0) return t("in_weeks", { n: localDigits(days / 7) });
+  return days > 0 ? t("in_days", { n: localDigits(days) }) : "";
+}
+function dayText(iso) {
+  const [, m, d] = iso.split("-").map(Number);
+  return localDigits(`${d}/${m}`);
+}
+
+// One follow-up action: its key stays until a definite answer, so a second tap or a resend never acts twice.
+async function followUp(holder, url, body, label) {
+  if (holder.dataset.busy) return null;
+  holder.dataset.busy = "1";
+  holder.followKey = holder.followKey || newKey();
+  const result = await save("POST", url, body, { key: holder.followKey, label });
+  delete holder.dataset.busy;
+  if (!result.settled) { renderPending(); toast(t("unknown")); return null; }
+  holder.followKey = null;
+  if (!isOk(result)) { alertMessage(errorMessage(result, t("failed"))); return null; }
+  renderUpcoming(result.data.upcoming);
+  return result;
+}
+
+function renderUpcoming(items) {
+  if (!nextList) return;
+  nextList.replaceChildren(...items.map((item) => {
+    const li = el("li");
+    li.dataset.item = item.id;
+    const what = el("span");
+    const name = el("bdi", null, item.name);
+    name.dir = "auto";
+    what.append(name);
+    if (item.tooth) what.append(` · ${t("tooth_short", { n: localDigits(item.tooth) })}`);
+    const when = [afterText(item.days), dayText(item.due_on)].filter(Boolean).join(" · ");
+    const side = el("span", "next-side");
+    if (item.booked) { side.append(el("span", "pill teal", `${t("fu_booked")} ${dayText(item.booked_day)}`)); li.append(what, side); return li; }
+    if (item.visit_id !== id) { side.append(el("span", "num", when)); li.append(what, side); return li; }  // an earlier visit's
+    const change = el("button", "chip-btn", when);
+    change.type = "button";
+    change.setAttribute("aria-expanded", "false");
+    change.setAttribute("aria-label", `${t("fu_change")}: ${item.name}, ${when}`);
+    const remove = el("button", "icon-btn", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `${t("remove")}: ${item.name}`);
+    remove.addEventListener("click", () => followUp(li, `/api/v1/follow-ups/${item.id}/drop`, {}, `${t("remove")} · ${item.name}`));
+    change.addEventListener("click", () => {
+      const open = li.querySelector(".next-when");
+      if (open) { open.remove(); change.setAttribute("aria-expanded", "false"); return; }
+      const row = el("span", "chips next-when");
+      PRESETS.forEach(([days, key]) => {
+        const b = el("button", "chip-btn", t(key));
+        b.type = "button";
+        b.dataset.days = days;
+        b.addEventListener("click", () => followUp(li, `/api/v1/follow-ups/${item.id}/due`, { days }, `${item.name} · ${t(key)}`));
+        row.append(b);
+      });
+      li.append(row);
+      change.setAttribute("aria-expanded", "true");
+    });
+    side.append(change, remove);
+    li.append(what, side);
+    return li;
+  }));
+  nextEmpty.hidden = items.length > 0;
+}
+if (nextList) renderUpcoming(data.upcoming || []);
+
+// A recorded procedure with a recipe offers its sessions: "Two sessions: in a week and in 2 weeks. Add them?"
+function offerRecipe(p, recorded) {
+  if (!p || !offers || !nextList || !p.follow_up.length || offers.querySelector(`[data-offer="${recorded.id}"]`)) return;
+  const n = p.follow_up.length;
+  const count = n === 1 ? t("fu_count_1") : n === 2 ? t("fu_count_2") : t("fu_count_n", { n: localDigits(n) });
+  const when = p.follow_up.map((s) => afterText(s.days)).reduce((a, b) => t("fu_pair", { a, b }));
+  const box = el("div", "notice offer");
+  box.dataset.offer = recorded.id;
+  box.setAttribute("role", "group");
+  const text = el("p", null, t("fu_offer", { name: p.name, count, when }));
+  const add = el("button", "btn", t("fu_add"));
+  add.type = "button";
+  add.dataset.offerAdd = "";
+  const skip = el("button", "btn ghost", t("fu_skip"));
+  skip.type = "button";
+  const actions = el("div", "appt-actions");
+  actions.append(add, skip);
+  box.append(text, actions);
+  add.addEventListener("click", async () => {
+    const body = { recipe_of: p.id };
+    if (recorded.tooth) body.tooth = recorded.tooth;
+    add.disabled = true;
+    const result = await followUp(box, `/api/v1/appointments/${id}/follow-ups`, body, `${t("fu_add")} · ${p.name}`);
+    add.disabled = false;
+    if (!result) return;
+    box.remove();
+    toast(t("fu_added"));
+  });
+  skip.addEventListener("click", () => box.remove());
+  offers.append(box);
+}
+
+const nextAdd = document.querySelector("[data-next-add]");
+if (nextAdd) {
+  const form = nextAdd.querySelector("form");
+  const adding = new Submitter(nextAdd, { label: t("fu_title") });
+  const retry = nextAdd.querySelector("[data-submit]");
+  const settle = () => {
+    retry.hidden = !adding.unknown;
+    nextAdd.querySelectorAll("[data-run]").forEach((b) => { b.disabled = Boolean(adding.unknown); });
+  };
+
+  async function addNext(body) {
+    const result = await adding.run("POST", `/api/v1/appointments/${id}/follow-ups`, body);
+    settle();
+    if (!result || !isOk(result)) return;
+    renderUpcoming(result.data.upcoming);
+    form.elements.namedItem("other").value = "";
+    toast(t("fu_added"));
+  }
+  nextAdd.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-next-when] [data-days]");
+    if (!chip || chip.disabled || adding.unknown) return;
+    const item = { days: Number(chip.dataset.days) };
+    const other = form.elements.namedItem("other").value.trim();
+    const what = form.querySelector('[name="what"]:checked').value;
+    if (other) item.label = other;
+    else if (what.startsWith("proc:")) item.procedure_id = Number(what.slice(5));
+    else item.label = what.slice(6);
+    addNext({ items: [item] });
+  });
+  form.addEventListener("submit", (event) => { event.preventDefault(); if (adding.unknown) addNext(adding.unknown.body); });
+  nextAdd.querySelector("[data-discard]").addEventListener("click", settle);
 }
 
 // --- the dental chart, loaded when first opened (the teeth page's part and script) ---

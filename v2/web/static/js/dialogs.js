@@ -1,6 +1,6 @@
 // Native <dialog>s (design 7.1, 7.6) and the browser half of safe repeats for their forms (design 7.4).
 import { discardPending, errorMessage, get, isOk, newKey, save } from "./api.js";
-import { clockParts } from "./numbers.js";
+import { clockParts, localDigits } from "./numbers.js";
 import { t } from "./strings.js";
 
 // --- Opening and closing: focus returns to the button that opened the dialog ---
@@ -156,6 +156,13 @@ export class Submitter {
 }
 
 // --- Doctor, day and time: shared by booking and moving a booking ---
+//
+// The day is a month calendar (Saged, 2026-11-13): it opens on today's month and moves freely to any month
+// up to the last bookable day. With a doctor picked, GET doctors/{id}/month greys their days off and hints
+// how many times are free; the server decides "today" and which times have passed (design 5.11).
+
+const pad = (n) => String(n).padStart(2, "0");
+const isoOf = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 
 export class When {
   constructor(root, { onChange } = {}) {
@@ -164,28 +171,42 @@ export class When {
     this.slots = root.querySelector("[data-slots]");
     this.status = root.querySelector("[data-time-status]");
     this.extra = root.querySelector("[data-extra]");
-    this.otherWrap = root.querySelector("[data-other-day]");
-    this.other = root.querySelector('[name="other_day"]');
+    this.cal = root.querySelector("[data-cal]");
+    this.grid = root.querySelector("[data-cal-grid]");
+    this.title = root.querySelector("[data-cal-title]");
+    this.calStatus = root.querySelector("[data-cal-status]");
+    this.dayInput = root.querySelector('[name="day"]');
+    const names = (key) => (root.querySelector(`[data-cal-${key}]`).textContent || "").split("|");
+    this.months = names("months");
+    this.weekdays = names("weekdays");
+    this.dayNames = names("days");
+    this.today = this.cal.dataset.today;
+    this.last = this.cal.dataset.last;
+    this.monthInfo = new Map();  // "doctor|section|YYYY-MM" -> {day: {works, free, full}}
     this.info = { queue: false, slots: [] };
     this.seq = 0;
+    this.monthSeq = 0;
+    this.goTo(this.today);
     root.addEventListener("change", (event) => {
       const name = event.target.name;
-      if (name === "day") this.otherWrap.hidden = event.target.value !== "other";
-      if (name === "doctor" || name === "day" || name === "other_day") this.refresh();
+      if (name === "doctor") { this.loadMonth(true); this.refresh(); }
       if (name === "extra") this.markTaken();
-      if (["doctor", "day", "other_day", "slot", "extra"].includes(name)) this.onChange(name);
+      if (["doctor", "slot", "extra"].includes(name)) this.onChange(name);
     });
+    this.cal.addEventListener("click", (event) => {
+      const move = event.target.closest("[data-cal-move]");
+      const day = event.target.closest("[data-day]");
+      if (move && !move.disabled) this.shift(Number(move.dataset.calMove));
+      if (event.target.closest("[data-cal-today]")) this.pick(this.today);
+      if (day && !day.disabled) this.pick(day.dataset.day);
+    });
+    this.grid.addEventListener("keydown", (event) => this.keys(event));
   }
 
   doctor() { const c = this.root.querySelector('[name="doctor"]:checked'); return c ? Number(c.value) : null; }
-
-  day() {
-    const c = this.root.querySelector('[name="day"]:checked');
-    if (!c) return null;
-    return c.value === "other" ? (this.other.value || null) : c.value;
-  }
-
+  day() { return this.dayInput.value || null; }
   slot() { const c = this.root.querySelector('[name="slot"]:checked'); return c && c.value ? c.value : null; }
+  picked() { return Boolean(this.root.querySelector('[name="slot"]:checked')); }  // a time, or "next turn"
   isExtra() { const c = this.root.querySelector('[name="extra"]'); return Boolean(c && c.checked && this.slot()); }
 
   setDoctor(id) {
@@ -193,13 +214,140 @@ export class When {
     if (input && !input.closest("[hidden]")) input.checked = true;
   }
 
+  // Back to today, for a dialog opening afresh; what a month showed may have changed since.
+  reset() {
+    this.monthInfo.clear();
+    this.dayInput.value = this.today;
+    this.goTo(this.today);
+  }
+
   setDay(value) {
-    const chip = this.root.querySelector(`[name="day"][value="${CSS.escape(value)}"]`);
-    if (chip) { chip.checked = true; this.otherWrap.hidden = true; return; }
-    const other = this.root.querySelector('[name="day"][value="other"]');
-    other.checked = true;
-    this.other.value = value;
-    this.otherWrap.hidden = false;
+    this.dayInput.value = value;
+    this.goTo(value);
+  }
+
+  // "Thursday 19 November" in the page's language and the clinic's digits; the year only when it isn't this one.
+  dayLabel(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const weekday = this.dayNames[(new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 1) % 7];
+    const year = iso.slice(0, 4) === this.today.slice(0, 4) ? "" : ` ${localDigits(y)}`;
+    return `${weekday} ${localDigits(d)} ${this.months[m - 1]}${year}`;
+  }
+
+  // --- the calendar ---
+
+  goTo(iso) {
+    const [y, m] = iso.split("-").map(Number);
+    this.view = { y, m };
+    this.render();
+    this.loadMonth(false);
+  }
+
+  shift(by) {
+    let { y, m } = this.view;
+    m += by;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    const key = isoOf(y, m, 1).slice(0, 7);
+    if (key < this.today.slice(0, 7) || key > this.last.slice(0, 7)) return;
+    this.view = { y, m };
+    this.render();
+    this.loadMonth(false);
+  }
+
+  monthKey() { return isoOf(this.view.y, this.view.m, 1).slice(0, 7); }
+  cacheKey(month) { return `${this.doctor() || ""}|${this.sectionOf ? this.sectionOf() : ""}|${month}`; }
+
+  async loadMonth(doctorChanged) {
+    const doctor = this.doctor();
+    const month = this.monthKey();
+    const key = this.cacheKey(month);
+    const seq = ++this.monthSeq;
+    if (!doctor || this.monthInfo.has(key)) { this.render(); if (doctorChanged) this.keepWorkingDay(); return; }
+    this.calStatus.textContent = t("loading");
+    const section = this.sectionOf ? this.sectionOf() : "";
+    const result = await get(`/api/v1/doctors/${doctor}/month?month=${month}${section ? `&section=${section}` : ""}`);
+    if (seq !== this.monthSeq) return;  // an older answer after a newer choice
+    if (!isOk(result)) { this.render(); this.calStatus.textContent = errorMessage(result, t("failed")); return; }
+    const days = {};
+    for (const d of result.data.days) days[d.day] = d;
+    this.monthInfo.set(key, days);
+    this.render();
+    if (doctorChanged) this.keepWorkingDay();
+  }
+
+  // After a doctor change, a picked day they don't work moves to their next working day in the month shown.
+  keepWorkingDay() {
+    const days = this.monthInfo.get(this.cacheKey(this.monthKey()));
+    const picked = this.day();
+    if (!days || !picked || !days[picked] || days[picked].works) return;
+    const next = Object.values(days).find((d) => d.works && d.day > picked);
+    if (next) this.pick(next.day);
+  }
+
+  render() {
+    const { y, m } = this.view;
+    const month = this.monthKey();
+    this.title.textContent = `${this.months[m - 1]} ${localDigits(y)}`;
+    this.cal.querySelector('[data-cal-move="-1"]').disabled = month <= this.today.slice(0, 7);
+    this.cal.querySelector('[data-cal-move="1"]').disabled = month >= this.last.slice(0, 7);
+    const days = this.doctor() ? this.monthInfo.get(this.cacheKey(month)) : null;
+    const cells = this.weekdays.map((name) => { const h = el("span", "cal-wd", name); h.setAttribute("aria-hidden", "true"); return h; });
+    const lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 1) % 7;  // weeks start on Saturday
+    for (let i = 0; i < lead; i++) cells.push(el("span", "cal-blank"));
+    const count = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const picked = this.day();
+    for (let d = 1; d <= count; d++) {
+      const iso = isoOf(y, m, d);
+      const info = days ? days[iso] : null;
+      const button = el("button", "cal-day");
+      button.type = "button";
+      button.dataset.day = iso;
+      const off = Boolean(info && !info.works && iso >= this.today);
+      button.disabled = iso < this.today || iso > this.last || off;
+      button.append(el("span", "cal-num", localDigits(d)));
+      let hint = "";
+      if (info && info.works) hint = info.full ? t("cal_full") : info.free ? t("cal_free", { n: localDigits(info.free) }) : "";
+      button.append(el("small", "cal-hint", hint));
+      if (info && info.full) button.classList.add("full");
+      if (off) button.classList.add("off");
+      if (iso === this.today) { button.classList.add("today"); button.setAttribute("aria-current", "date"); }
+      button.setAttribute("aria-pressed", String(iso === picked));
+      button.tabIndex = iso === picked ? 0 : -1;
+      button.setAttribute("aria-label", [this.dayLabel(iso), off ? t("cal_off") : hint].filter(Boolean).join(" · "));
+      cells.push(button);
+    }
+    this.grid.replaceChildren(...cells);
+    if (!this.grid.querySelector('[tabindex="0"]')) { const first = this.grid.querySelector(".cal-day:not(:disabled)"); if (first) first.tabIndex = 0; }
+    this.calStatus.textContent = picked ? t("picked_day", { day: this.dayLabel(picked) }) : t("need_day");
+  }
+
+  pick(iso) {
+    if (iso < this.today || iso > this.last) return;
+    const focused = this.cal.contains(document.activeElement) && document.activeElement.classList.contains("cal-day");
+    this.dayInput.value = iso;
+    if (iso.slice(0, 7) !== this.monthKey()) this.goTo(iso); else this.render();
+    const button = this.grid.querySelector(`[data-day="${iso}"]`);
+    if (button && focused) button.focus();
+    this.refresh();
+    this.onChange("day");
+  }
+
+  // Arrows move by a day or a week (right to left aware); Enter or Space picks, as on any button.
+  keys(event) {
+    const button = event.target.closest(".cal-day");
+    if (!button) return;
+    const rtl = getComputedStyle(this.grid).direction === "rtl";
+    const steps = { ArrowLeft: rtl ? 1 : -1, ArrowRight: rtl ? -1 : 1, ArrowUp: -7, ArrowDown: 7 };
+    if (!(event.key in steps)) return;
+    event.preventDefault();
+    const [y, m, d] = button.dataset.day.split("-").map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d + steps[event.key]));
+    const iso = isoOf(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
+    if (iso < this.today || iso > this.last) return;
+    if (iso.slice(0, 7) !== this.monthKey()) this.goTo(iso);
+    const target = this.grid.querySelector(`[data-day="${iso}"]`);
+    if (target) { this.grid.querySelectorAll(".cal-day").forEach((b) => { b.tabIndex = -1; }); target.tabIndex = 0; target.focus(); }
   }
 
   // Doctors outside the chosen section are hidden (a doctor's sections are those of their sessions).
@@ -211,7 +359,8 @@ export class When {
     });
   }
 
-  needsTime() { return this.info.slots.length > 0 && !this.info.queue; }
+  // A time, or "next turn" on a queue day, must be picked whenever the day offers any.
+  needsTime() { return this.info.slots.length > 0 || this.info.queue; }
 
   async refresh() {
     const doctor = this.doctor();
@@ -228,38 +377,37 @@ export class When {
     if (!isOk(result)) { this.status.textContent = errorMessage(result, t("failed")); return; }
     this.info = { queue: result.data.queue, slots: result.data.slots || [] };
     if (!this.info.queue && !this.info.slots.length) { this.status.textContent = t("doctor_off"); this.onChange("slots"); return; }
-    const chips = [];
-    if (this.info.queue) chips.push(this.chip("", null, t("next_turn")));
-    for (const slot of this.info.slots) chips.push(this.chip(slot.starts_at, slot.taken));
-    if (this.info.slots.length) this.slots.replaceChildren(...chips);
-    const free = this.info.slots.filter((s) => !s.taken).length;
-    this.status.textContent = this.info.slots.length
-      ? t("free_times", { n: free })
-      : t("queue_day");
-    this.extra.hidden = !this.info.slots.some((s) => s.taken);
-    if (this.info.queue) chips[0].querySelector("input").checked = true;
+    const chips = this.info.slots.map((slot) => this.chip(slot.starts_at, slot.taken, slot.passed));
+    if (this.info.queue) chips.push(this.chip("", false, false, t("next_turn")));
+    this.slots.replaceChildren(...chips);
+    const free = this.info.slots.filter((s) => !s.taken && !s.passed).length;
+    this.status.textContent = this.info.slots.length ? t("free_times", { n: localDigits(free) }) : t("queue_day");
+    this.extra.hidden = !this.info.slots.some((s) => s.taken && !s.passed);
     this.markTaken();
     this.onChange("slots");
   }
 
-  chip(value, taken, text) {
+  chip(value, taken, passed, text) {
     const label = el("label", "chip");
     const input = el("input");
     input.type = "radio";
     input.name = "slot";
     input.value = value;
     if (taken) input.dataset.taken = "1";
+    if (passed) { input.dataset.passed = "1"; input.disabled = true; }
     const span = el("span");
     if (text) span.textContent = text;
     else span.append(clockNode(value));
-    if (taken) span.append(el("small", null, t("taken")));
+    if (passed) span.append(el("small", null, t("passed")));
+    else if (taken) span.append(el("small", null, t("taken")));
     label.append(input, span);
     return label;
   }
 
+  // A taken time is offered only as an extra booking, on purpose; a time that has passed never is.
   markTaken() {
     const allow = this.root.querySelector('[name="extra"]').checked;
-    this.slots.querySelectorAll("input[data-taken]").forEach((input) => {
+    this.slots.querySelectorAll("input[data-taken]:not([data-passed])").forEach((input) => {
       input.disabled = !allow;
       if (!allow && input.checked) input.checked = false;
     });

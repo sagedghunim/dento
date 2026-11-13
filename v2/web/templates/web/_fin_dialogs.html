@@ -4,10 +4,11 @@
 <dialog class="sheet small" id="cash-dialog" aria-labelledby="cash-title">
 <form novalidate>
   <header class="dialog-head">
-    <h2 id="cash-title"><span data-title-in>{% translate "Cash in" %}</span><span data-title-out hidden>{% translate "Cash out" %}</span></h2>
+    <h2 id="cash-title">{% translate "Other drawer movement" %}</h2>
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
+    <p class="muted">{% translate "Only for cash that isn't a patient's payment or an expense, such as change the owner adds to the drawer." %}</p>
     <fieldset class="group"><legend>{% translate "Which way" %}</legend><div class="chips">
       <label class="chip"><input type="radio" name="kind" value="in" checked><span>{% translate "Into the drawer" %}</span></label>
       <label class="chip"><input type="radio" name="kind" value="out"><span>{% translate "Out of the drawer" %}</span></label>
@@ -78,30 +79,33 @@
 {% endif %}
 {% endif %}
 
-{% if tab == "expenses" and perms.expenses %}
+{% if perms.expenses %}{% if tab == "register" or tab == "expenses" %}
 <dialog class="sheet small" id="expense-dialog" aria-labelledby="expense-title">
 <form novalidate>
   <header class="dialog-head">
-    <h2 id="expense-title">{% translate "New expense" %}</h2>
+    <h2 id="expense-title">{% translate "Pay an expense" %}</h2>
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
-    <label class="field">{% translate "Category" %}<select name="category_id" data-category-select>
-      {% for c in active_categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-    </select></label>
-    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
-    <label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr" max="{{ today }}" value="{{ today }}" data-today="{{ today }}"></label>
-    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off" placeholder="{% translate "Electricity bill, lab of patient…" %}"></label>
+    <fieldset class="group"><legend>{% translate "What for" %}</legend><div class="chips" data-category-chips>
+      {% for c in pay_categories %}<label class="chip"><input type="radio" name="category_id" value="{{ c.id }}" data-code="{{ c.code }}"><span><bdi dir="auto">{{ c.name }}</bdi></span></label>{% endfor %}
+    </div></fieldset>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
     {% if perms.collect %}<label class="check"><input type="checkbox" name="from_shift"> <span>{% translate "Paid from the register's cash" %}</span></label>{% endif %}
+    <label class="field"><span data-note-optional>{% translate "Note (optional)" %}</span><span data-note-required hidden>{% translate "What was it for? (required for Other)" %}</span><input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+    <label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr" max="{{ today }}" value="{{ today }}" data-today="{{ today }}"></label>
   </div>
   <footer class="dialog-foot">
     <p class="form-error" data-error role="alert"></p>
     <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
     <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
-    <button type="submit" class="btn" data-submit>{% translate "Add the expense" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
   </footer>
 </form>
 </dialog>
+{% endif %}{% endif %}
+
+{% if tab == "expenses" and perms.expenses %}
 
 <dialog class="sheet small" id="void-dialog" aria-labelledby="void-title">
 <form novalidate>

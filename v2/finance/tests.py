@@ -132,6 +132,21 @@ class ExpenseTests(M2TestCase):
         self.assertEqual(r.status_code, 404, r.content)
         self.assertEqual(call(self.desk, "GET", "/api/v1/expense-categories").status_code, 403)
 
+    def test_only_other_needs_a_note(self):
+        items = {c["code"]: c["id"] for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
+        r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["other"], "amount": 500, "note": "  "})
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(r.json()["error"]["fields"], {"note": "required"})
+        self.assertEqual(call(self.owner, "GET", "/api/v1/expenses").json()["total"], 0)  # nothing recorded
+        r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["other"], "amount": 500, "note": "Tip"})
+        self.assertEqual(r.status_code, 201, r.content)
+        r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["rent"], "amount": 500})  # no note
+        self.assertEqual(r.status_code, 201, r.content)
+        # Renamed, it is still "Other".
+        call(self.owner, "PATCH", f"/api/v1/expense-categories/{items['other']}", {"name": "متفرقات"})
+        r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["other"], "amount": 500})
+        self.assertEqual(r.status_code, 400, r.content)
+
     def test_an_expense_moves_the_days_expenses_and_a_void_takes_effect_once(self):
         from summaries.models import ClinicDay
 

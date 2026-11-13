@@ -16,7 +16,7 @@ from core.testing import call
 from .testing import PNG, M2TestCase, upload
 
 # What the doctor template lacks among the codes these endpoints need.
-EXTRA = ["settings.manage", "billing.discount", "appointments.others"]  # others: the visits are the owner's (G4)
+EXTRA = ["settings.manage", "billing.discount", "appointments.others", "appointments.book"]  # others: the visits are the owner's (G4)
 
 
 def objects(test, fixture):
@@ -37,11 +37,14 @@ def objects(test, fixture):
     attachment = upload(fixture.client("assistant"), f"/api/v1/patients/{patient}/attachments", PNG).json()["attachment"]
     own = call(owner, "POST", "/api/v1/procedures", {"name_ar": f"إجراء {uuid.uuid4().hex[:6]}", "price": 100}).json()
     section = call(owner, "GET", "/api/v1/clinic").json().get("sections", [{}])[0].get("id")
+    follow = call(doc, "POST", f"/api/v1/appointments/{visit['id']}/follow-ups",
+                  {"items": [{"label": "متابعة", "days": 7}, {"label": "متابعة", "days": 14}]}).json()["upcoming"]
     return SimpleNamespace(visit=visit["id"], patient=patient, filling=filling["id"], crown=crown["id"],
                            medicine=medicine["id"], template=template["id"], template_version=template["version"],
                            plan=plan["plan"]["id"], item=plan["plan"]["items"][0]["id"],
                            item2=plan["plan"]["items"][1]["id"], rx=rx["id"], attachment=attachment["id"],
-                           own_procedure=own["procedure"]["id"], section=section)
+                           own_procedure=own["procedure"]["id"], section=section,
+                           follow=follow[0]["id"], follow2=follow[1]["id"])
 
 
 def mutating(o):
@@ -79,6 +82,15 @@ def mutating(o):
         "procedure edit": ("PATCH", f"/api/v1/procedures/{o.own_procedure}", {"changes": {"price": 5}},
                            {"changes": {"price": 6}}, ["settings.manage"], None),
         "procedure remove": ("DELETE", f"/api/v1/procedures/{o.own_procedure}", {}, {"x": 1}, ["settings.manage"], None),
+        "follow-ups add": ("POST", f"/api/v1/appointments/{v}/follow-ups", {"items": [{"label": "a", "days": 7}]},
+                           {"items": [{"label": "b", "days": 7}]}, ["procedures.record"], None),
+        "follow-up due": ("POST", f"/api/v1/follow-ups/{o.follow}/due", {"days": 21}, {"days": 30},
+                          ["procedures.record"], None),
+        "follow-up drop": ("POST", f"/api/v1/follow-ups/{o.follow2}/drop", {}, {"x": 1}, ["procedures.record"], None),
+        "follow-ups snooze": ("POST", "/api/v1/follow-ups/snooze", {"item_ids": [o.follow]}, {"item_ids": [o.follow2]},
+                              ["appointments.book"], None),
+        "follow-ups booked": ("POST", "/api/v1/follow-ups/booked", {"item_ids": [o.follow], "appointment_id": v},
+                              {"item_ids": [o.follow2], "appointment_id": v}, ["appointments.book"], None),
     }
 
 
@@ -120,7 +132,8 @@ def snapshot(fixture):
         return tuple(model.objects.filter(clinic_id=fixture.id).count() for model in (
             m.VisitNote, m.Vitals, m.VisitProcedure, m.Tooth, m.ToothHistory, m.Plan, m.PlanItem, m.Prescription,
             m.Medicine, m.PrescriptionTemplate, m.Procedure, m.Attachment)) + (
-            list(m.PlanItem.objects.filter(clinic_id=fixture.id).order_by("id").values_list("status", flat=True)),
+            list(m.PlanItem.objects.filter(clinic_id=fixture.id).order_by("id")
+                 .values_list("status", "due_on", "snoozed_until", "appointment_id")),
             list(m.Medicine.objects.filter(clinic_id=fixture.id).order_by("id").values_list("is_active", "default_note")),
             list(m.Procedure.objects.filter(clinic_id=fixture.id).order_by("id").values_list("is_active", "price")),
             list(m.PrescriptionTemplate.objects.filter(clinic_id=fixture.id).order_by("id").values_list("version", "is_active")),

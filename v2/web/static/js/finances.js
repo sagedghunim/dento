@@ -86,16 +86,11 @@ const dataOf = (node, name) => JSON.parse(node.closest(`[data-${name}]`).dataset
 
 // --- the register ---
 
+// "Other drawer movement": the rare cash that is neither a patient's payment nor an expense. Needs a reason.
 const cashDialog = setup("cash-dialog", ({ dialog, field, submitter }) => {
-  const title = (kind) => {
-    dialog.querySelector("[data-title-in]").hidden = kind !== "in";
-    dialog.querySelector("[data-title-out]").hidden = kind !== "out";
-  };
-  dialog.querySelectorAll('[name="kind"]').forEach((r) => r.addEventListener("change", () => title(r.value)));
   return {
     fill(item) {
       dialog.querySelector(`[name="kind"][value="${item.kind}"]`).checked = true;
-      title(item.kind);
     },
     request() {
       const kind = dialog.querySelector('[name="kind"]:checked').value;
@@ -151,42 +146,67 @@ async function openReport(id, opener) {
 
 // --- expenses and categories ---
 
-const expenseDialog = setup("expense-dialog", ({ dialog, field, submitter }) => ({
-  fill() {
-    const day = field("day");
-    day.value = day.dataset.today;
-    // The choices follow the categories on the page, so one added a minute ago is offered too.
-    const select = dialog.querySelector("[data-category-select]");
-    const listed = Array.from(body.querySelectorAll(".cat-list [data-category]"), (row) => JSON.parse(row.dataset.category));
-    if (listed.length) {
-      select.replaceChildren(...listed.map((c) => {
-        const option = document.createElement("option");
-        option.value = c.id;
-        option.textContent = c.name;
-        return option;
-      }));
-    }
-    if (select.options.length) select.selectedIndex = 0;
-  },
-  request() {
-    const categoryId = Number(field("category_id").value);
-    if (!categoryId) { submitter.say(t("fin_need_category")); return null; }
-    const amount = money(submitter, field("amount").value);
-    if (amount === null) return null;
-    const day = asciiDigits(field("day").value);
-    if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) { submitter.say(t("fin_bad_day")); return null; }
-    const fromShift = field("from_shift");
-    const name = field("category_id").selectedOptions[0].textContent;
-    return { method: "POST", url: "/api/v1/expenses",
-             body: { category_id: categoryId, amount, day: day || undefined, note: field("note").value.trim(), from_shift: Boolean(fromShift && fromShift.checked) },
-             label: t("fin_expense_added", { name, amount: moneyText(amount) }) };
-  },
-  done(data) {
-    const e = data.expense;
-    toast(e.day.slice(0, 7) === month ? t("fin_expense_saved") : t("fin_expense_other_month"));
-    reloadTab();
-  },
-}));
+// "Pay an expense" (register and expenses tabs): tap what it was for, type the amount, save. Only "Other" (money
+// that fits no category) needs a note; the server checks that too. From the register it comes out of the drawer.
+const expenseDialog = setup("expense-dialog", ({ dialog, field, submitter }) => {
+  const chips = dialog.querySelector("[data-category-chips]");
+  const picked = () => dialog.querySelector('[name="category_id"]:checked');
+  const isOther = () => Boolean(picked() && picked().dataset.code === "other");
+  const noteLabel = () => {
+    dialog.querySelector("[data-note-optional]").hidden = isOther();
+    dialog.querySelector("[data-note-required]").hidden = !isOther();
+    field("note").required = isOther();
+  };
+  chips.addEventListener("change", () => { noteLabel(); field("amount").focus(); });
+  return {
+    fill(item) {
+      const day = field("day");
+      day.value = day.dataset.today;
+      // On the expenses tab the choices follow the categories listed there, so one added a minute ago is offered.
+      const listed = Array.from(body.querySelectorAll(".cat-list [data-category]"), (row) => JSON.parse(row.dataset.category));
+      if (listed.length) {
+        listed.sort((a, b) => (a.code === "other") - (b.code === "other"));
+        chips.replaceChildren(...listed.map((c) => {
+          const label = document.createElement("label");
+          label.className = "chip";
+          const input = document.createElement("input");
+          Object.assign(input, { type: "radio", name: "category_id", value: String(c.id) });
+          input.dataset.code = c.code || "";
+          const text = document.createElement("span");
+          const name = document.createElement("bdi");
+          name.dir = "auto";
+          name.textContent = c.name;
+          text.append(name);
+          label.append(input, text);
+          return label;
+        }));
+      }
+      const fromShift = field("from_shift");
+      if (fromShift) fromShift.checked = Boolean(item && item.fromDrawer);
+      noteLabel();
+    },
+    request() {
+      const chosen = picked();
+      if (!chosen) { submitter.say(t("fin_need_category")); return null; }
+      const amount = money(submitter, field("amount").value);
+      if (amount === null) return null;
+      const note = field("note").value.trim();
+      if (isOther() && !note) { submitter.say(t("need_reason")); field("note").focus(); return null; }
+      const day = asciiDigits(field("day").value);
+      if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) { submitter.say(t("fin_bad_day")); return null; }
+      const fromShift = field("from_shift");
+      const name = chosen.closest(".chip").textContent.trim();
+      return { method: "POST", url: "/api/v1/expenses",
+               body: { category_id: Number(chosen.value), amount, day: day || undefined, note, from_shift: Boolean(fromShift && fromShift.checked) },
+               label: t("fin_expense_added", { name, amount: moneyText(amount) }) };
+    },
+    done(data) {
+      const e = data.expense;
+      toast(tab !== "expenses" || e.day.slice(0, 7) === month ? t("fin_expense_saved") : t("fin_expense_other_month"));
+      reloadTab();
+    },
+  };
+});
 
 const voidDialog = setup("void-dialog", ({ dialog }) => ({
   fill(item) {
@@ -343,7 +363,7 @@ document.addEventListener("click", (event) => {
     const shiftId = button.closest("[data-shift-id]").dataset.shiftId;
     closeShiftDialog.open({ id: Number(shiftId), expected: Number(button.dataset.expectedAmount) }, button);
   } else if ((button = on("[data-shift-report]")) && reportDialog) openReport(button.dataset.shiftReport, button);
-  else if ((button = on("[data-new-expense]")) && expenseDialog) expenseDialog.open(null, button);
+  else if ((button = on("[data-new-expense]")) && expenseDialog) expenseDialog.open({ fromDrawer: button.hasAttribute("data-from-drawer") }, button);
   else if ((button = on("[data-void-expense]")) && voidDialog) voidDialog.open(dataOf(button, "expense"), button);
   else if ((button = on("[data-new-category]")) && categoryDialog) categoryDialog.open(null, button);
   else if ((button = on("[data-rename-category]")) && categoryDialog) categoryDialog.open(dataOf(button, "category"), button);

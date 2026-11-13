@@ -17,11 +17,9 @@
 <ul class="lines">{% for m in report.other %}<li><span>{{ m.label }}</span><span class="amt">{{ m.net|money }}</span></li>{% endfor %}</ul>
 {% endif %}
 {% if report.movements %}
-<h3 class="sub-title">{% translate "Cash in and out" %}</h3>
+<h3 class="sub-title">{% translate "Drawer movements" %}</h3>
 <ul class="lines">
-  {% for m in report.movements %}
-  <li><span><span class="pill {% if m.kind == 'in' %}teal{% else %}amber{% endif %}">{% if m.kind == "in" %}{% translate "In" %}{% else %}{% translate "Out" %}{% endif %}</span> <bdi dir="auto">{{ m.reason }}</bdi> <span class="muted">· {{ m.when.time }}{% if m.by %} · <bdi dir="auto">{{ m.by }}</bdi>{% endif %}</span></span><span class="amt">{{ m.amount|money }}</span></li>
-  {% endfor %}
+  {% for m in report.movements %}{% include "web/_fin_drawer_row.html" %}{% endfor %}
 </ul>
 {% endif %}
 {% if s.note %}<p class="muted">{% translate "Note:" %} <bdi dir="auto">{{ s.note }}</bdi></p>{% endif %}

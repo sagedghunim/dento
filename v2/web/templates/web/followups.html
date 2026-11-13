@@ -1,0 +1,43 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Follow-ups" %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{% static 'js/dialogs.js' %}">{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Follow-ups" %}</h1>
+  <p>{% translate "Patients whose doctor asked for another visit that isn't booked yet." %}</p>
+</div>
+<div class="pending-bar" data-pending-bar hidden></div>
+<div data-follow-ups>
+{% for g in groups %}
+<section class="card fu-group" aria-labelledby="fu-{{ g.key }}" data-fu-group>
+  <div class="card-head">
+    <h2 id="fu-{{ g.key }}">{% if g.key == "overdue" %}<span class="pill red">{% translate "Overdue" %}</span>{% elif g.key == "week" %}<span class="pill amber">{% translate "This week" %}</span>{% else %}<span class="pill grey">{% translate "Further ahead" %}</span>{% endif %}</h2>
+    <span class="muted num" data-fu-count>{{ g.rows|length|digits }}</span>
+  </div>
+  <ul class="fu-list">
+    {% for r in g.rows %}
+    <li class="fu-row" data-fu data-items="{{ r.ids }}" data-id="{{ r.patient.id }}" data-name="{{ r.patient.name }}" data-file="{{ r.patient.file_no }}" data-phone="{{ r.patient.phone }}" data-doctor="{{ r.doctor_id }}" data-section="{{ r.section_id }}" data-day="{{ r.day_iso }}">
+      <div class="fu-who">
+        {% if perms.view_patients %}<a class="fu-name" href="/patients/{{ r.patient.id }}"><bdi dir="auto">{{ r.patient.name }}</bdi></a>{% else %}<strong class="fu-name"><bdi dir="auto">{{ r.patient.name }}</bdi></strong>{% endif %}
+        <span class="what">{% translate "File" %} {{ r.patient.file_no|num }} · <bdi dir="auto">{{ r.doctor }}</bdi>{% if r.patient.phone %} · <a class="tel" href="tel:{{ r.patient.phone }}" aria-label="{% translate "Call" %} {{ r.patient.phone }}">{{ r.patient.phone|phone }}</a>{% with wa=r.patient.phone|whatsapp %}{% if wa %} · <a class="tel wa" href="https://wa.me/{{ wa }}" target="_blank" rel="noopener noreferrer">{% translate "WhatsApp" %}</a>{% endif %}{% endwith %}{% endif %}</span>
+      </div>
+      <ul class="fu-items">
+        {% for i in r.items %}<li><span><bdi dir="auto">{{ i.name }}</bdi>{% if i.tooth %} · {% translate "Tooth" %} {{ i.tooth|digits }}{% endif %}</span> <span class="num fu-day">{{ i.due_on|shortday }}</span></li>{% endfor %}
+      </ul>
+      <div class="appt-actions">
+        {% if perms.book %}<button type="button" class="btn" data-fu-book>{% translate "Book" %}</button>{% endif %}
+        <button type="button" class="btn ghost" data-fu-later>{% translate "Later" %}</button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+<p class="card empty-note" data-fu-empty{% if groups %} hidden{% endif %}>{% if paged %}{% translate "No more follow-ups." %}{% else %}{% translate "No follow-ups are waiting to be booked." %}{% endif %}</p>
+{% if next %}<p class="list-foot"><a class="btn ghost" href="/follow-ups?after={{ next }}">{% translate "Load more" %}</a></p>{% endif %}
+{% if paged %}<p class="list-foot"><a class="btn ghost" href="/follow-ups">{% translate "Back to the start" %}</a></p>{% endif %}
+</div>
+{% include "web/_dialogs.html" %}
+{{ config|json_script:"clinic-config" }}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/followups.js' %}"></script>{% endblock %}

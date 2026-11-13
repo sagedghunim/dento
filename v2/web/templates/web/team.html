@@ -221,5 +221,39 @@
 </form>
 </dialog>
 {% endif %}
+{% if can_settings %}
+<section class="card" aria-labelledby="recipes-title" data-recipes>
+  <div class="card-head">
+    <div>
+      <h2 id="recipes-title">{% translate "Follow-ups after a procedure" %}</h2>
+      <p class="card-sub">{% translate "The sessions the doctor is offered to add after recording a procedure. Change them, turn them off, or add them to another procedure." %}</p>
+    </div>
+  </div>
+  <label class="field">{% translate "Find a procedure" %}
+    <input type="search" dir="auto" autocomplete="off" maxlength="60" placeholder="{% translate "Type part of its name" %}" data-recipe-search>
+  </label>
+  <ul class="proc-list recipe-list" data-recipe-list></ul>
+  <p class="muted" data-recipe-status role="status"></p>
+</section>
+
+<dialog class="sheet small" id="recipe-dialog" aria-labelledby="recipe-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="recipe-title">{% translate "Follow-ups" %} · <bdi dir="auto" data-recipe-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <ol class="recipe-steps" data-recipe-steps></ol>
+    <button type="button" class="btn ghost" data-recipe-add>{% translate "Add a session" %}</button>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-run data-recipe-off>{% translate "No follow-ups" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% if can_settings %}<script type="module" src="{% static 'js/recipes.js' %}"></script>{% endif %}{% endblock %}

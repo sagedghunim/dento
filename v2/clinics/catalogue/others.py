@@ -269,3 +269,22 @@ SPECIALTIES = {
         ],
     },
 }
+
+# Follow-up recipes (Saged, 2026-11-13), as in dental.py: procedure (English name) -> [(days, Arabic, English)].
+FOLLOW_UPS = {
+    "pediatrics": {
+        "Growth and development check": [(90, "متابعة نمو", "Growth check")],
+        "Vaccine administration": [(30, "الجرعة الجاية", "Next vaccine dose")],
+        "Nebuliser session": [(2, "متابعة الصدر", "Chest check")],
+        "Transcutaneous bilirubin": [(2, "إعادة قياس الصفار", "Bilirubin recheck")],
+    },
+    "dermatology": {
+        "Laser hair removal, small area": [(30, "جلسة ليزر", "Laser session")],
+        "Laser hair removal, large area": [(30, "جلسة ليزر", "Laser session")],
+        "Chemical peel": [(14, "جلسة تقشير", "Peel session")],
+        "Microneedling": [(30, "جلسة ديرما بن", "Microneedling session")],
+        "PRP session": [(30, "جلسة بلازما", "PRP session")],
+        "Botulinum toxin, per area": [(14, "متابعة البوتوكس", "Botox check")],
+        "Cryotherapy of warts": [(14, "جلسة تبريد", "Cryotherapy session")],
+    },
+}

@@ -24,4 +24,5 @@ urlpatterns = [
     path("api/v1/appointments/<int:appointment_id>/undo-no-show", views.undo_no_show_view),
     path("api/v1/appointments/<int:appointment_id>/reschedule", views.reschedule_view),
     path("api/v1/doctors/<int:doctor_id>/slots", views.slots_view),
+    path("api/v1/doctors/<int:doctor_id>/month", views.month_view),
 ]

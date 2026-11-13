@@ -349,7 +349,7 @@ function patchGroups(fresh) {
       const head = group.querySelector("[data-head]");
       const freshHead = freshGroup.querySelector("[data-head]");
       if (head.outerHTML !== freshHead.outerHTML) head.replaceWith(freshHead);
-      for (const name of ["open", "done"]) {
+      for (const name of ["open", "booked", "done"]) {
         const live = group.querySelector(`[data-rows="${name}"]`);
         const fresh = freshGroup.querySelector(`[data-rows="${name}"]`);
         if (live && fresh) patchRows(live, fresh);
@@ -359,6 +359,12 @@ function patchGroups(fresh) {
       if (fold && freshFold) {  // the count and whether it shows; open or closed stays as the person left it
         fold.hidden = freshFold.hidden;
         fold.querySelector("[data-fold-count]").textContent = freshFold.querySelector("[data-fold-count]").textContent;
+      }
+      const booked = group.querySelector("[data-booked-wrap]");
+      const freshBooked = freshGroup.querySelector("[data-booked-wrap]");
+      if (booked && freshBooked) {
+        booked.hidden = freshBooked.hidden;
+        booked.querySelector("[data-booked-count]").textContent = freshBooked.querySelector("[data-booked-count]").textContent;
       }
       group.querySelector("[data-empty]").hidden = freshGroup.querySelector("[data-empty]").hidden;
       if ((prev ? prev.nextElementSibling : list.firstElementChild) !== group) {
@@ -403,6 +409,32 @@ function patchRows(rows, freshRows) {
 function rememberRows() {
   list.querySelectorAll(".appt").forEach((row) => { rowHtml.set(row.dataset.id, row.outerHTML); markActing(row); });
 }
+
+// --- how long each patient has waited, from arrival, by the server's clock (Saged, 2026-11-13) ---
+// The fragment only changes when the day does, so the minutes tick here; web/format.py wait_text says the same.
+
+function waitText(minutes) {
+  const m = Math.max(0, Math.floor(minutes));
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  const say = (key) => t(key, { h: localDigits(h), m: localDigits(rest) });
+  if (m >= 240) return t("wait_over", { h: localDigits(4) });
+  if (m < 1) return t("wait_now");
+  if (!h) return say("wait_m");
+  if (h === 1) return say(rest ? "wait_1h_m" : "wait_1h");
+  return say(rest ? "wait_h_m" : "wait_h");
+}
+
+function tickWaits() {
+  const now = Date.now() + clockSkew;
+  list.querySelectorAll("[data-wait-since]").forEach((node) => {
+    const since = Date.parse(node.dataset.waitSince);
+    if (Number.isNaN(since)) return;
+    const text = waitText((now - since) / 60000);
+    if (node.textContent !== text) node.textContent = text;
+  });
+}
+setInterval(tickWaits, 30000);
 
 // --- filters by doctor and by section (design D3), and the counts ---
 

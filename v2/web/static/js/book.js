@@ -3,11 +3,16 @@
 // in the same single request (design 5.1).
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { Submitter, When, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
+import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
 
 const config = JSON.parse(document.getElementById("clinic-config").textContent);
+
+function clockText(iso) {
+  const parts = clockParts(iso);
+  return parts ? `${parts.time} ${parts.pm ? t("pm") : t("am")}` : "";
+}
 
 // A result element's data (from _patient_results.html or the duplicate-phone list).
 export function patientFrom(node) {
@@ -175,7 +180,7 @@ export function initBook({ onBooked, defaults } = {}) {
   }
 
   form.addEventListener("change", (event) => {
-    if (event.target.name === "section") { filterBySection(); when.refresh(); }
+    if (event.target.name === "section") { filterBySection(); when.loadMonth(true); when.refresh(); }
     if (event.target.name === "service") quote();
     if (event.target.name === "collect" || event.target.name === "arrive") labels();
     if (event.target.name === "amount") field("amount").dataset.touched = "1";
@@ -241,7 +246,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!b.service_id) return t("need_service");
     if (!b.doctor_id) return t("need_doctor");
     if (!b.day) return t("need_day");
-    if (when.needsTime() && !b.starts_at) return t("need_time");
+    if (when.needsTime() && !when.picked()) return t("need_time");
     if (b.payment && !b.payment.amount) return t("bad_amount");
     return "";
   }
@@ -264,12 +269,15 @@ export function initBook({ onBooked, defaults } = {}) {
     if (tab && paid) tab.location.href = receiptUrl(appointment.invoice.id);
     else if (tab) tab.close();
     dialog.close();
-    const names = { name: appointment.patient.name, n: localDigits(appointment.queue_no) };
+    // The toast says when: the day and the time, or the turn on a queue day (Saged, 2026-11-13).
+    const names = { name: appointment.patient.name, n: localDigits(appointment.queue_no), day: when.dayLabel(appointment.day),
+                    time: appointment.starts_at ? clockText(appointment.starts_at) : "" };
+    const bookedKey = appointment.starts_at ? "booked_at" : appointment.day !== config.today ? "booked_day" : "booked";
     if (paid) {
       toast(t("booked_paid", { ...names, amount: moneyText(appointment.invoice.paid) }),
         printing && !tab ? { label: t("print_receipt"), href: receiptUrl(appointment.invoice.id) } : null);
     } else {
-      toast(t("booked", names));
+      toast(t(bookedKey, names));
       if (b.payment) alertMessage(t("booked_not_paid"));
     }
     if (onBooked) onBooked(result.data);
@@ -291,7 +299,7 @@ export function initBook({ onBooked, defaults } = {}) {
       const source = form.querySelector(`[name="source"][value="${CSS.escape(localStorage.getItem("hamada.source") || "")}"]`);
       if (source) source.checked = true;
     } catch (e) { /* none */ }
-    when.otherWrap.hidden = true;
+    when.reset();
     lastFee = null;
     const d = defaults ? defaults() : {};
     section = section || d.sectionId || "";
@@ -303,6 +311,7 @@ export function initBook({ onBooked, defaults } = {}) {
     else { patient = null; picked.hidden = true; finder.hidden = false; if (newBox) newBox.hidden = true; field("q").value = query; }
     openDialog(dialog);
     if (!given) { field("q").focus(); if (query) search(); }
+    when.loadMonth(true);
     when.refresh();
     quote();
     labels();

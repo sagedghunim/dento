@@ -74,15 +74,15 @@ export async function run() {
 
     // A procedure without the chart, double-clicked: recorded once.
     const procsBefore = (await record(first.id)).procedures.length;
-    const picked = await page.eval(`(() => { const s = document.querySelector('[data-add-procedure] select');
-      const o = [...s.options].find((x) => x.value && x.dataset.unit !== "tooth") || s.options[1]; s.value = o.value;
-      s.dispatchEvent(new Event("change", { bubbles: true }));
-      if (o.dataset.unit === "tooth") document.querySelector('[data-add-procedure] [name="tooth"]').value = "36";
-      const b = document.querySelector('[data-add-procedure] [data-submit]'); b.click(); b.click(); return o.textContent; })()`);
+    // One of the quick procedures (one tap each); a tooth procedure asks for the tooth, which is optional.
+    const picked = await page.eval(`(() => { const d = JSON.parse(document.getElementById("visit-data").textContent);
+      const p = d.procedures.find((x) => d.top.includes(x.id) && x.unit !== "tooth") || d.procedures.find((x) => d.top.includes(x.id));
+      const b = document.querySelector('[data-top-procedures] [data-proc="' + p.id + '"]'); b.click(); b.click();
+      if (p.unit === "tooth") { const s = document.querySelector("[data-proc-confirm] [data-submit]"); s.click(); s.click(); }
+      return p.name; })()`);
     await page.until(`document.querySelectorAll("[data-procedures] li").length === ${procsBefore + 1}`, 10000, `the procedure shows in the list (${picked})`);
     await sleep(500);
     check((await record(first.id)).procedures.length === procsBefore + 1, "a double click recorded one procedure");
-    check(await page.eval(`document.querySelector("[data-no-procedures]").hidden`), "the empty note hides");
 
     // The dental chart opens inside the screen; a procedure recorded there joins the list.
     check(!(await page.eval(`document.querySelector("[data-chart-fold]").open`)), "the chart starts closed");

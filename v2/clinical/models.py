@@ -131,6 +131,9 @@ class Procedure(models.Model):
     description_en = models.CharField(max_length=500, blank=True, default="", db_default="")  # design G3
     internal_cost = models.BigIntegerField(default=0)
     condition = models.CharField(max_length=20, blank=True, default="")  # the tooth state it sets, if any
+    # Its follow-up recipe (Saged, 2026-11-13): [{"days": 7, "label": "...", "label_en": "..."}], offered in the
+    # visit when it is recorded; [] is none (or turned off). The clinic edits it under Team & settings.
+    follow_up = models.JSONField(default=list, blank=True, db_default=models.Value([], output_field=models.JSONField()))
     is_active = models.BooleanField(default=True)
     sort = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
@@ -328,15 +331,24 @@ class Plan(models.Model):
 
 
 class PlanItem(models.Model):
+    """A planned procedure, or a follow-up (Saged, 2026-11-13): a procedure or a short label, a suggested day, the
+    visit that suggested it and, once the desk books it, its appointment. The desk's Follow-ups list shows the
+    unbooked ones once their visit is finished."""
+
     clinic = _clinic()
     plan = _ref(Plan)
-    procedure = _ref(Procedure)
+    procedure = _ref(Procedure, null=True)
+    label = models.CharField(max_length=80, blank=True, default="", db_default="")
     position = models.PositiveSmallIntegerField()
     tooth = models.PositiveSmallIntegerField(null=True, blank=True)
     area = models.CharField(max_length=20, blank=True, default="")
     price = models.BigIntegerField()
     status = models.CharField(max_length=12, default="planned")
     done_appointment = _ref("scheduling.Appointment", null=True)
+    due_on = models.DateField(null=True, blank=True)  # the suggested day (the clinic's business day)
+    visit = _ref("scheduling.Appointment", null=True)  # the visit that suggested it
+    appointment = _ref("scheduling.Appointment", null=True)  # booked for it
+    snoozed_until = models.DateField(null=True, blank=True)  # the desk's "later": hidden until this day
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -350,10 +362,16 @@ class PlanItem(models.Model):
             _fk("plan", "clinical.Plan", "plan_item_plan_fk"),
             _fk("procedure", "clinical.Procedure", "plan_item_procedure_fk"),
             _fk("done_appointment", "scheduling.Appointment", "plan_item_appointment_fk"),
+            _fk("visit", "scheduling.Appointment", "plan_item_visit_fk"),
+            _fk("appointment", "scheduling.Appointment", "plan_item_booked_fk"),
+            models.CheckConstraint(condition=Q(procedure__isnull=False) | ~Q(label=""), name="plan_item_has_what"),
         ]
         # Unfinished treatment (F6): only the open items, so the list reads them, not every plan.
+        # Follow-ups to book: the desk's list reads the planned items with a suggested day, by day.
         indexes = [models.Index(fields=["clinic", "plan"], condition=Q(status__in=["planned", "in_progress"]),
-                                name="plan_item_open")]
+                                name="plan_item_open"),
+                   models.Index(fields=["clinic", "due_on"], condition=Q(status="planned", due_on__isnull=False),
+                                name="plan_item_follow_up")]
 
 
 class VisitProcedure(models.Model):

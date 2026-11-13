@@ -1,8 +1,10 @@
 // Finances (design F1, F3, F4, F5), as someone with finances.view, expenses.manage and cash.shift
 // (HAMADA_BT_USER=ahmed with finances.view and expenses.manage granted; see README). Add an expense with a double
 // click and see the month's expenses rise once; a dropped connection keeps an expense for "Try again"; void it;
-// add a category; cash in and cash out on the register move the expected cash once each; every tab fits 390 px;
-// an expired session goes to sign-in. With HAMADA_BT_SHOTS=<folder> it also takes the screenshots.
+// add a category; on the register, "Pay an expense" by its category (double-clicked) takes it from the drawer once and
+// lists it by the category's name, "Other" won't save without a reason, and the quiet "other drawer movement" moves the
+// expected cash once; every tab fits 390 px; an expired session goes to sign-in. With HAMADA_BT_SHOTS=<folder> it
+// takes the register at 1280 and 390 px.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browser, check, signIn, sleep } from "./lib.mjs";
@@ -22,6 +24,11 @@ async function shot(page, name, full = false) {
 const monthExpenses = async (api) => (await api("GET", "/api/v1/finances/profit")).data.expenses;
 const expected = async (api) => { const r = (await api("GET", "/api/v1/register")).data; return r.shift ? r.totals.expected_cash : 0; };
 const expenseRow = (note) => `[...document.querySelectorAll("[data-expense]")].find((r) => r.textContent.includes(${JSON.stringify(note)}))`;
+// Tap a category chip in "Pay an expense": by its code, or the first that isn't "Other". Returns its name.
+const pickCategory = (code = "") => `(() => { const chips = [...document.querySelectorAll('#expense-dialog [name="category_id"]')];
+  const code = ${JSON.stringify(code)};
+  const c = code ? chips.find((i) => i.dataset.code === code) : chips.find((i) => i.dataset.code !== "other");
+  c.click(); return c.closest(".chip").textContent.trim(); })()`;
 const fill = (dialog, values) => `(() => { const f = document.querySelector("#${dialog} form");
   for (const [k, v] of Object.entries(${JSON.stringify(values)})) f.elements[k].value = v; })()`;
 
@@ -38,6 +45,8 @@ export async function run() {
     const note = `Bt bill ${stamp}`;
     await page.eval(`document.querySelector("[data-new-expense]").click()`);
     await page.until(`document.getElementById("expense-dialog").open`, 3000, "the expense dialog opens");
+    check(await page.eval(`!document.querySelector('#expense-dialog [name="from_shift"]').checked`), "on the expenses tab it isn't from the drawer by default");
+    await page.eval(pickCategory());
     await page.eval(fill("expense-dialog", { amount: "123.45", note }));
     await page.eval(`(() => { const b = document.querySelector("#expense-dialog [data-submit]"); b.click(); b.click(); })()`);
     await page.until(`Boolean(${expenseRow(note)})`, 10000, "the new expense is listed");
@@ -49,13 +58,13 @@ export async function run() {
     await page.open("/finances?tab=month");
     const statText = await page.eval(`document.querySelector('[data-stat="expenses"]').textContent`);
     check(await monthExpenses(api) === before + 12345 && statText.length > 0, `This month shows the expenses (${statText.trim()})`);
-    await shot(page, "v2-finances-1280.png");
 
     // --- a dropped connection: the add stays on screen for "Try again", then saves once ---
     await page.open("/finances?tab=expenses");
     const note2 = `Bt lab ${stamp}`;
     await page.eval(`document.querySelector("[data-new-expense]").click()`);
     await page.until(`document.getElementById("expense-dialog").open`, 3000, "the expense dialog opens again");
+    await page.eval(pickCategory("lab"));
     await page.eval(fill("expense-dialog", { amount: "10", note: note2 }));
     await page.cdp("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     await page.eval(`document.querySelector("#expense-dialog [data-submit]").click()`);
@@ -84,28 +93,56 @@ export async function run() {
     await page.until(`[...document.querySelectorAll(".cat-list [data-category]")].some((r) => r.textContent.includes(${JSON.stringify(cat)}))`, 10000, "the new category is listed");
     await page.eval(`document.querySelector("[data-new-expense]").click()`);
     await page.until(`document.getElementById("expense-dialog").open`, 3000, "the expense dialog opens");
-    check(await page.eval(`[...document.querySelectorAll("[data-category-select] option")].some((o) => o.textContent === ${JSON.stringify(cat)})`), "the new category is offered for expenses");
+    check(await page.eval(`[...document.querySelectorAll("[data-category-chips] .chip")].some((o) => o.textContent.trim() === ${JSON.stringify(cat)})`), "the new category is offered for expenses");
+    check(await page.eval(`[...document.querySelectorAll('[data-category-chips] [name="category_id"]')].pop().dataset.code === "other"`), "Other is offered last");
     await page.eval(`document.querySelector("#expense-dialog .dialog-head [data-close]").click()`);
 
-    // --- the register: cash in, then a double-clicked cash out, each moves the expected cash once ---
+    // --- the register: no generic cash in / out; "Pay an expense" by its category, from the drawer ---
     await page.open("/finances?tab=register");
     check(await page.eval(`document.querySelector(".card-sub").textContent.length > 20`), "the register says it opens by itself on the first cash payment");
+    check(await page.eval(`!document.querySelector('[data-cash="out"]') && Boolean(document.querySelector("[data-new-expense]"))`), "the register offers Pay an expense, not Cash out");
     const start = await expected(api);
-    await page.eval(`document.querySelector('[data-cash="in"]').click()`);
-    await page.until(`document.getElementById("cash-dialog").open`, 3000, "the cash dialog opens");
-    await page.eval(fill("cash-dialog", { amount: "50", reason: `Bt change ${stamp}` }));
-    await page.eval(`document.querySelector("#cash-dialog [data-submit]").click()`);
-    await page.until(`Boolean(document.querySelector("[data-expected]"))`, 10000, "the open shift shows its expected cash");
+    await page.eval(`document.querySelector("[data-new-expense]").click()`);
+    await page.until(`document.getElementById("expense-dialog").open`, 3000, "Pay an expense opens on the register");
+    check(await page.eval(`document.querySelector('#expense-dialog [name="from_shift"]').checked`), "from the register it is paid from the drawer by default");
+    const labName = await page.eval(pickCategory("lab"));
+    check(await page.eval(`document.activeElement === document.querySelector('#expense-dialog [name="amount"]')`), "tapping a category moves to the amount");
+    await page.eval(fill("expense-dialog", { amount: "20" }));
+    await page.eval(`(() => { const b = document.querySelector("#expense-dialog [data-submit]"); b.click(); b.click(); })()`);
+    await page.until(`!document.getElementById("expense-dialog").open`, 10000, "the expense dialog closes");
+    await sleep(1000);
+    check(await expected(api) === start - 2000, "a double-clicked lab expense took 20 from the drawer once");
+    await page.until(`[...document.querySelectorAll("[data-register] .lines li")].some((li) => li.textContent.includes(${JSON.stringify(labName)}))`, 10000, "the drawer list names the expense by its category");
+
+    // "Other" needs a reason: the dialog says so and sends nothing; with one it saves.
+    await page.eval(`document.querySelector("[data-new-expense]").click()`);
+    await page.until(`document.getElementById("expense-dialog").open`, 3000, "Pay an expense opens again");
+    await page.eval(pickCategory("other"));
+    check(await page.eval(`!document.querySelector("#expense-dialog [data-note-required]").hidden`), "with Other the note says it is required");
+    await page.eval(fill("expense-dialog", { amount: "5" }));
+    await page.eval(`document.querySelector("#expense-dialog [data-submit]").click()`);
     await sleep(500);
-    check(await expected(api) === start + 5000, "cash in raised the expected cash by 50");
-    await page.eval(`document.querySelector('[data-cash="out"]').click()`);
-    await page.until(`document.getElementById("cash-dialog").open`, 3000, "the cash dialog opens for cash out");
-    check(await page.eval(`document.querySelector('#cash-dialog [name="kind"]:checked').value`) === "out", "it opens set to cash out");
-    await page.eval(fill("cash-dialog", { amount: "20", reason: `Bt deposit ${stamp}` }));
+    check(await page.eval(`document.getElementById("expense-dialog").open && document.querySelector("#expense-dialog [data-error]").textContent.length > 0`), "Other without a reason isn't saved and says why");
+    check(await expected(api) === start - 2000, "nothing was taken for Other without a reason");
+    await page.eval(fill("expense-dialog", { note: `Bt tip ${stamp}` }));
+    await page.eval(`document.querySelector("#expense-dialog [data-submit]").click()`);
+    await page.until(`!document.getElementById("expense-dialog").open`, 10000, "Other with a reason saves");
+    await sleep(800);
+    check(await expected(api) === start - 2500, "Other with a reason took 5");
+
+    // The quiet "other drawer movement": the owner adds change; a reason is required.
+    await page.eval(`document.querySelector('[data-cash="in"]').click()`);
+    await page.until(`document.getElementById("cash-dialog").open`, 3000, "the other drawer movement opens");
+    await page.eval(fill("cash-dialog", { amount: "50", reason: "" }));
+    await page.eval(`document.querySelector("#cash-dialog [data-submit]").click()`);
+    await sleep(400);
+    check(await page.eval(`document.getElementById("cash-dialog").open`), "a movement without a reason isn't sent");
+    await page.eval(fill("cash-dialog", { reason: `Bt change ${stamp}` }));
     await page.eval(`(() => { const b = document.querySelector("#cash-dialog [data-submit]"); b.click(); b.click(); })()`);
     await page.until(`!document.getElementById("cash-dialog").open`, 10000, "the cash dialog closes");
     await sleep(1000);
-    check(await expected(api) === start + 3000, "a double-clicked cash out took 20 once");
+    check(await expected(api) === start + 2500, "a double-clicked movement added 50 once");
+    await shot(page, "v2-register-1280.png");
     check(await page.eval(`document.querySelectorAll(".cash-lines li").length >= 2`), "the shift lists its cash lines");
     await page.eval(`document.querySelector("[data-shift-report]").click()`);
     await page.until(`document.querySelector("#report-dialog [data-report-body] .cash-lines")`, 10000, "a shift's report opens");
@@ -117,12 +154,7 @@ export async function run() {
     for (const t of ["month", "register", "expenses", "pay", "owed"]) {
       await page.open(`/finances?tab=${t}`);
       check(await page.eval(`document.documentElement.scrollWidth <= 390`), `the ${t} tab fits 390 px`);
-      if (t === "month") await shot(page, "v2-finances-390.png", true);
-    }
-    if (SHOTS) {
-      await page.open("/finances?tab=expenses");
-      await page.eval(`document.querySelector("[data-new-expense]").click()`);
-      await shot(page, "v2-finances-dialog-390.png");
+      if (t === "register") await shot(page, "v2-register-390.png", true);
     }
 
     // An expired session: a page load goes to sign-in.

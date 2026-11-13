@@ -109,15 +109,17 @@ def clinic_config(ctx, today):
     }
 
 
-def _day_choices(today):
-    """Day chips for the dialogs: the server decides "today" (design 5.11)."""
-    return [{"value": (today + dt.timedelta(days=n)).isoformat(),
-             "label": label or fmt.day(today + dt.timedelta(days=n), with_year=False)}
-            for n, label in ((0, _("Today")), (1, _("Tomorrow")), (2, ""))]
+def _calendar_names():
+    """The Book calendar's month and weekday names (Django's own translations), weeks from Saturday."""
+    from django.utils.dates import MONTHS, WEEKDAYS, WEEKDAYS_ABBR
+
+    order = (5, 6, 0, 1, 2, 3, 4)  # Saturday first, as in Egypt; Monday is 0
+    return {"months": [str(MONTHS[m]) for m in range(1, 13)], "weekdays": [str(WEEKDAYS_ABBR[d]) for d in order],
+            "days": [str(WEEKDAYS[d]) for d in order]}
 
 
 def _dialog_context(ctx, today):
-    return {"config": clinic_config(ctx, today), "day_choices": _day_choices(today), **_labels()}
+    return {"config": clinic_config(ctx, today), "cal": _calendar_names(), **_labels()}
 
 
 # --- Today ---------------------------------------------------------------------------------------------------
@@ -175,7 +177,7 @@ def queue_context(ctx, day, today, data):
     for queue in data["queues"]:
         doctor = queue["doctor"]
         names[doctor["id"]] = doctor["name"]
-        rows, folded = [], []
+        rows, booked, folded = [], [], []
         for appointment in queue["appointments"]:
             appointment = {**appointment, "section_id": _section_of(appointment)}
             appointment["dental"] = dental(appointment["section_id"])
@@ -183,7 +185,13 @@ def queue_context(ctx, day, today, data):
             starts = appointment["starts_at"]
             appointment["started"] = not starts or dt.datetime.fromisoformat(starts) <= now  # "didn't come" offered
             status = appointment["status"]
-            (folded if status == "done" and appointment["due"] <= 0 else rows).append(appointment)
+            # The wait runs from arrival, only while waiting or ready (never from the booking's time).
+            if status in ("waiting", "ready") and appointment["arrived_at"]:
+                waited = (now - dt.datetime.fromisoformat(appointment["arrived_at"])).total_seconds() // 60
+                appointment["wait"] = fmt.wait_text(waited)
+            # Booked visits (not arrived) are a list of their own, by time, never among the waiting (Saged, 2026-11-13).
+            (folded if status == "done" and appointment["due"] <= 0
+             else booked if status == "booked" else rows).append(appointment)
             if status != "cancelled":
                 stats["total"] += 1
             if status in ("waiting", "in_room", "done"):
@@ -191,9 +199,9 @@ def queue_context(ctx, day, today, data):
         rows.sort(key=lambda a: ROW_RANK.get(a["status"], 9))  # stable: keeps time and turn inside a rank
         sessions = doctor["sessions"]
         section_ids = sorted({s["section_id"] for s in sessions if s.get("section_id")} |
-                             {a["section_id"] for a in rows + folded if a["section_id"]})
+                             {a["section_id"] for a in rows + booked + folded if a["section_id"]})
         groups.append({"id": doctor["id"], "name": doctor["name"], "sessions": sessions, "rows": rows,
-                       "folded": folded, "counts": queue["counts"], "section_ids": section_ids})
+                       "booked": booked, "folded": folded, "counts": queue["counts"], "section_ids": section_ids})
     recent = [{**event, "doctor": names.get(event["doctor_id"], "")} for event in data["recent"]]
     return {
         "day": day, "today": today, "is_today": day == today, "groups": groups, "stats": stats,

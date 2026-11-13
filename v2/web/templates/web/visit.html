@@ -34,7 +34,7 @@
       <h2 id="notes-title"><label for="visit-notes">{% translate "Visit notes" %}</label></h2>
       <span class="save-state" data-save-state role="status" aria-live="polite"></span>
     </div>
-    <textarea id="visit-notes" class="notes-box" name="notes" maxlength="5000" dir="auto" rows="8" spellcheck="false" placeholder="{% translate "For example: filling 36, cleaning" %}" data-notes>{{ record.note.notes|default:"" }}</textarea>
+    <textarea id="visit-notes" class="notes-box" name="notes" maxlength="5000" dir="auto" rows="8" spellcheck="false" placeholder="{% translate "Complaint, exam, what was done, what comes next…" %}" data-notes>{{ record.note.notes|default:"" }}</textarea>
     <div class="notice" data-note-conflict hidden>
       <p>{% translate "This note was changed on another screen. Your text stays here and will be saved over it. Their text:" %}</p>
       <p class="their-text"><bdi dir="auto" data-their-text></bdi></p>
@@ -50,34 +50,74 @@
 
   <section class="card" aria-labelledby="procs-title" data-procs-card>
     <div class="card-head">
-      <h2 id="procs-title">{% translate "Procedures this visit" %}</h2>
-      <strong class="num" data-procs-total>{{ record.invoice.total|default:0|money }}</strong>
+      <h2 id="procs-title">{% translate "Done today" %}</h2>
     </div>
-    <ul class="proc-list" data-procedures>
-      {% for p in record.procedures %}<li><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span><span class="num">{{ p.amount|money }}</span></li>{% endfor %}
-    </ul>
-    <p class="empty-note" data-no-procedures{% if record.procedures %} hidden{% endif %}>{% translate "No procedures yet." %}</p>
     {% if perms.record and config.procedures %}
     <div class="add-proc" data-add-procedure>
-      <form class="add-proc-form" novalidate>
-        <div class="add-proc-fields">
-          <label class="field grow-field">{% translate "Procedure" %}
-            <select name="procedure_id">
-              <option value="">{% translate "Pick the procedure" %}</option>
-              {% for p in config.procedures %}<option value="{{ p.id }}" data-unit="{{ p.unit }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
-            </select>
-          </label>
-          <label class="field tooth-field" data-tooth-field hidden>{% translate "Tooth" %}<input name="tooth" dir="ltr" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="36"></label>
+      <form novalidate>
+        <div class="chips" data-top-procedures>
+          {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi> <span class="count num">{{ p.price|money }}</span></button>{% endfor %}
         </div>
-        <p class="form-error" data-error role="alert"></p>
-        <div class="appt-actions">
-          <button type="submit" class="btn" data-submit><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add procedure" %}</button>
+        <label class="field proc-search">{% translate "Another procedure" %}
+          <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
+        </label>
+        <div class="chips" data-proc-results aria-live="polite"></div>
+        <div class="proc-confirm" data-proc-confirm hidden>
+          <strong><bdi dir="auto" data-proc-name></bdi></strong>
+          <label class="field tooth-field" data-tooth-field hidden>{% translate "Tooth number (optional)" %}<input name="tooth" dir="ltr" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="36"></label>
+          <button type="submit" class="btn" data-submit>{% translate "Record" %}</button>
+          <button type="button" class="btn ghost" data-proc-cancel>{% translate "Cancel" %}</button>
           <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
         </div>
+        <p class="form-error" data-error role="alert"></p>
       </form>
     </div>
     {% endif %}
+    <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
+      <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi></span><span class="num">{{ bill.fee|money }}</span></li>
+    </ul>
+    <ul class="proc-list bill" data-procedures>
+      {% for p in record.procedures %}<li data-record="{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span><span class="num">{{ p.amount|money }}</span></li>{% endfor %}
+    </ul>
+    <p class="bill-total"><span>{% translate "Total" %}</span><strong class="num" data-procs-total>{{ bill.total|money }}</strong></p>
+    <div class="offers" data-offers></div>
   </section>
+
+  {% if perms.record %}
+  <section class="card" aria-labelledby="next-title" data-next-card>
+    <div class="card-head">
+      <h2 id="next-title">{% translate "What comes next" %}</h2>
+      <span class="muted">{% translate "The desk books these when the visit is finished." %}</span>
+    </div>
+    <ul class="proc-list next-list" data-upcoming></ul>
+    <p class="empty-note" data-no-upcoming hidden>{% translate "Nothing planned yet." %}</p>
+    <div data-next-add><form class="next-add" novalidate>
+      <fieldset class="group">
+        <legend>{% translate "What" %}</legend>
+        <div class="chips" data-next-what>
+          <label class="chip"><input type="radio" name="what" value="label:{% translate "Follow-up visit" %}" checked><span>{% translate "Follow-up visit" %}</span></label>
+          <label class="chip"><input type="radio" name="what" value="label:{% translate "Continue the treatment" %}"><span>{% translate "Continue the treatment" %}</span></label>
+          {% for p in top %}<label class="chip"><input type="radio" name="what" value="proc:{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi></span></label>{% endfor %}
+        </div>
+        <label class="field next-other">{% translate "Something else (optional)" %}<input name="other" dir="auto" autocomplete="off" maxlength="80"></label>
+      </fieldset>
+      <fieldset class="group">
+        <legend>{% translate "When: one tap adds it" %}</legend>
+        <div class="chips" data-next-when>
+          <button type="button" class="chip-btn" data-run data-days="2">{% translate "In 2 days" %}</button>
+          <button type="button" class="chip-btn" data-run data-days="7">{% translate "In a week" %}</button>
+          <button type="button" class="chip-btn" data-run data-days="14">{% translate "In 2 weeks" %}</button>
+          <button type="button" class="chip-btn" data-run data-days="30">{% translate "In a month" %}</button>
+        </div>
+      </fieldset>
+      <p class="form-error" data-error role="alert"></p>
+      <div class="appt-actions">
+        <button type="submit" class="btn" data-submit hidden>{% translate "Try again" %}</button>
+        <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+      </div>
+    </form></div>
+  </section>
+  {% endif %}
 
   {% if perms.prescribe %}
   <section class="card" aria-labelledby="rx-title">

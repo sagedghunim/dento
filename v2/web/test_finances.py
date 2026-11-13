@@ -55,8 +55,11 @@ class FinancesPageTests(FinancesCase):
                        'id="expense-dialog"', 'id="void-dialog"'):
             self.assertIn(marker, expenses, marker)
         register = self.owner.get("/finances?tab=register").content.decode()
-        for marker in ('data-cash="in"', 'data-cash="out"', 'id="cash-dialog"', 'id="close-dialog"'):
+        for marker in ("data-new-expense data-from-drawer", 'id="expense-dialog"', 'name="category_id"',
+                       'data-cash="in"', 'id="cash-dialog"', 'id="close-dialog"', "دفع مصروف", "حركة أخرى للخزنة"):
             self.assertIn(marker, register, marker)
+        # No generic cash in / cash out buttons: money out is an expense by its category.
+        self.assertNotIn('data-cash="out"', register)
         self.assertTrue("data-open-shift" in register or "data-close-shift" in register)  # one, by the shift's state
         self.assertIn("تُفتح تلقائيًا مع أول دفعة نقدية", register)  # says plainly that it opens by itself
         pay = self.owner.get("/finances?tab=pay").content.decode()
@@ -79,12 +82,36 @@ class FinancesPageTests(FinancesCase):
         self.assertIn("فكة", r.content.decode())
         self.assertEqual(fragment(self.desk, "/finances/shifts").status_code, 200)
 
+    def test_the_register_lists_drawer_expenses_by_category_and_other_stays(self):
+        items = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
+        r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["lab"]["id"], "amount": 7000,
+                                                          "from_shift": True, "note": "تركيبة"})
+        self.assertEqual(r.status_code, 201, r.content)
+        call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["rent"]["id"], "amount": 9000})  # not drawer
+        register = fragment(self.owner, "/finances/part?tab=register").content.decode()
+        moves = register.split("حركة الخزنة في هذه الوردية")[1]
+        self.assertIn(items["lab"]["name"], moves)
+        self.assertIn("تركيبة", moves)
+        self.assertNotIn(items["rent"]["name"], moves)
+        shift = register.split('data-shift-id="')[1].split('"')[0]
+        self.assertIn(items["lab"]["name"], fragment(self.owner, f"/finances/shifts/{shift}").content.decode())
+        # "Other" can't be removed from the screen, and comes back if the API removed it; it is offered last.
+        expenses = self.owner.get("/finances?tab=expenses").content.decode()
+        row = expenses.split(f'&quot;id&quot;: {items["other"]["id"]},')[1].split("</li>")[0]
+        self.assertNotIn("data-remove-category", row)
+        call(self.owner, "PATCH", f"/api/v1/expense-categories/{items['other']['id']}", {"is_active": False})
+        register = self.owner.get("/finances?tab=register").content.decode()
+        chips = register.split("data-category-chips")[1].split("</fieldset>")[0]
+        self.assertEqual(chips.count('name="category_id"'), 5)
+        self.assertIn('data-code="other"', chips.split('name="category_id"')[-1])
+
     def test_the_front_desk_sees_the_register_only(self):
         r = self.desk.get("/finances")
         html = r.content.decode()
         self.assertEqual(r.status_code, 200)
         self.assertIn('data-tab="register"', html)
-        for marker in MONEY_MARKERS + ("?tab=expenses",):
+        self.assertIn('data-cash="in"', html)  # the quiet "other drawer movement"
+        for marker in MONEY_MARKERS + ("?tab=expenses", "data-new-expense", 'id="expense-dialog"'):
             self.assertNotIn(marker, html, marker)
         self.assertIn('data-tab="register"', self.desk.get("/finances?tab=month").content.decode())  # no way in
         self.assertIn('href="/finances"', self.desk.get("/patients").content.decode())

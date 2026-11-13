@@ -6,7 +6,7 @@
         <h2 id="exp-title">{% translate "Expenses" %} · {{ month.label }}</h2>
         <p class="card-sub">{% translate "Total:" %} <strong data-expenses-total="{{ expenses_total }}">{{ expenses_total|money }}</strong></p>
       </div>
-      <button type="button" class="btn" data-new-expense><svg class="icon"><use href="#i-plus"/></svg>{% translate "Expense" %}</button>
+      <button type="button" class="btn" data-new-expense><svg class="icon"><use href="#i-minus"/></svg>{% translate "Pay an expense" %}</button>
     </div>
     {% if expenses %}
     <ul class="lines exp-list" data-rows="expenses">{% include "web/_fin_expense_rows.html" with rows=expenses %}</ul>
@@ -25,7 +25,7 @@
         <bdi dir="auto" class="cat-name">{{ c.name }}</bdi>
         <span class="row-actions">
           <button type="button" class="btn ghost" data-rename-category>{% translate "Rename" %}</button>
-          <button type="button" class="icon-btn danger-icon" data-remove-category aria-label="{% translate "Remove" %}: {{ c.name }}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+          {% if c.code != "other" %}<button type="button" class="icon-btn danger-icon" data-remove-category aria-label="{% translate "Remove" %}: {{ c.name }}" title="{% translate "Remove" %}"><svg class="icon"><use href="#i-x"/></svg></button>{% endif %}
         </span>
       </li>
       {% endfor %}

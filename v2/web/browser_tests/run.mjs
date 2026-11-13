@@ -3,6 +3,7 @@ import { run as rowsStay } from "./e1_rows_stay.mjs";
 import { run as noDoubleBooking } from "./e2_no_double_booking.mjs";
 import { run as finishCollect } from "./e3_finish_collect.mjs";
 import { run as desk } from "./e9_desk.mjs";
+import { run as bookCalendar } from "./e11_book_calendar.mjs";
 import { BASE, USER } from "./lib.mjs";
 
 const tests = [
@@ -10,6 +11,7 @@ const tests = [
   ["e2_no_double_booking (R7)", noDoubleBooking],
   ["e3_finish_collect (R2)", finishCollect],
   ["e9_desk (desk review)", desk],
+  ["e11_book_calendar (booking by day and time)", bookCalendar],
 ];
 
 console.log(`Browser tests against ${BASE} as ${USER}`);

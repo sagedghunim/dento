@@ -28,6 +28,12 @@ urlpatterns = [
     path(v + "patients/<int:patient_id>/plans", by_method(GET=views.plans_view, POST=views.plan_create_view)),
     path(v + "plans/<int:plan_id>/items", views.plan_items_view),
     path(v + "plan-items/<int:item_id>/status", views.plan_item_status_view),
+    # Follow-ups: what comes next, and the desk's list
+    path(v + "appointments/<int:appointment_id>/follow-ups", views.follow_ups_add_view),
+    path(v + "follow-ups/snooze", views.follow_ups_snooze_view),
+    path(v + "follow-ups/booked", views.follow_ups_booked_view),
+    path(v + "follow-ups/<int:item_id>/due", views.follow_up_due_view),
+    path(v + "follow-ups/<int:item_id>/drop", views.follow_up_drop_view),
     # Prescriptions
     path(v + "prescriptions", views.prescription_create_view),
     path(v + "prescriptions/<int:prescription_id>", views.prescription_view),
