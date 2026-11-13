@@ -329,6 +329,8 @@ function renderUpcoming(items) {
     return li;
   }));
   nextEmpty.hidden = items.length > 0;
+  const send = document.querySelector("[data-next-send]");  // the plan by WhatsApp: only with something to send
+  if (send) send.hidden = !items.length;
 }
 if (nextList) renderUpcoming(data.upcoming || []);
 

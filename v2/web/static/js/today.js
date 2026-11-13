@@ -2,6 +2,7 @@
 // rows patched in place and never moved under the finger, a stale indicator, and one-tap row actions.
 import { errorMessage, fetchText, isOk, membership, pendingList, save } from "./api.js";
 import { initBook } from "./book.js";
+import { later, openPlan } from "./fu.js";
 import { parseFragment, receiptUrl } from "./dialogs.js";
 import { clockParts, localDigits } from "./numbers.js";
 import { initPay } from "./pay.js";
@@ -12,6 +13,7 @@ import { initWalkIn } from "./walkin.js";
 
 const card = document.querySelector("[data-queue-card]");
 const list = document.querySelector('[data-slot="groups"]');
+const strip = document.querySelector('[data-slot="followups"]');  // "just out of the visit" (web/_just_out.html)
 const config = JSON.parse(document.getElementById("clinic-config").textContent);
 const meta = document.querySelector('meta[name="hamada"]');
 const freshness = document.querySelector("[data-freshness]");
@@ -189,13 +191,15 @@ let deferredSince = 0;
 let pointerX = -1;
 let pointerY = -1;
 for (const name of ["pointermove", "pointerdown", "wheel", "keydown", "touchstart"]) {
-  card.addEventListener(name, (event) => {
-    lastActivity = Date.now();
-    if (event.pointerType) lastPointer = event.pointerType;
-    if (name === "touchstart") lastPointer = "touch";
-    if (event.clientX != null) { pointerX = event.clientX; pointerY = event.clientY; }
-    else if (event.touches && event.touches[0]) { pointerX = event.touches[0].clientX; pointerY = event.touches[0].clientY; }
-  }, { passive: true });
+  for (const area of [card, strip]) {  // the strip's rows don't move under the finger either
+    if (area) area.addEventListener(name, (event) => {
+      lastActivity = Date.now();
+      if (event.pointerType) lastPointer = event.pointerType;
+      if (name === "touchstart") lastPointer = "touch";
+      if (event.clientX != null) { pointerX = event.clientX; pointerY = event.clientY; }
+      else if (event.touches && event.touches[0]) { pointerX = event.touches[0].clientX; pointerY = event.touches[0].clientY; }
+    }, { passive: true });
+  }
 }
 
 // --- rows stay where the eye and the finger are (M1 decision R8) ---
@@ -244,6 +248,7 @@ function tooSoon(row) {
 }
 window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
 card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
+if (strip) strip.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
 card.addEventListener("focusout", () => setTimeout(flushHeld, 0));
 card.addEventListener("toggle", (event) => {
   if (!event.target.open) { setTimeout(flushHeld, 0); return; }
@@ -317,11 +322,22 @@ function apply(html) {
     live.dataset.html = fresh.innerHTML;
     live.replaceChildren(...fresh.childNodes);
   }
+  patchStrip(root.querySelector('[data-slot="followups"]'));
   patchGroups(root.querySelector('[data-slot="groups"]'));
   card.dataset.version = root.dataset.version;
   applyFilters();
   stats();
   settle(before);
+}
+
+// The strip is replaced whole, but never while one of its rows is saving: that answer brings a new fragment.
+function patchStrip(fresh) {
+  if (!strip || !fresh || strip.dataset.html === fresh.innerHTML || strip.querySelector("[data-busy]")) return;
+  const focused = strip.contains(document.activeElement) ? document.activeElement.closest("[data-fu]") : null;
+  strip.dataset.html = fresh.innerHTML;
+  strip.replaceChildren(...fresh.childNodes);
+  const again = focused && strip.querySelector(`[data-fu][data-id="${focused.dataset.id}"][data-doctor="${focused.dataset.doctor}"] button`);
+  if (again) again.focus({ preventScroll: true });
 }
 
 function patchGroups(fresh) {
@@ -582,6 +598,18 @@ card.addEventListener("click", (event) => {
     default: break;
   }
 });
+
+// --- "just out of the visit": book the plan's sessions now, or later from Follow-ups ---
+
+if (strip) {
+  strip.addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-fu]");
+    if (!row) return;
+    const opener = event.target.closest("[data-fu-book]");
+    if (opener && book) openPlan(book, row, opener);
+    if (event.target.closest("[data-fu-later]") && await later(row, true)) { row.hidden = true; changed(); }
+  });
+}
 
 // --- quick booking from the card, and "/" for search (design 7.6) ---
 

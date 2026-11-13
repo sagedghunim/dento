@@ -37,6 +37,9 @@
 </div>
 {% endif %}
 
+{# Just out of the visit: who to book before they leave (Saged, 2026-11-13). Filled by the queue's polling. #}
+<div data-slot="followups" aria-live="polite">{% include "web/_just_out.html" %}</div>
+
 <div class="grid-2">
   <section class="card queue" data-queue-card aria-labelledby="queue-title" data-day="{{ day.isoformat }}" data-version="{{ version }}" data-etag="{{ etag }}" data-server-time="{{ server_time }}" data-poll-after="{{ poll_after }}" data-undo-arrive="{% if features.undo_arrive %}1{% endif %}" data-undo-call="{% if features.undo_call %}1{% endif %}">
     <h2 id="queue-title">{% if is_today %}{% translate "Today's appointments" %}{% else %}{% translate "Appointments" %}{% endif %}</h2>

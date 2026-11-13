@@ -1,8 +1,12 @@
 // The Book dialog (design 7.3): find or add the patient (with the duplicate-phone step), the section in a
 // center, the service, the doctor and a slot or a queue turn, and for a walk-in "arrived" and "collect"
 // in the same single request (design 5.1).
+// With a plan (Saged, 2026-11-13: open({plan: [{id, name, due}]})) the dialog books a patient's follow-up sessions
+// in one go: it opens on session 1's suggested day with every session's day marked on the calendar, and after each
+// booking moves straight to the next one; "skip" passes one over. Each booking carries its follow-up's id, so the
+// server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { Submitter, When, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
+import { Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
@@ -76,9 +80,41 @@ export function initBook({ onBooked, defaults } = {}) {
   let searchController = null;
   let searchTimer = null;
   let lastFee = null;
+  let plan = null;     // {items: [{id, name, due}], index} while a plan's sessions are being booked
+  let stepAt = 0;      // when the dialog moved to the next session: a double tap never books that one too
+  const planBar = dialog.querySelector("[data-plan-bar]");
 
   const when = new When(dialog, { onChange: () => { quote(); labels(); } });
   wireClose(dialog);
+
+  // --- a plan's sessions ---
+
+  const session = () => (plan ? plan.items[plan.index] : null);
+  const bookable = (iso) => (iso < when.today ? when.today : iso > when.last ? when.last : iso);
+
+  function showPlan() {
+    const current = session();
+    when.marks = plan ? new Map(plan.items.slice(plan.index).map((item, i) => [bookable(item.due), i ? "later" : "now"]).reverse()) : null;
+    const change = dialog.querySelector("[data-change-patient]");
+    if (change) change.hidden = Boolean(plan);  // the sessions are this patient's
+    if (!planBar) return;
+    planBar.hidden = !plan;
+    if (!current) return;
+    planBar.querySelector("[data-plan-step]").textContent = plan.items.length > 1
+      ? t("plan_step", { i: localDigits(plan.index + 1), n: localDigits(plan.items.length), name: current.name }) : current.name;
+    planBar.querySelector("[data-plan-hint]").textContent = t("plan_suggested", { day: when.dayLabel(current.due) });
+  }
+
+  function nextSession() {
+    plan.index += 1;
+    stepAt = Date.now();
+    start({ patient, doctorId: when.doctor(), sectionId: sectionId() });
+  }
+
+  dialog.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-plan-skip]") || !plan || dialog.dataset.busy || submitter.holdsUnknown()) return;
+    if (plan.index + 1 < plan.items.length) nextSession(); else closeDialog(dialog);
+  });
 
   // --- the patient ---
 
@@ -231,6 +267,7 @@ export function initBook({ onBooked, defaults } = {}) {
     }
     const slot = when.slot();
     if (slot) { out.starts_at = slot; if (when.isExtra()) out.extra = true; }
+    if (plan && patient) out.follow_up_id = session().id;
     const today = isToday();
     out.arrive = Boolean(today && field("arrive") && field("arrive").checked);
     if (today && field("collect") && field("collect").checked && lastFee !== 0) {
@@ -254,6 +291,7 @@ export function initBook({ onBooked, defaults } = {}) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (dialog.dataset.busy) return;  // a double tap does nothing
+    if (Date.now() - stepAt < 800) return;  // nor does it book the plan's next session
     const b = submitter.unknown ? submitter.unknown.body : body();
     const problem = submitter.unknown ? "" : check(b);
     if (problem) { submitter.say(problem); return; }
@@ -264,11 +302,13 @@ export function initBook({ onBooked, defaults } = {}) {
     const result = await submitter.run("POST", "/api/v1/appointments", b, label);
     if (!result || !isOk(result)) { if (tab) tab.close(); return; }
     const appointment = result.data.appointment;
+    const bookedSession = b.follow_up_id ? session() : null;
+    const more = Boolean(bookedSession && plan.index + 1 < plan.items.length);
     // "Collected" only when the answer's invoice shows the money (M1 decision R2), never from what was sent.
     const paid = Boolean(b.payment && appointment.invoice && appointment.invoice.paid >= b.payment.amount);
     if (tab && paid) tab.location.href = receiptUrl(appointment.invoice.id);
     else if (tab) tab.close();
-    dialog.close();
+    if (!more) dialog.close();
     // The toast says when: the day and the time, or the turn on a queue day (Saged, 2026-11-13).
     const names = { name: appointment.patient.name, n: localDigits(appointment.queue_no), day: when.dayLabel(appointment.day),
                     time: appointment.starts_at ? clockText(appointment.starts_at) : "" };
@@ -280,13 +320,21 @@ export function initBook({ onBooked, defaults } = {}) {
       toast(t(bookedKey, names));
       if (b.payment) alertMessage(t("booked_not_paid"));
     }
-    if (onBooked) onBooked(result.data);
+    if (onBooked) onBooked(result.data, bookedSession);
+    if (more) nextSession();  // straight on to the plan's next session
   });
 
   // --- opening ---
 
-  function open({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener } = {}) {
+  function open({ plan: sessions = null, opener, ...rest } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one (R7)
+    plan = sessions && sessions.length && rest.patient ? { items: sessions, index: 0 } : null;
+    stepAt = 0;
+    start({ ...rest, opener });
+  }
+
+  // The dialog afresh, for a new booking or for the plan's next session (the dialog then stays open).
+  function start({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener } = {}) {
     form.reset();
     submitter.reset();
     results.replaceChildren();
@@ -300,6 +348,8 @@ export function initBook({ onBooked, defaults } = {}) {
       if (source) source.checked = true;
     } catch (e) { /* none */ }
     when.reset();
+    if (plan) when.setDay(bookable(session().due));  // the session's suggested day; an overdue one from today on
+    showPlan();
     lastFee = null;
     const d = defaults ? defaults() : {};
     section = section || d.sectionId || "";
@@ -309,7 +359,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!when.doctor()) pickOnlyDoctor();
     if (given) showPicked(given);
     else { patient = null; picked.hidden = true; finder.hidden = false; if (newBox) newBox.hidden = true; field("q").value = query; }
-    openDialog(dialog);
+    openDialog(dialog, opener || dialog._opener);
     if (!given) { field("q").focus(); if (query) search(); }
     when.loadMonth(true);
     when.refresh();

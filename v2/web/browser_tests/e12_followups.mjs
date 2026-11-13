@@ -158,7 +158,7 @@ export async function run() {
     await deskPage.eval(`document.querySelector("#book-dialog [data-close]").click()`);
 
     // A booking linked to the first session: it leaves the list.
-    const firstItem = Number(await deskPage.eval(`${row}.dataset.items.split(",")[0]`));
+    const firstItem = Number(await deskPage.eval(`${row}.querySelector("[data-item]").dataset.item`));
     const again = await desk.api("POST", "/api/v1/appointments", { doctor_id: membership, service_id: service, arrive: true, patient_id: visit.patient.id });
     check(again.status === 201, "the desk books the patient again");
     check((await desk.api("POST", "/api/v1/follow-ups/booked", { item_ids: [firstItem], appointment_id: again.data.appointment.id })).status === 200, "the booking is linked");

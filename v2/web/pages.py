@@ -203,11 +203,20 @@ def queue_context(ctx, day, today, data):
         groups.append({"id": doctor["id"], "name": doctor["name"], "sessions": sessions, "rows": rows,
                        "booked": booked, "folded": folded, "counts": queue["counts"], "section_ids": section_ids})
     recent = [{**event, "doctor": names.get(event["doctor_id"], "")} for event in data["recent"]]
+    perms = _perms(ctx)
+    just_out = []
+    if day == today and perms["book"]:  # "just out of the visit": today only, for those who book (one statement)
+        from clinical import followups
+
+        from .followup_pages import decorate
+
+        just_out = decorate(followups.just_out(ctx, today))
     return {
+        "just_out": just_out,
         "day": day, "today": today, "is_today": day == today, "groups": groups, "stats": stats,
         "recent": recent, "totals": data.get("totals"), "truncated": data["truncated"],
         "version": data["version"], "server_time": data["server_time"],
-        "perms": _perms(ctx), "features": _features(), "show_doctor": len(groups) > 1,
+        "perms": perms, "features": _features(), "show_doctor": len(groups) > 1,
     }
 
 

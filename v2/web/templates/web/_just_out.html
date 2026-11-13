@@ -1,0 +1,7 @@
+{% load i18n %}{% if just_out %}<section class="card just-out" data-just-out aria-labelledby="just-out-title">
+  <div class="card-head">
+    <h2 id="just-out-title">{% translate "Just out of the visit" %}</h2>
+    <span class="muted">{% translate "Book their next sessions before they leave." %}</span>
+  </div>
+  <ul class="fu-list">{% for r in just_out %}{% include "web/_fu_row.html" %}{% endfor %}</ul>
+</section>{% endif %}

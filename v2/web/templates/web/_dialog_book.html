@@ -5,6 +5,11 @@
     <h2 id="book-title">{% translate "New booking" %}</h2>
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
+  {# A plan's sessions, booked one after the other (book.js): which one this is, its suggested day, and "skip". #}
+  <div class="plan-bar" data-plan-bar hidden>
+    <p><strong data-plan-step></strong> <span class="muted" data-plan-hint></span></p>
+    <button type="button" class="btn ghost" data-plan-skip>{% translate "Skip this session" %}</button>
+  </div>
   <div class="dialog-body">
     <fieldset class="group">
       <legend>{% translate "Patient" %}</legend>

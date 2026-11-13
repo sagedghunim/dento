@@ -566,10 +566,12 @@ def follow_up_drop_view(request, ctx, data, item_id):
 
 @api("POST", perm="appointments.book", replay=lambda ctx, stored: {"ok": True})
 def follow_ups_snooze_view(request, ctx, data):
-    """POST {item_ids}: the desk's "later": off the list for a week."""
+    """POST {item_ids, keep_listed?}: the desk's "later": off the list for a week. With keep_listed (Today's
+    strip) the follow-ups only leave the strip and stay in the Follow-ups list."""
     from . import followups
 
-    followups.snooze(ctx, data.get("item_ids"))
+    keep = validate.boolean(data, "keep_listed")
+    followups.snooze(ctx, data.get("item_ids"), 0 if keep else followups.SNOOZE_DAYS)
     return Result({"ok": True})
 
 

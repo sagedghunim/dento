@@ -90,6 +90,7 @@
       <span class="muted">{% translate "The desk books these when the visit is finished." %}</span>
     </div>
     <ul class="proc-list next-list" data-upcoming></ul>
+    {% if patient.phone|whatsapp %}<p class="next-send" data-next-send hidden><a class="btn ghost" href="/follow-ups/whatsapp/{{ patient.id }}" target="_blank" rel="noopener noreferrer">{% translate "Send the plan by WhatsApp" %}</a></p>{% endif %}
     <p class="empty-note" data-no-upcoming hidden>{% translate "Nothing planned yet." %}</p>
     <div data-next-add><form class="next-add" novalidate>
       <fieldset class="group">

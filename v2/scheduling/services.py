@@ -152,6 +152,14 @@ def book(ctx, request, deltas=None):
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
                                             invoice_number=invoice_number, today=today, shift_id=shift_id)
+    if request.get("follow_up_id") is not None:
+        # The plan's session this booking is for: claimed under its row lock, or the whole booking is refused
+        # (two people booking one session, a resend under a new key). Today's strip hears through the version.
+        from clinical.followups import claim
+
+        visit_day = claim(ctx, request["follow_up_id"], appointment.id, patient["id"])
+        if visit_day == today:
+            deltas.clinic_day(today)
     version = deltas.write_clinics(ctx)[day] if own else None
 
     from .selectors import payload

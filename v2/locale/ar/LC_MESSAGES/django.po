@@ -3565,3 +3565,48 @@ msgstr "المتابعة دي اتحجزت أو اتقفلت خلاص."
 
 msgid "This appointment is for another patient."
 msgstr "الحجز ده لمريض تاني."
+
+msgid "%(n)s. %(what)s: %(day)s"
+msgstr "%(n)s. %(what)s: %(day)s"
+
+msgid "%(n)s. %(what)s: %(day)s at %(time)s"
+msgstr "%(n)s. %(what)s: %(day)s الساعة %(time)s"
+
+msgid "%(n)s. %(what)s: around %(day)s (not booked yet)"
+msgstr "%(n)s. %(what)s: حوالي %(day)s (لسه من غير حجز)"
+
+msgid "%(what)s (tooth %(tooth)s)"
+msgstr "%(what)s (سن %(tooth)s)"
+
+msgid "Book their next sessions before they leave."
+msgstr "احجز جلساتهم الجاية قبل ما يمشوا."
+
+msgid "Hello %(name)s, these are your coming sessions at %(clinic)s:"
+msgstr "أهلاً %(name)s، دي جلساتك الجاية في %(clinic)s:"
+
+msgid "Just out of the visit"
+msgstr "خارج من الكشف دلوقتي"
+
+msgid "Send the plan by WhatsApp"
+msgstr "ابعت الخطة واتساب"
+
+msgid "Session {i} of {n}: {name}"
+msgstr "جلسة {i} من {n}: {name}"
+
+msgid "Skip this session"
+msgstr "تخطّي الجلسة دي"
+
+msgid "Suggested day"
+msgstr "اليوم المقترح"
+
+msgid "Suggested: {day}"
+msgstr "المقترح: {day}"
+
+msgid "This session is for another patient."
+msgstr "الجلسة دي لمريض تاني."
+
+msgid "This session was already booked."
+msgstr "الجلسة دي اتحجزت خلاص."
+
+msgid "{name}: kept in Follow-ups."
+msgstr "{name}: موجود في المتابعات."

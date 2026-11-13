@@ -90,6 +90,9 @@ def book_view(request, ctx, data):
                                   ["clinic", "phone", "online", "whatsapp"]),
         "note": validate.text(data, "note", 500, required=False),
         "payment": _payment(data),
+        # The follow-up this booking is for (clinical.followups.claim), linked in the same transaction.
+        "follow_up_id": (validate.ident(data.get("follow_up_id"), "follow_up_id")
+                         if data.get("follow_up_id") is not None else None),
     }
     appointment, version = services.book(ctx, body)
     return Result({"appointment": appointment, "version": version}, status=201, target_type="appointment",

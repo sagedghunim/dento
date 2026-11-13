@@ -1006,6 +1006,14 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .cal-day[aria-pressed="true"].full .cal-hint { color: var(--on-teal); }
 .cal-day:disabled { background: var(--surface-2); color: var(--muted); opacity: .55; cursor: not-allowed; }
 .cal-day.off .cal-num { text-decoration: line-through; }
+/* A plan's suggested days: a bar under the day; the session being booked also gets the border. */
+.cal-day.suggested { box-shadow: inset 0 -4px 0 var(--amber); }
+.cal-day.suggested.now:not([aria-pressed="true"]) { background: var(--amber-tint); border-color: var(--amber); }
+.plan-bar {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--amber-tint); border-block-end: 1px solid var(--line);
+}
+.plan-bar p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .cal [data-cal-status] { margin-block-start: 6px; }
 
 /* Today: booked visits in their own list under the waiting ones; no-show and cancelled rows kept small. */
@@ -1046,6 +1054,8 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .fu-name { font-weight: 800; color: var(--ink); overflow-wrap: anywhere; }
 .fu-items li { display: flex; gap: 10px; justify-content: space-between; overflow-wrap: anywhere; }
 .fu-day { white-space: nowrap; font-weight: 700; }
+.just-out { margin-block-end: 16px; border-inline-start: 4px solid var(--amber); }
+.next-send { margin: 10px 0 0; }
 .recipe-list li > span { min-width: 0; }
 .recipe-steps { display: grid; gap: 8px; margin-block-end: 10px; }
 .recipe-step { display: grid; grid-template-columns: minmax(0, 1fr) 96px 44px; gap: 8px; align-items: end; }

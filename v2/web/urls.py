@@ -19,6 +19,7 @@ urlpatterns = [
     path("patients/<int:patient_id>/teeth", teeth.patient_teeth_page, name="patient-teeth"),
     path("patients/<int:patient_id>/teeth/<int:tooth>/history", teeth.tooth_history, name="tooth-history"),
     path("follow-ups", followup_pages.followups_page, name="follow-ups"),
+    path("follow-ups/whatsapp/<int:patient_id>", followup_pages.whatsapp_plan, name="follow-ups-whatsapp"),
     path("inventory", inventory_pages.inventory_page, name="inventory"),
     path("inventory/items", inventory_pages.inventory_items, name="inventory-items"),
     path("inventory/items/<int:item_id>/movements", inventory_pages.item_movements, name="item-movements"),

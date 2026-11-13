@@ -253,3 +253,202 @@ class VisitScreenPlanTests(M2TestCase):
         self.assertIn('"upcoming": [{"id":', html)
         self.assertIn('"follow_up": [{"days": 7', html)
         self.assertNotIn('name="unit_price"', html)  # no price field for the doctor
+
+
+class PhaseBTests(M2TestCase):
+    """Phase B (Saged, 2026-11-13): Today's "just out of the visit" strip, a plan booked session by session, and the
+    plan sent to the patient by WhatsApp."""
+
+    def setUp(self):
+        super().setUp()
+        self.visit = self.in_room()
+        self.patient = self.visit["patient"]["id"]
+        self.day = today(self.a)
+        self.doctor_id = self.a.membership("doctor").id
+        root_canal = self.procedure("Root canal treatment, molar")
+        r = call(self.doc, "POST", f"/api/v1/appointments/{self.visit['id']}/follow-ups", {"recipe_of": root_canal["id"]})
+        self.ids = [u["id"] for u in r.json()["upcoming"]]
+
+    def finish(self):
+        self.assertEqual(self.act(self.visit["id"], "finish", "in_room", client=self.doc).status_code, 200)
+
+    def queue(self, client=None, url="/today/queue", **extra):
+        client = client or self.desk
+        return client.get(url, HTTP_X_MEMBERSHIP=str(client.membership_id), **extra)  # as the page's script asks
+
+    def strip(self, client=None, url="/today/queue"):
+        html = self.queue(client, url).content.decode()
+        return html.split("data-just-out", 1)[1].split("</section>", 1)[0] if "data-just-out" in html else ""
+
+    def slot(self, hhmm, client=None, **body):
+        return self.book(client=client, patient_id=self.patient, doctor_id=self.doctor_id,
+                         starts_at=self.slot_iso(self.a, self.day, hhmm), **body)
+
+    def count(self):
+        from scheduling.models import Appointment
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            return Appointment.objects.filter(clinic_id=self.a.id).count()
+
+    def owner_visit(self):
+        """The owner's own patient, with a follow-up from the owner's finished visit: (appointment, item id)."""
+        owner = self.a.client("owner")
+        theirs = self.book(new_patient={"full_name": "Owner Patient", "phone": "01077777777"}).json()["appointment"]
+        self.assertEqual(self.act(theirs["id"], "arrive", "booked").status_code, 200)
+        self.assertEqual(self.act(theirs["id"], "call", "waiting").status_code, 200)
+        r = call(owner, "POST", f"/api/v1/appointments/{theirs['id']}/follow-ups", {"items": [{"label": "متابعة", "days": 7}]})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(self.act(theirs["id"], "finish", "in_room").status_code, 200)
+        return theirs, r.json()["upcoming"][0]["id"]
+
+    # --- the strip ---
+
+    def test_a_finished_visit_with_unbooked_follow_ups_shows_on_today_until_booked_or_put_off(self):
+        self.assertEqual(self.strip(), "")  # still with the doctor
+        before = self.queue()
+        self.finish()
+        for url in ("/today/queue", "/today"):
+            strip = self.strip(url=url)
+            self.assertIn("خارج من الكشف دلوقتي", strip)
+            self.assertIn("Mohamed Ahmed", strip)
+            self.assertIn("جلسة عصب تانية", strip)
+            self.assertIn("جلسة عصب تالتة", strip)
+            self.assertIn("data-fu-book", strip)
+            self.assertIn("data-fu-later", strip)
+            self.assertIn(f'data-item="{self.ids[0]}"', strip)
+            self.assertIn(f'data-due="{(self.day + dt.timedelta(days=7)).isoformat()}"', strip)
+        # Booking the first session leaves the second; the polling screens are told (the day's version moved).
+        etag = self.queue()["ETag"]
+        self.assertNotEqual(etag, before["ETag"])
+        self.slot("10:00", follow_up_id=self.ids[0])
+        strip = self.strip()
+        self.assertNotIn("جلسة عصب تانية", strip)
+        self.assertIn("جلسة عصب تالتة", strip)
+        # "Later": off the strip, still in Follow-ups.
+        etag = self.queue()["ETag"]
+        r = call(self.desk, "POST", "/api/v1/follow-ups/snooze", {"item_ids": [self.ids[1]], "keep_listed": True})
+        self.assertEqual(r.status_code, 200, r.content)
+        r = self.queue(HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(r.status_code, 200)  # not a 304: the strip changed
+        self.assertEqual(self.strip(), "")
+        self.assertIn("جلسة عصب تالتة", self.desk.get("/follow-ups").content.decode())
+        self.assertEqual(call(self.desk, "POST", "/api/v1/follow-ups/snooze",
+                              {"item_ids": [self.ids[1]], "keep_listed": "yes"}).status_code, 400)
+
+    def test_the_strip_is_only_todays_and_only_for_those_who_book_and_see_the_visit(self):
+        self.finish()
+        self.assertIn("Mohamed Ahmed", self.strip())
+        self.assertIn("Mohamed Ahmed", self.strip(self.doc))  # the doctor's own
+        tomorrow = (self.day + dt.timedelta(days=1)).isoformat()
+        self.assertEqual(self.strip(url=f"/today/queue?day={tomorrow}"), "")
+        self.assertEqual(self.strip(self.b.client("assistant")), "")  # another place
+        self.owner_visit()
+        self.assertIn("Owner Patient", self.strip())
+        self.assertNotIn("Owner Patient", self.strip(self.doc))  # another doctor's finished visit
+        # No booking permission: no strip (its actions would be refused).
+        self.set_codes("doctor", revoked=["appointments.book"])
+        self.assertEqual(self.strip(self.doc), "")
+
+    def test_the_queue_poll_stays_a_fixed_number_of_statements(self):
+        self.finish()
+        one = self.queries(lambda: self.queue())
+        self.owner_visit()
+        self.assertIn("Owner Patient", self.strip())
+        self.assertEqual(self.queries(lambda: self.queue()), one)
+
+    # --- booking a plan's sessions ---
+
+    def test_a_booking_links_its_follow_up_in_the_same_request_exactly_once(self):
+        self.finish()
+        had = self.count()
+        key = "0f1b6c9e-7a55-4a44-8a43-0d4f7f1c2b10"
+        body = {"patient_id": self.patient, "doctor_id": self.doctor_id, "service_id": self.services_a["consultation"].id,
+                "starts_at": self.slot_iso(self.a, self.day, "10:00"), "follow_up_id": self.ids[0]}
+        first = call(self.desk, "POST", "/api/v1/appointments", body, key=key)
+        self.assertEqual(first.status_code, 201, first.content)
+        again = call(self.desk, "POST", "/api/v1/appointments", body, key=key)  # the resend after a dropped connection
+        self.assertEqual(again.json()["appointment"]["id"], first.json()["appointment"]["id"])
+        self.assertEqual(self.count(), had + 1)
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(PlanItem.objects.get(clinic_id=self.a.id, id=self.ids[0]).appointment_id,
+                             first.json()["appointment"]["id"])
+        # A second person booking the same session (another key): refused whole, no second appointment.
+        r = self.slot("11:00", follow_up_id=self.ids[0], expect=None)
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "follow_up_booked"), r.content)
+        self.assertEqual(self.count(), had + 1)
+        # Once that booking is cancelled, the session can be booked again.
+        self.assertEqual(self.act(first.json()["appointment"]["id"], "cancel", "booked").status_code, 200)
+        self.assertEqual(self.slot("11:00", follow_up_id=self.ids[0], expect=None).status_code, 201)
+
+    def test_a_follow_up_is_booked_only_for_its_patient_by_someone_who_sees_it(self):
+        self.finish()
+        other = self.book(new_patient={"full_name": "Someone Else", "phone": "01055555555"}).json()["appointment"]["patient"]["id"]
+        had = self.count()
+        r = self.book(patient_id=other, follow_up_id=self.ids[0], expect=None)
+        self.assertEqual(r.status_code, 400, r.content)  # another patient's session
+        for bad in ("x", 0, [1]):
+            self.assertEqual(self.slot("10:00", follow_up_id=bad, expect=None).status_code, 400, bad)
+        self.assertEqual(self.slot("10:00", follow_up_id=999999, expect=None).status_code, 404)
+        # Another place's follow-up is 404 there; a dropped one is refused.
+        b = self.b.client("assistant")
+        self.assertEqual(self.book(client=b, fixture=self.b, follow_up_id=self.ids[0], expect=None).status_code, 404)
+        call(self.doc, "POST", f"/api/v1/follow-ups/{self.ids[1]}/drop", {})
+        self.assertEqual(self.slot("10:00", follow_up_id=self.ids[1], expect=None).status_code, 409)
+        self.assertEqual(self.count(), had)  # nothing was booked by any refused request
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertIsNone(PlanItem.objects.get(clinic_id=self.a.id, id=self.ids[0]).appointment_id)
+
+    def test_a_doctor_cannot_book_another_doctors_follow_up(self):
+        _theirs, item = self.owner_visit()
+        r = self.slot("10:00", client=self.doc, follow_up_id=item, expect=None)
+        self.assertEqual(r.status_code, 404, r.content)
+
+    # --- the plan by WhatsApp ---
+
+    def test_the_plan_opens_whatsapp_with_the_sessions_and_when(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        self.finish()
+        url = f"/follow-ups/whatsapp/{self.patient}"
+        self.assertIn(f'href="{url}"', self.strip())
+        self.assertIn(f'href="{url}"', self.desk.get("/follow-ups").content.decode())
+        self.slot("10:00", follow_up_id=self.ids[0])
+        r = self.desk.get(url)
+        self.assertEqual(r.status_code, 302, r.content)
+        target = urlsplit(r["Location"])
+        self.assertEqual((target.scheme, target.netloc, target.path), ("https", "wa.me", "/201012345678"))
+        text = parse_qs(target.query)["text"][0]
+        self.assertIn("a clinic", text)
+        lines = text.splitlines()
+        first = next(line for line in lines if "جلسة عصب تانية" in line)
+        second = next(line for line in lines if "جلسة عصب تالتة" in line)
+        self.assertIn("10:00", first.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")))  # booked: its day and time
+        self.assertIn("لسه من غير حجز", second)  # not booked: the suggested day only, no time
+        self.assertNotRegex(second, r"[0-9٠-٩]:[0-9٠-٩]")
+        self.assertEqual(r["Cache-Control"], "no-store")
+        # The doctor's visit screen offers it too.
+        again = self.in_room(self.patient)
+        self.assertIn(f'href="{url}"', self.doc.get(f"/visits/{again['id']}").content.decode())
+
+    def test_whatsapp_needs_a_phone_sessions_and_a_patient_the_member_sees(self):
+        from django.test import Client
+
+        from patients.models import Patient
+
+        self.finish()
+        url = f"/follow-ups/whatsapp/{self.patient}"
+        self.assertEqual(self.doc.get(url).status_code, 302)  # the doctor's own patient
+        self.assertEqual(self.b.client("assistant").get(url).status_code, 404)  # another place
+        self.assertEqual(self.desk.get("/follow-ups/whatsapp/999999").status_code, 404)
+        theirs, _item = self.owner_visit()
+        other = f"/follow-ups/whatsapp/{theirs['patient']['id']}"
+        self.assertEqual(self.desk.get(other).status_code, 302)
+        self.assertEqual(self.doc.get(other).status_code, 404)  # another doctor's patient
+        # No phone: no button and no link.
+        with clinic_transaction(self.a.id, self.a.shard):
+            Patient.objects.filter(clinic_id=self.a.id, id=self.patient).update(phone="")
+        self.assertEqual(self.desk.get(url).status_code, 404)
+        self.assertNotIn(url, self.desk.get("/follow-ups").content.decode())
+        self.assertNotIn(url, self.strip())
+        # Signed out: to the sign-in page, never to WhatsApp.
+        self.assertIn("/login", Client().get(url)["Location"])

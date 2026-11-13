@@ -5,7 +5,8 @@ desk books it, its appointment (`appointment_id`). A procedure's recipe (`Proced
 sessions in the visit. The desk's list shows the unbooked ones once their visit is finished; a booking that was
 cancelled or missed puts its follow-up back on the list.
 
-Lock order: key -> plan row -> its items (as the treatment plan's own writes).
+Lock order: key -> plan row -> its items (as the treatment plan's own writes) -> today's summary row (the
+version Today's strip polls on). A booking that claims a follow-up holds its doctor-day first, then the item.
 """
 
 import datetime as dt
@@ -158,6 +159,7 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
                    appointment["day"] + dt.timedelta(days=days), appointment_id, now]
     sql.run(ctx, 'INSERT INTO "clinical_plan_item" (clinic_id, plan_id, procedure_id, label, position, tooth, area, '
                  f"price, status, due_on, visit_id, updated_at) VALUES {', '.join(values)}", params)
+    _tell_today(ctx, {appointment["day"]})
     return appointment["patient_id"]
 
 
@@ -186,6 +188,7 @@ def set_due(ctx, item_id, days):
     sql.run(ctx, 'UPDATE "clinical_plan_item" SET due_on = %s, snoozed_until = NULL, updated_at = %s '
                  "WHERE clinic_id = %s AND id = %s",
             [item["visit_day"] + dt.timedelta(days=days), timezone.now(), ctx.clinic_id, item_id])
+    _tell_today(ctx, {item["visit_day"]})
     return item["patient_id"]
 
 
@@ -195,6 +198,7 @@ def drop(ctx, item_id):
     if item["status"] == "planned":
         sql.run(ctx, "UPDATE \"clinical_plan_item\" SET status = 'dropped', updated_at = %s WHERE clinic_id = %s AND id = %s",
                 [timezone.now(), ctx.clinic_id, item_id])
+        _tell_today(ctx, {item["visit_day"]})
     elif item["status"] != "dropped":
         raise ApiError("status_changed", _("This follow-up was already booked or closed."), 409,
                        fields={"status": item["status"]})
@@ -210,29 +214,70 @@ def _ids(value, name="item_ids"):
     return sorted({ident(v, name) for v in value})
 
 
+def _tell_today(ctx, visit_days):
+    """Today's strip shows follow-ups of today's finished visits: the polling screens learn of a change through
+    the day's version. Other days have no strip, so nothing is written for them. Taken last, after the items."""
+    today = business_day(ctx.clinic)
+    if today in visit_days:
+        from summaries.services import bump
+
+        bump(ctx, today)
+
+
 def snooze(ctx, item_ids, days=SNOOZE_DAYS):
-    """The desk's "later": these follow-ups leave the list for some days. A repeat changes nothing more."""
+    """The desk's "later": these follow-ups leave the list for some days. A repeat changes nothing more.
+
+    With days=0 (Today's strip) they only leave the strip: the Follow-ups list keeps them."""
     until = business_day(ctx.clinic) + dt.timedelta(days=days)
+    seen = set()
     for item_id in _ids(item_ids):  # in id order: one lock order for every caller
         item = _item(ctx, item_id)
         if item["status"] != "planned":
             continue
+        seen.add(item["visit_day"])
         sql.run(ctx, 'UPDATE "clinical_plan_item" SET snoozed_until = %s, updated_at = %s WHERE clinic_id = %s AND id = %s',
                 [until, timezone.now(), ctx.clinic_id, item_id])
         record_change(ctx, "follow_up.snooze", "plan_item", item_id, after={"snoozed_until": until.isoformat()})
+    _tell_today(ctx, seen)
     return until
 
 
+def _booked_live(ctx, appointment_id):
+    """True while the follow-up's booking stands (a cancelled or missed one frees it)."""
+    return appointment_id is not None and sql.row(
+        ctx, 'SELECT 1 FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s '
+             "AND status NOT IN ('cancelled', 'no_show')", [ctx.clinic_id, appointment_id]) is not None
+
+
+def claim(ctx, item_id, appointment_id, patient_id):
+    """Inside the booking's own transaction (scheduling.services.book): this follow-up is booked as the appointment
+    being made. The item's row lock decides between two people booking the same session: the second is refused
+    whole, so its appointment is never made. Returns the day of the visit that suggested it."""
+    item = _item(ctx, item_id)  # another doctor's, section's or place's is 404
+    if item["patient_id"] != patient_id:
+        raise ApiError("invalid", _("This session is for another patient."), fields={"follow_up_id": "patient"})
+    if item["status"] != "planned":
+        raise ApiError("status_changed", _("This follow-up was already booked or closed."), 409,
+                       fields={"status": item["status"]})
+    if _booked_live(ctx, item["appointment_id"]):
+        raise ApiError("follow_up_booked", _("This session was already booked."), 409,
+                       fields={"follow_up_id": "booked"})
+    sql.run(ctx, 'UPDATE "clinical_plan_item" SET appointment_id = %s, snoozed_until = NULL, updated_at = %s '
+                 "WHERE clinic_id = %s AND id = %s", [appointment_id, timezone.now(), ctx.clinic_id, item_id])
+    record_change(ctx, "follow_up.booked", "plan_item", item_id, after={"appointment_id": appointment_id})
+    return item["visit_day"]
+
+
 def link_booked(ctx, item_ids, appointment_id):
-    """These follow-ups were booked as this appointment (the same patient's). Phase B calls this from the booking
-    itself; until then the Follow-ups screen calls it right after the Book dialog answers."""
+    """These follow-ups were booked as this appointment (the same patient's): for a booking made without its
+    follow-up. The Book dialog sends `follow_up_id` with the booking instead (see claim)."""
     from . import services
 
     found = sql.row(ctx, 'SELECT patient_id, status FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
                     [ctx.clinic_id, appointment_id])
     if found is None:
         raise services.not_found("appointment")
-    linked = []
+    linked, seen = [], set()
     for item_id in _ids(item_ids):
         item = _item(ctx, item_id)
         if item["patient_id"] != found[0]:
@@ -243,6 +288,8 @@ def link_booked(ctx, item_ids, appointment_id):
                      "WHERE clinic_id = %s AND id = %s", [appointment_id, timezone.now(), ctx.clinic_id, item_id])
         record_change(ctx, "follow_up.booked", "plan_item", item_id, after={"appointment_id": appointment_id})
         linked.append(item_id)
+        seen.add(item["visit_day"])
+    _tell_today(ctx, seen)
     return linked
 
 
@@ -283,6 +330,68 @@ def to_book(ctx, today=None, after=None, size=LIST_SIZE):
                              "due_on": r["due_on"]})
     cursor = (page[-1]["due_on"].isoformat(), page[-1]["id"]) if len(rows) > size else None
     return [{"key": key, "rows": list(found.values())} for key, found in groups.items() if found], cursor
+
+
+STRIP_SIZE = 60
+PLAN_SIZE = 30
+
+
+def just_out(ctx, today):
+    """Today's strip "just out of the visit": the unbooked follow-ups of today's finished visits that nobody put
+    off, the latest finished first. One row per patient and doctor, shaped as to_book's rows.
+
+    One statement through plan_item_follow_up (a follow-up of today's visit is due after today).
+    """
+    where, params = _visible(ctx)
+    rows = sql.dicts(ctx, f"""
+        SELECT i.id, i.due_on, i.label, i.tooth, c.name_ar, c.name_en, p.patient_id, pt.full_name, pt.phone, pt.file_no,
+               a.doctor_id, a.section_id, m.display_name, m.display_name_en
+          FROM "clinical_plan_item" i
+          JOIN "clinical_plan" p ON p.clinic_id = i.clinic_id AND p.id = i.plan_id
+          JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.visit_id
+          JOIN "patients_patient" pt ON pt.clinic_id = p.clinic_id AND pt.id = p.patient_id
+          JOIN "clinics_membership" m ON m.clinic_id = a.clinic_id AND m.id = a.doctor_id
+          LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
+          LEFT JOIN "scheduling_appointment" b ON b.clinic_id = i.clinic_id AND b.id = i.appointment_id
+               AND b.status NOT IN ('cancelled', 'no_show')
+         WHERE i.clinic_id = %s AND i.status = 'planned' AND i.due_on > %s AND a.day = %s AND a.status = 'done'
+           AND b.id IS NULL AND i.snoozed_until IS NULL{where}
+         ORDER BY a.finished_at DESC NULLS LAST, a.id DESC, i.due_on, i.id LIMIT %s""",
+                     [ctx.clinic_id, today, today, *params, STRIP_SIZE])
+    found = {}
+    for r in rows:
+        row = found.setdefault((r["patient_id"], r["doctor_id"]), {
+            "patient": {"id": r["patient_id"], "name": r["full_name"], "phone": r["phone"], "file_no": r["file_no"]},
+            "doctor_id": r["doctor_id"], "doctor": pick(r["display_name"], r["display_name_en"]),
+            "section_id": r["section_id"], "day": r["due_on"], "items": []})
+        row["items"].append({"id": r["id"], "name": pick(r["name_ar"], r["name_en"]) or r["label"], "tooth": r["tooth"],
+                             "due_on": r["due_on"]})
+    return list(found.values())
+
+
+def plan_sessions(ctx, patient_id, today=None):
+    """What the patient is told: (patient {name, phone} or None, their coming sessions in order). A booked session
+    has its day and time; an unbooked one its suggested day. Only follow-ups the member may see."""
+    today = today or business_day(ctx.clinic)
+    where, params = _visible(ctx)
+    rows = sql.dicts(ctx, f"""
+        SELECT i.id, i.label, i.tooth, i.due_on, c.name_ar, c.name_en, b.day AS booked_day, b.starts_at,
+               pt.full_name, pt.phone
+          FROM "clinical_plan" p
+          JOIN "clinical_plan_item" i ON i.clinic_id = p.clinic_id AND i.plan_id = p.id
+          JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.visit_id
+          JOIN "patients_patient" pt ON pt.clinic_id = p.clinic_id AND pt.id = p.patient_id
+          LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
+          LEFT JOIN "scheduling_appointment" b ON b.clinic_id = i.clinic_id AND b.id = i.appointment_id
+               AND b.status NOT IN ('cancelled', 'no_show')
+         WHERE p.clinic_id = %s AND p.patient_id = %s AND i.status = 'planned' AND i.due_on IS NOT NULL
+           AND (b.id IS NULL OR b.day >= %s){where}
+         ORDER BY coalesce(b.day, i.due_on), i.id LIMIT %s""", [ctx.clinic_id, patient_id, today, *params, PLAN_SIZE])
+    if not rows:
+        return None, []
+    return ({"name": rows[0]["full_name"], "phone": rows[0]["phone"]},
+            [{"id": r["id"], "name": pick(r["name_ar"], r["name_en"]) or r["label"], "tooth": r["tooth"],
+              "due_on": r["due_on"], "booked_day": r["booked_day"], "starts_at": r["starts_at"]} for r in rows])
 
 
 # --- The doctor's most used procedures --------------------------------------------------------------------------

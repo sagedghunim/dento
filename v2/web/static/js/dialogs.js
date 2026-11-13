@@ -312,9 +312,12 @@ export class When {
       if (info && info.full) button.classList.add("full");
       if (off) button.classList.add("off");
       if (iso === this.today) { button.classList.add("today"); button.setAttribute("aria-current", "date"); }
+      // A plan's sessions (book.js): each one's suggested day is marked, the one being booked more strongly.
+      const mark = this.marks ? this.marks.get(iso) : null;
+      if (mark) button.classList.add("suggested", mark);
       button.setAttribute("aria-pressed", String(iso === picked));
       button.tabIndex = iso === picked ? 0 : -1;
-      button.setAttribute("aria-label", [this.dayLabel(iso), off ? t("cal_off") : hint].filter(Boolean).join(" · "));
+      button.setAttribute("aria-label", [this.dayLabel(iso), mark ? t("cal_suggested") : "", off ? t("cal_off") : hint].filter(Boolean).join(" · "));
       cells.push(button);
     }
     this.grid.replaceChildren(...cells);
