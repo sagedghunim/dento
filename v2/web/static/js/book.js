@@ -11,7 +11,8 @@ const config = JSON.parse(document.getElementById("clinic-config").textContent);
 
 // A result element's data (from _patient_results.html or the duplicate-phone list).
 export function patientFrom(node) {
-  return { id: Number(node.dataset.id), name: node.dataset.name, file: node.dataset.file, phone: node.dataset.phone };
+  return { id: Number(node.dataset.id), name: node.dataset.name, file: node.dataset.file, phone: node.dataset.phone,
+           owed: Number(node.dataset.owed) || 0 };
 }
 
 // "File 12 · 010 1234 5678" as nodes, the phone isolated so its groups keep their order (design 7.2).
@@ -21,7 +22,32 @@ export function patientMeta(p) {
     const phone = el("bdi", "ltr num", phoneText(p.phone));
     nodes.push(" · ", phone);
   }
+  if (p.owed > 0) nodes.push(" · ", el("strong", "owed", t("owed_before", { amount: moneyText(p.owed) })));
   return nodes;
+}
+
+// A new name with a phone that already has a file suggests that file; it never blocks (R4.2). The Book and
+// Walk-in dialogs both have [data-dupes] with [data-dupe-list]; a suggestion is picked like a search result.
+export async function checkPhone(dialog, value) {
+  const dupes = dialog.querySelector("[data-dupes]");
+  const digits = asciiDigits(value).replace(/\D/g, "");
+  dupes.hidden = true;
+  if (digits.length < 10) return;
+  const result = await get(`/api/v1/patients/by-phone?phone=${encodeURIComponent(digits)}`);
+  if (!isOk(result) || !result.data.items.length) return;
+  const list = dialog.querySelector("[data-dupe-list]");
+  list.replaceChildren(...result.data.items.map((p) => {
+    const button = el("button", "result");
+    button.type = "button";
+    Object.assign(button.dataset, { pickPatient: "", id: p.id, name: p.name, file: p.file_no, phone: p.phone || "" });
+    const who = el("bdi", "who", p.name);
+    who.dir = "auto";
+    const meta = el("span", "meta");
+    meta.append(...patientMeta({ file: p.file_no, phone: p.phone }));
+    button.append(who, meta);
+    return button;
+  }));
+  dupes.hidden = false;
 }
 
 export function initBook({ onBooked, defaults } = {}) {
@@ -118,28 +144,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (event.target.closest("[data-back-to-search]")) showFinder();
   });
 
-  // Booking a new name with a phone that already has a file suggests that file; it never blocks (R4.2).
-  async function checkPhone() {
-    const digits = asciiDigits(field("phone").value).replace(/\D/g, "");
-    dupes.hidden = true;
-    if (digits.length < 10) return;
-    const result = await get(`/api/v1/patients/by-phone?phone=${encodeURIComponent(digits)}`);
-    if (!isOk(result) || !result.data.items.length) return;
-    const list = dialog.querySelector("[data-dupe-list]");
-    list.replaceChildren(...result.data.items.map((p) => {
-      const button = el("button", "result");
-      button.type = "button";
-      Object.assign(button.dataset, { pickPatient: "", id: p.id, name: p.name, file: p.file_no, phone: p.phone || "" });
-      const who = el("bdi", "who", p.name);
-      who.dir = "auto";
-      const meta = el("span", "meta");
-      meta.append(...patientMeta({ file: p.file_no, phone: p.phone }));
-      button.append(who, meta);
-      return button;
-    }));
-    dupes.hidden = false;
-  }
-  if (newBox) field("phone").addEventListener("change", checkPhone);
+  if (newBox) field("phone").addEventListener("change", () => checkPhone(dialog, field("phone").value));
 
   // --- section, service, doctor ---
 
@@ -174,6 +179,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (event.target.name === "service") quote();
     if (event.target.name === "collect" || event.target.name === "arrive") labels();
     if (event.target.name === "amount") field("amount").dataset.touched = "1";
+    if (event.target.name === "source") { try { localStorage.setItem("hamada.source", event.target.value); } catch (e) { /* none */ } }
     if (event.target.name === "print") { try { localStorage.setItem("hamada.print", field("print").checked ? "1" : ""); } catch (e) { /* none */ } }
   });
 
@@ -280,6 +286,11 @@ export function initBook({ onBooked, defaults } = {}) {
     if (dupes) dupes.hidden = true;
     if (field("amount")) delete field("amount").dataset.touched;
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
+    // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.
+    try {
+      const source = form.querySelector(`[name="source"][value="${CSS.escape(localStorage.getItem("hamada.source") || "")}"]`);
+      if (source) source.checked = true;
+    } catch (e) { /* none */ }
     when.otherWrap.hidden = true;
     lastFee = null;
     const d = defaults ? defaults() : {};

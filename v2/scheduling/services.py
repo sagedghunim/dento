@@ -268,6 +268,86 @@ def undo(ctx, appointment_id, action, seen):
     return Deltas().clinic_day(day).write_clinics(ctx)[day]
 
 
+def _only_today():
+    return ApiError("not_today", _("This can be done only on the visit's own day."), 409, fields={"day": "not_today"})
+
+
+def mark_no_show(ctx, appointment_id, seen):
+    """The desk marks a booked visit "didn't come" (desk review 7): today only, once its time has passed.
+
+    A queue booking has no time, so it may be marked any time on its day. One conditional UPDATE decides; the
+    slot is freed (holds_slot); the doctor-day's no-show count rises, as the nightly sweep's does. Goes to the
+    change log. Returns the version of the day, or None for a harmless repeat.
+    """
+    rules.guard(ctx, appointment_id)
+    if seen != "booked":
+        raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
+                       fields={"status": "invalid"})
+    now = timezone.now()
+    today = business_day(ctx.clinic)
+    changed = sql.row(ctx, 'UPDATE "scheduling_appointment" SET status = %s, updated_at = %s, updated_by_id = %s '
+                           "WHERE clinic_id = %s AND id = %s AND status = 'booked' AND day = %s "
+                           "AND (starts_at IS NULL OR starts_at <= %s) RETURNING day, doctor_id",
+                      ["no_show", now, ctx.membership_id, ctx.clinic_id, appointment_id, today, now])
+    if changed is None:
+        current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list(
+            "status", "day", "starts_at").first()
+        if current is None:
+            raise rules.not_found("appointment")
+        status, day, starts_at = current
+        if status == "no_show":
+            return None
+        if status == "booked" and day != today:
+            raise _only_today()
+        if status == "booked":
+            raise ApiError("not_yet", _("This booking's time hasn't come yet."), 409, fields={"status": "not_yet"})
+        raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
+    day, doctor_id = changed
+    record_change(ctx, "appointment.no_show", "appointment", appointment_id,
+                  before={"status": "booked"}, after={"status": "no_show"})
+    deltas = Deltas().doctor_day(day, doctor_id, no_shows=1).clinic_day(day)
+    deltas.write_doctors(ctx)
+    return deltas.write_clinics(ctx)[day]
+
+
+def undo_no_show(ctx, appointment_id, seen):
+    """Undo a hand-marked "didn't come", today only: back to booked. A visit the nightly sweep closed stays.
+
+    If someone took the slot meanwhile, the slot constraint refuses it (409 slot_taken).
+    """
+    rules.guard(ctx, appointment_id)
+    if seen != "no_show":
+        raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
+                       fields={"status": "invalid"})
+    today = business_day(ctx.clinic)
+    try:
+        changed = sql.row(ctx, 'UPDATE "scheduling_appointment" SET status = %s, updated_at = %s, updated_by_id = %s '
+                               "WHERE clinic_id = %s AND id = %s AND status = 'no_show' AND day = %s "
+                               "AND NOT auto_closed RETURNING day, doctor_id",
+                          ["booked", timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, today])
+    except IntegrityError as error:
+        if _constraint(error) in SLOT_CONSTRAINTS:
+            raise _slot_taken()
+        raise
+    if changed is None:
+        current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list(
+            "status", "day").first()
+        if current is None:
+            raise rules.not_found("appointment")
+        status, day = current
+        if status == "booked":
+            return None
+        if status == "no_show" and day != today:
+            raise _only_today()
+        raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
+    day, doctor_id = changed
+    record_change(ctx, "appointment.undo_no_show", "appointment", appointment_id,
+                  before={"status": "no_show"}, after={"status": "booked"})
+    deltas = Deltas().doctor_day(day, doctor_id, no_shows=-1).clinic_day(day)
+    deltas.write_doctors(ctx)
+    return deltas.write_clinics(ctx)[day]
+
+
 def _unchanged(ctx, appointment_id, action, target, today, with_payment=False):
     current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list("status", "day").first()
     if current is None:

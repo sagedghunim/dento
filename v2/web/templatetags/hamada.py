@@ -28,6 +28,11 @@ def phone(value):
 
 
 @register.filter
+def whatsapp(value):
+    return fmt.whatsapp(value)
+
+
+@register.filter
 def clock(value):
     return fmt.clock(value)
 

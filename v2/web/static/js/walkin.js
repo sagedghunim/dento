@@ -2,7 +2,7 @@
 // the server would choose (GET /today/walk-in) and can be changed; a payment is optional. POST
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { patientFrom, patientMeta } from "./book.js";
+import { checkPhone, patientFrom, patientMeta } from "./book.js";
 import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { alertMessage, toast } from "./shell.js";
@@ -28,6 +28,7 @@ export function initWalkIn({ onBooked } = {}) {
   let defaults = { doctor_id: null, service_id: null };
   let quoteSeq = 0;
   let openSeq = 0;
+  let lastFee = null;
   wireClose(dialog);
 
   // --- the patient: search, or a new name and phone ---
@@ -64,6 +65,7 @@ export function initWalkIn({ onBooked } = {}) {
     if (q && !digits && !field("full_name").value) field("full_name").value = q;
     if (q && digits && !field("phone").value) field("phone").value = q;
     (digits ? field("full_name") : field("phone")).focus();
+    if (digits) checkPhone(dialog, field("phone").value);
     quote();
   }
 
@@ -115,6 +117,7 @@ export function initWalkIn({ onBooked } = {}) {
     if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }
     if (name === "service") quote();
     if (name === "amount") field("amount").dataset.touched = "1";
+    if (name === "phone" && newBox) checkPhone(dialog, field("phone").value);
     if (name === "collect") { collectFields.hidden = !field("collect").checked; if (field("collect").checked) field("amount").focus(); }
   });
 
@@ -142,12 +145,13 @@ export function initWalkIn({ onBooked } = {}) {
     const doctor = doctorId();
     const service = serviceId();
     const seq = ++quoteSeq;
-    if (!doctor || !service) { fee.textContent = ""; return; }
+    if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;
     if (patient) url += `&patient=${patient.id}`;
     const result = await get(url);
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = ""; return; }
+    lastFee = result.data.fee;
     fee.textContent = t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(result.data.fee) });
     if (field("amount") && !field("amount").dataset.touched) field("amount").value = result.data.fee ? amountInput(result.data.fee) : "";
   }
@@ -168,7 +172,7 @@ export function initWalkIn({ onBooked } = {}) {
     }
     if (field("doctor").value) out.doctor_id = Number(field("doctor").value);
     if (field("service").value) out.service_id = Number(field("service").value);
-    if (field("collect") && field("collect").checked) {
+    if (field("collect") && field("collect").checked && lastFee !== 0) {  // a free follow-up has nothing to collect
       out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
     }
     return out;
@@ -199,7 +203,7 @@ export function initWalkIn({ onBooked } = {}) {
 
   // --- opening ---
 
-  function open({ opener } = {}) {
+  function open({ opener, query = "" } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one
     form.reset();
     submitter.reset();
@@ -207,7 +211,10 @@ export function initWalkIn({ onBooked } = {}) {
     searchStatus.textContent = "";
     fee.textContent = "";
     if (field("amount")) delete field("amount").dataset.touched;
-    if (collectFields) collectFields.hidden = true;
+    if (collectFields) collectFields.hidden = !field("collect").checked;  // a walk-in pays now: ticked (desk review 2)
+    lastFee = null;
+    const dupes = dialog.querySelector("[data-dupes]");
+    if (dupes) dupes.hidden = true;
     patient = null;
     picked.hidden = true;
     finder.hidden = false;
@@ -215,7 +222,9 @@ export function initWalkIn({ onBooked } = {}) {
     defaults = { doctor_id: null, service_id: null };
     filterServices();
     openDialog(dialog, opener);
+    field("q").value = query;
     field("q").focus();
+    if (query) search();
     loadDefaults(++openSeq);
   }
 

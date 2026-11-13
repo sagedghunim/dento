@@ -219,6 +219,9 @@ export function initPay({ onChanged } = {}) {
     name.replaceChildren(el("bdi", null, visit.name));
     name.firstChild.dir = "auto";
     dialog.querySelector("[data-meta]").textContent = visit.service || "";
+    const earlier = dialog.querySelector("[data-earlier-note]");  // owed on older visits, shown, not mixed in
+    earlier.hidden = !(visit.earlier > 0);
+    earlier.textContent = visit.earlier > 0 ? t("owed_before", { amount: moneyText(visit.earlier) }) : "";
     render();
     openDialog(dialog);
     load();

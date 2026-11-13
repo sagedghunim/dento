@@ -70,6 +70,23 @@ def phone(value):
     return digits(value)
 
 
+def whatsapp(value):
+    """The wa.me number of a phone, Egyptian numbers made international (010… -> 2010…); "" when unclear."""
+    text = "".join(ch for ch in str(value or "") if ch.isdigit() or ch == "+")
+    text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789"))
+    plus = text.startswith("+")
+    number = "".join(ch for ch in text if ch.isdigit())
+    if number.startswith("00"):
+        number, plus = number[2:], True
+    if len(number) == 11 and number.startswith("01"):
+        return "20" + number[1:]
+    if len(number) == 10 and number.startswith("1"):
+        return "20" + number
+    if len(number) == 12 and number.startswith("201"):
+        return number
+    return number if plus and 8 <= len(number) <= 15 else ""
+
+
 def _parse(value):
     if value in (None, ""):
         return None

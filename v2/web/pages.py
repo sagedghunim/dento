@@ -140,30 +140,53 @@ def _dental_rows(ctx):
     return lambda section_id: section_id in ids if section_id else whole
 
 
+# Each doctor's list puts who needs the desk first (desk review 5): with the doctor, ready, with the assistant,
+# waiting, finished but still owing, booked, then didn't come and cancelled. Finished and paid rows fold away.
+# The order inside a rank stays the selector's (slot time, then turn).
+ROW_RANK = {"in_room": 0, "ready": 1, "with_assistant": 2, "waiting": 3, "done": 4, "booked": 5, "no_show": 6,
+            "cancelled": 7}
+
+
+def _earlier_balances(ctx, day, data):
+    """What each patient on the day owes from before, for those who see money (collect or finances)."""
+    if not (ctx.can("billing.collect") or ctx.can("finances.view")):
+        return {}
+    from billing.selectors import balances
+
+    ids = {a["patient"]["id"] for queue in data["queues"] for a in queue["appointments"]}
+    return balances(ctx, ids, day)
+
+
 def queue_context(ctx, day, today, data):
     """Today's groups, rows and recent changes, from scheduling.selectors.today_data."""
     names = {}
     groups = []
     stats = {"total": 0, "waiting": 0, "in_room": 0, "done": 0}
     dental = _dental_rows(ctx)
+    earlier = _earlier_balances(ctx, day, data)
+    now = timezone.now()
     for queue in data["queues"]:
         doctor = queue["doctor"]
         names[doctor["id"]] = doctor["name"]
-        rows = []
+        rows, folded = [], []
         for appointment in queue["appointments"]:
             appointment = {**appointment, "section_id": _section_of(appointment)}
             appointment["dental"] = dental(appointment["section_id"])
-            rows.append(appointment)
+            appointment["earlier"] = earlier.get(appointment["patient"]["id"], 0)
+            starts = appointment["starts_at"]
+            appointment["started"] = not starts or dt.datetime.fromisoformat(starts) <= now  # "didn't come" offered
             status = appointment["status"]
+            (folded if status == "done" and appointment["due"] <= 0 else rows).append(appointment)
             if status != "cancelled":
                 stats["total"] += 1
             if status in ("waiting", "in_room", "done"):
                 stats[status] += 1
+        rows.sort(key=lambda a: ROW_RANK.get(a["status"], 9))  # stable: keeps time and turn inside a rank
         sessions = doctor["sessions"]
         section_ids = sorted({s["section_id"] for s in sessions if s.get("section_id")} |
-                             {a["section_id"] for a in rows if a["section_id"]})
+                             {a["section_id"] for a in rows + folded if a["section_id"]})
         groups.append({"id": doctor["id"], "name": doctor["name"], "sessions": sessions, "rows": rows,
-                       "counts": queue["counts"], "section_ids": section_ids})
+                       "folded": folded, "counts": queue["counts"], "section_ids": section_ids})
     recent = [{**event, "doctor": names.get(event["doctor_id"], "")} for event in data["recent"]]
     return {
         "day": day, "today": today, "is_today": day == today, "groups": groups, "stats": stats,
@@ -257,6 +280,17 @@ def walk_in_defaults(request, ctx):
 # --- Patients --------------------------------------------------------------------------------------------------
 
 
+def _with_owed(ctx, results):
+    """Each result's balance, for those who see money (desk review 3, 9): one grouped statement for the page."""
+    if results and (ctx.can("billing.collect") or ctx.can("finances.view")):
+        from billing.selectors import balances
+
+        owed = balances(ctx, [p["id"] for p in results])
+        for p in results:
+            p["owed"] = owed.get(p["id"], 0)
+    return results
+
+
 @require_GET
 @ensure_csrf_cookie
 @page(perm="patients.view")
@@ -266,7 +300,7 @@ def patients_page(request, ctx):
 
     today = business_day(ctx.clinic)
     query = request.GET.get("q", "")[:60]
-    results = selectors.search(ctx, query, today) if query else None
+    results = _with_owed(ctx, selectors.search(ctx, query, today)) if query else None
     return render(request, "web/patients.html", {
         "ctx": ctx, "nav_active": "patients", "q": query, "results": results, "perms": _perms(ctx),
         **_dialog_context(ctx, today)})
@@ -281,7 +315,7 @@ def patient_search(request, ctx):
     if len(query) > 60:
         raise ApiError("invalid", "q is too long", fields={"q": "too_long"})  # answered as JSON by @fragment
     today = business_day(ctx.clinic)
-    results = selectors.search(ctx, query, today)
+    results = _with_owed(ctx, selectors.search(ctx, query, today))
     return HttpResponse(render_to_string("web/_patient_results.html", {
         "results": results, "q": query, "pick": request.GET.get("pick") == "1", "today": today,
         "doctors": {d["id"]: d["name"] for d in clinic_config(ctx, today)["doctors"]} if results else {},

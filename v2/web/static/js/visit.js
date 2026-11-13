@@ -36,13 +36,38 @@ export function initVisitDialogs({ onChanged } = {}) {
   // --- finish ---
   const finishForm = finishDialog.querySelector("form");
   const owed = finishDialog.querySelector("[data-finish-owed]");
+  const earlierBox = finishDialog.querySelector("[data-earlier]");
+  const visitAmount = finishDialog.querySelector("[data-visit-amount]");
+  const withEarlier = () => !earlierBox.hidden && finishForm.elements.namedItem("with_earlier").checked;
+  finishForm.elements.namedItem("with_earlier").addEventListener("change", () => {
+    finishDialog.querySelector("[data-earlier-amount]").hidden = !withEarlier();
+  });
+
+  // The visit's payment and, ticked by default, what the patient owes from before: one request (desk review 3).
+  function payments() {
+    const method = finishForm.querySelector('[name="method"]:checked').value;
+    const out = {};
+    if (visit.due > 0) {
+      const raw = finishForm.elements.namedItem("amount").value.trim();
+      const amount = parsePiastres(raw);
+      if (raw && amount === null) return null;
+      if (amount) out.payment = { amount, method };
+    }
+    if (withEarlier()) {
+      const amount = parsePiastres(finishForm.elements.namedItem("earlier_amount").value);
+      if (!amount || amount > visit.earlier) return null;
+      out.earlier = { amount, method };
+    }
+    return out.payment || out.earlier ? out : null;
+  }
+
   async function finish(withPayment) {
     if (finishDialog.dataset.busy) return;
     let body = { status: visit.status };
     if (withPayment) {
-      const amount = parsePiastres(finishForm.elements.namedItem("amount").value);
-      if (!amount) { finishing.say(t("bad_amount")); return; }
-      body.payment = { amount, method: finishForm.querySelector('[name="method"]:checked').value };
+      const money = payments();
+      if (!money) { finishing.say(t("bad_amount")); return; }
+      body = { ...body, ...money };
     }
     if (finishing.unknown) body = finishing.unknown.body;
     const result = await finishing.run("POST", `/api/v1/appointments/${visit.id}/finish`, body, `${t("finish")} · ${visit.name}`);
@@ -54,12 +79,14 @@ export function initVisitDialogs({ onChanged } = {}) {
       if (onChanged) onChanged();
       return;
     }
-    if (isOk(result) && body.payment) {
+    if (isOk(result) && (body.payment || body.earlier)) {
       // "Collected" only from the answer: the invoice's paid must have risen by the amount (M1 decision R2).
+      // The earlier balance is paid in the same transaction as the finish, so a 200 means it was taken.
       const invoice = result.data.appointment && result.data.appointment.invoice;
       const after = invoice ? invoice.paid : 0;
-      if (after - visit.paid < body.payment.amount) { nothingCollected(result.data.appointment, t("nothing_collected")); if (onChanged) onChanged(); return; }
-      await done(finishDialog, finishing, result, t("finished_paid", { name: visit.name, amount: moneyText(body.payment.amount) }));
+      if (body.payment && after - visit.paid < body.payment.amount) { nothingCollected(result.data.appointment, t("nothing_collected")); if (onChanged) onChanged(); return; }
+      const total = (body.payment ? body.payment.amount : 0) + (body.earlier ? body.earlier.amount : 0);
+      await done(finishDialog, finishing, result, t("finished_paid", { name: visit.name, amount: moneyText(total) }));
       return;
     }
     await done(finishDialog, finishing, result, t("finished", { name: visit.name }));
@@ -72,6 +99,8 @@ export function initVisitDialogs({ onChanged } = {}) {
     finishing.say(message);
     finishDialog.querySelector("[data-submit]").hidden = true;
     owed.hidden = true;
+    earlierBox.hidden = true;  // the earlier balance goes with a finish only
+    visitAmount.hidden = false;
     collectNow.hidden = !(visit.due > 0);
     finishDialog.querySelector("[data-due-text]").textContent = t("owes", { amount: moneyText(visit.due) });
     if (visit.due > 0) finishForm.elements.namedItem("amount").value = amountInput(visit.due);
@@ -130,8 +159,13 @@ export function initVisitDialogs({ onChanged } = {}) {
       collectNow.hidden = true;
       finishDialog.querySelector("[data-submit]").hidden = false;
       named(finishDialog, v.name);
-      finishDialog.querySelector("[data-due-text]").textContent = t("owes", { amount: moneyText(v.due) });
-      finishForm.elements.namedItem("amount").value = amountInput(v.due);
+      finishDialog.querySelector("[data-due-text]").textContent = v.due > 0 ? t("owes", { amount: moneyText(v.due) }) : "";
+      finishForm.elements.namedItem("amount").value = v.due > 0 ? amountInput(v.due) : "";
+      visitAmount.hidden = !(v.due > 0);
+      earlierBox.hidden = !(v.earlier > 0);
+      finishDialog.querySelector("[data-earlier-amount]").hidden = false;
+      finishDialog.querySelector("[data-earlier-text]").textContent = t("with_earlier", { amount: moneyText(v.earlier || 0) });
+      finishForm.elements.namedItem("earlier_amount").value = v.earlier > 0 ? amountInput(v.earlier) : "";
       openDialog(finishDialog, opener);
     },
     cancel(v, opener) {

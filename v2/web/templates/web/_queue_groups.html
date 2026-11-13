@@ -5,8 +5,12 @@
     <span class="muted">{% for s in g.sessions %}{{ s.starts|clock }} – {{ s.ends|clock }} · {% if s.mode == "slots" %}{% translate "appointments" %}{% else %}{% translate "queue" %}{% endif %}{% if not forloop.last %} | {% endif %}{% empty %}{% translate "Not working this day" %}{% endfor %}</span>
     <span class="muted">{% translate "Waiting:" %} {{ g.counts.waiting|digits }} · {% translate "With the doctor:" %} {{ g.counts.in_room|digits }} · {% translate "Done:" %} {{ g.counts.done|digits }}</span>
   </div>
-  <ol class="rows">{% for a in g.rows %}{% include "web/_row.html" %}{% endfor %}</ol>
-  <p class="empty-note" data-empty{% if g.rows %} hidden{% endif %}>{% translate "No bookings yet." %}</p>
+  <ol class="rows" data-rows="open">{% for a in g.rows %}{% include "web/_row.html" %}{% endfor %}</ol>
+  <details class="done-fold" data-fold{% if not g.folded %} hidden{% endif %}>
+    <summary data-fold-label>{% translate "Finished visits" %} (<span data-fold-count>{{ g.folded|length|digits }}</span>)</summary>
+    <ol class="rows" data-rows="done">{% for a in g.folded %}{% include "web/_row.html" %}{% endfor %}</ol>
+  </details>
+  <p class="empty-note" data-empty{% if g.rows or g.folded %} hidden{% endif %}>{% translate "No bookings yet." %}</p>
 </section>
 {% empty %}
 <p class="empty-note">{% translate "No doctor works on this day, and nothing is booked." %}</p>

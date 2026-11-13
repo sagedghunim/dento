@@ -41,9 +41,11 @@ def objects(test, fixture):
     line = call(client, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
                 {"kind": "procedure", "service_id": services["procedure"].id}).json()["invoice"]["lines"][-1]
     unpaid = book()
+    no_show = book()
+    call(client, "POST", f"/api/v1/appointments/{no_show['id']}/no-show", {"status": "booked"})
     unpaid_invoice = call(client, "POST", f"/api/v1/appointments/{unpaid['id']}/invoice").json()["invoice"]
     return SimpleNamespace(booked=booked["id"], waiting=waiting["id"], in_room=in_room["id"], paid=paid["id"],
-                           assisted=assisted["id"], readied=readied["id"],
+                           assisted=assisted["id"], readied=readied["id"], no_show=no_show["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
                            unpaid_invoice=unpaid_invoice["id"], patient=booked["patient"]["id"], owner=owner,
                            doctor=fixture.membership("doctor").id, procedure=services["procedure"].id,
@@ -82,6 +84,10 @@ def mutating(test, o):
                         {"status": "with_assistant", "note": 1}, ["appointments.queue"]),
         "undo ready": ("POST", f"/api/v1/appointments/{o.readied}/undo-ready", {"status": "ready"},
                        {"status": "ready", "note": 1}, ["appointments.queue"]),
+        "no show": ("POST", f"/api/v1/appointments/{o.booked}/no-show", {"status": "booked"},
+                    {"status": "booked", "note": 1}, ["appointments.queue"]),
+        "undo no show": ("POST", f"/api/v1/appointments/{o.no_show}/undo-no-show", {"status": "no_show"},
+                         {"status": "no_show", "note": 1}, ["appointments.queue"]),
         "finish": ("POST", f"/api/v1/appointments/{o.in_room}/finish", {"status": "in_room"},
                    {"status": "in_room", "note": 1}, ["appointments.queue"]),
         "cancel": ("POST", f"/api/v1/appointments/{o.booked}/cancel", {"status": "booked"},

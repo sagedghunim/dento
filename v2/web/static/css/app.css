@@ -346,6 +346,16 @@ button.chip-btn .count { color: var(--muted); font-weight: 600; }
 .appt.gone { opacity: .45; }
 .appt.done .who, .appt.cancelled .who, .appt.no_show .who { color: var(--muted); }
 .appt.cancelled .who > span:first-child { text-decoration: line-through; }
+/* Desk review 3, 5, 7: the older balance, tappable phones and the folded finished rows. */
+.earlier { color: var(--amber); font-size: .875rem; font-weight: 600; }
+.owed { color: var(--amber); font-weight: 600; }
+.what a.tel { color: inherit; text-decoration: underline; text-underline-offset: 3px; display: inline-block;
+  padding-block: 12px; margin-block: -12px; }  /* a 44 px tall target without a taller row */
+.what a.tel.wa { color: var(--teal-dark); font-weight: 600; }
+.done-fold { margin-top: 8px; }
+.done-fold > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 6px; padding-inline: 8px;
+  color: var(--muted); font-weight: 700; border-radius: 8px; }
+.done-fold > summary:hover { background: var(--surface-2); }
 .more > summary {
   display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line);
   border-radius: 10px; cursor: pointer; color: var(--ink);

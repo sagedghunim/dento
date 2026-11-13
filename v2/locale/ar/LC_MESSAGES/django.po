@@ -883,10 +883,10 @@ msgid "Didn't come"
 msgstr "لم يحضر"
 
 msgid "Owes"
-msgstr "عليه"
+msgstr "باقي"
 
 msgid "Arrived"
-msgstr "وصل"
+msgstr "تم الحضور"
 
 msgid "Call in"
 msgstr "استدعاء"
@@ -968,7 +968,7 @@ msgid "Loading…"
 msgstr "جارٍ التحميل…"
 
 msgid "Arrived: {name}"
-msgstr "وصل: {name}"
+msgstr "تم الحضور: {name}"
 
 msgid "Called in: {name}"
 msgstr "دخل للطبيب: {name}"
@@ -1007,7 +1007,7 @@ msgid "The bill was voided"
 msgstr "أُلغيت الفاتورة"
 
 msgid "Owes {amount}"
-msgstr "عليه {amount}"
+msgstr "باقي {amount}"
 
 msgid "Payment"
 msgstr "دفعة"
@@ -3186,3 +3186,54 @@ msgid ""
 msgstr ""
 "أيوه: إنت بتحجز وبتستقبل المرضى وبتحصّل الفلوس بنفسك. لا: فيه مساعد على "
 "الاستقبال بيعمل ده."
+
+msgid "Call"
+msgstr "اتصال"
+
+msgid "Owed from before:"
+msgstr "باقي من قبل:"
+
+msgid "With the assistant"
+msgstr "مع المساعد"
+
+msgid "Ready for the doctor"
+msgstr "جاهز للطبيب"
+
+msgid "Book the next visit"
+msgstr "احجز الزيارة الجاية"
+
+msgid "Undo: didn't come"
+msgstr "التراجع عن «لم يحضر»"
+
+msgid "Finished visits"
+msgstr "خلصوا"
+
+msgid "From the earlier balance (EGP)"
+msgstr "من الباقي القديم (ج.م)"
+
+msgid "This booking's time hasn't come yet."
+msgstr "ميعاد هذا الحجز لم يأتِ بعد."
+
+msgid "Ready for the doctor: {name}"
+msgstr "جاهز للطبيب: {name}"
+
+msgid "No longer ready: {name}"
+msgstr "لم يعد جاهزًا: {name}"
+
+msgid "Marked as didn't come: {name}"
+msgstr "لم يحضر: {name}"
+
+msgid "Owed from before: {amount}"
+msgstr "باقي من قبل: {amount}"
+
+msgid "Also collect what is owed from before ({amount})"
+msgstr "حصّل كمان الباقي القديم ({amount})"
+
+msgid "This can be done only on the visit's own day."
+msgstr "هذا ممكن في يوم الزيارة نفسه فقط."
+
+msgid "With the assistant:"
+msgstr "مع المساعد:"
+
+msgid "Ready for the doctor:"
+msgstr "جاهز للطبيب:"

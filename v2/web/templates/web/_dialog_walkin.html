@@ -24,6 +24,10 @@
       <div class="grid-form" data-new hidden>
         <label class="field">{% translate "Full name" %}<input name="full_name" maxlength="120" dir="auto" autocomplete="off"></label>
         <label class="field">{% translate "Mobile" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off"></label>
+        <div class="notice" data-dupes hidden>
+          <p>{% translate "This mobile number already has a file. Is it one of these?" %}</p>
+          <div data-dupe-list></div>
+        </div>
         <button type="button" class="link-btn" data-back-to-search>{% translate "Search instead" %}</button>
       </div>
       {% endif %}
@@ -40,8 +44,8 @@
     </div>
     <p class="muted" data-defaults-note role="status" hidden></p>
     {% if config.perms.collect %}
-    <label class="check"><input type="checkbox" name="collect"> {% translate "Collect now" %}</label>
-    <div class="grid-form" data-collect-fields hidden>
+    <label class="check"><input type="checkbox" name="collect" checked> {% translate "Collect now" %}</label>
+    <div class="grid-form" data-collect-fields>
       <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
       <fieldset class="group"><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
     </div>

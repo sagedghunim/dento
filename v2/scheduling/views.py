@@ -216,6 +216,25 @@ undo_ready_view = _undo_view("undo_ready")
 undo_call_view = _undo_view("undo_call")
 
 
+def _no_show_view(undo):
+    """no-show takes {"status": "booked"}, undo-no-show {"status": "no_show"} (desk review 7)."""
+
+    def view(request, ctx, data, appointment_id):
+        appointment_id = _appointment_id(appointment_id)
+        seen = validate.choice(data, "status", STATUSES)
+        action = services.undo_no_show if undo else services.mark_no_show
+        version = action(ctx, appointment_id, seen)
+        return Result(selectors.answer(ctx, appointment_id, version), target_type="appointment",
+                      target_id=appointment_id)
+
+    view.__name__ = view.__qualname__ = "undo_no_show_view" if undo else "no_show_view"
+    return api("POST", perm="appointments.queue", replay=_replay_appointment)(view)
+
+
+no_show_view = _no_show_view(False)
+undo_no_show_view = _no_show_view(True)
+
+
 @api("POST", perm="appointments.book", replay=_replay_appointment)
 def reschedule_view(request, ctx, data, appointment_id):
     appointment_id = _appointment_id(appointment_id)

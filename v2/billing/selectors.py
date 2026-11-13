@@ -159,6 +159,24 @@ def patient_balance(ctx, patient_id):
                           "due": r["total"] - r["paid"]} for r in rows[:BALANCE_LIMIT]]}
 
 
+def balances(ctx, patient_ids, day=None):
+    """What each of these patients owes from before (desk review 3): {patient_id: piastres}, owing patients only.
+
+    One grouped statement on the invoice_unpaid index, whatever the number of patients. With `day`, the
+    invoices of that day's visits are left out: their rows show them as this visit's "owes".
+    """
+    if not patient_ids:
+        return {}
+    return dict(sql.rows(ctx, """
+        SELECT i.patient_id, sum(i.total - i.paid)::bigint
+          FROM "billing_invoice" i
+         WHERE i.clinic_id = %s AND i.patient_id = ANY(%s::bigint[]) AND i.status = 'open' AND i.paid < i.total
+           AND (%s::date IS NULL OR i.appointment_id IS NULL OR NOT EXISTS (
+                SELECT 1 FROM "scheduling_appointment" a
+                 WHERE a.clinic_id = i.clinic_id AND a.id = i.appointment_id AND a.day = %s::date))
+         GROUP BY i.patient_id""", [ctx.clinic_id, sorted(set(patient_ids)), day, day]))
+
+
 def visit_invoice(ctx, appointment_id):
     """The visit's open invoice with its lines, for the finish dialog: lines, total, paid and remaining."""
     found = sql.row(ctx, 'SELECT id FROM "billing_invoice" WHERE clinic_id = %s AND appointment_id = %s '

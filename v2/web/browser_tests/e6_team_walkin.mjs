@@ -118,6 +118,8 @@ export async function run() {
     await page.until(`document.getElementById("walkin-dialog").open`, 3000, "the walk-in dialog opens");
     await page.until(`document.querySelector('#walkin-dialog [name="doctor"]').value !== ""`, 8000, "the doctor comes from the server's choice");
     await page.eval(`document.querySelector("#walkin-dialog [data-new-patient]").click()`);
+    // "Collect now" starts ticked for a walk-in (desk review 2): the fee fills the amount.
+    await page.until(`document.querySelector('#walkin-dialog [name="amount"]').value !== ""`, 8000, "the fee fills the amount");
     await page.eval(`(() => { const f = document.querySelector("#walkin-dialog form");
                               f.elements.full_name.value = ${JSON.stringify(name)}; f.elements.phone.value = "0101${String(Date.now()).slice(-7)}"; })()`);
     await shot(page, "v2-walkin-1280.png");

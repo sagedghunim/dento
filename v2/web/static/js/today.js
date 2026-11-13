@@ -25,6 +25,7 @@ const channelName = `hamada-today-${membership()}-${dayParam || "current"}`;
 let etag = card.dataset.etag || null;
 let pollAfter = Number(card.dataset.pollAfter) || 5;
 let serverTime = card.dataset.serverTime || "";
+let clockSkew = 0;  // the server's clock minus this one's, in ms: "didn't come" waits for the booking's time
 let lastGood = Date.now();
 let failures = 0;
 let retryAfter = 0;
@@ -145,6 +146,8 @@ async function poll() {
 function good(time) {
   lastGood = Date.now();
   if (time) serverTime = time;
+  const parsed = time ? Date.parse(time) : NaN;
+  if (!Number.isNaN(parsed)) clockSkew = parsed - Date.now();
   showFreshness();
 }
 
@@ -242,7 +245,14 @@ function tooSoon(row) {
 window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
 card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
 card.addEventListener("focusout", () => setTimeout(flushHeld, 0));
-card.addEventListener("toggle", (event) => { if (!event.target.open) setTimeout(flushHeld, 0); }, true);
+card.addEventListener("toggle", (event) => {
+  if (!event.target.open) { setTimeout(flushHeld, 0); return; }
+  // "Didn't come" shows once the booking's time has passed, by the server's clock.
+  event.target.querySelectorAll("[data-act='no-show'][data-after]").forEach((item) => {
+    const after = Date.parse(item.dataset.after);
+    item.hidden = !Number.isNaN(after) && after > Date.now() + clockSkew;
+  });
+}, true);
 
 function hot() {
   const window_ = lastPointer === "mouse" ? 1500 : 2500;
@@ -339,7 +349,17 @@ function patchGroups(fresh) {
       const head = group.querySelector("[data-head]");
       const freshHead = freshGroup.querySelector("[data-head]");
       if (head.outerHTML !== freshHead.outerHTML) head.replaceWith(freshHead);
-      patchRows(group.querySelector(".rows"), freshGroup.querySelector(".rows"));
+      for (const name of ["open", "done"]) {
+        const live = group.querySelector(`[data-rows="${name}"]`);
+        const fresh = freshGroup.querySelector(`[data-rows="${name}"]`);
+        if (live && fresh) patchRows(live, fresh);
+      }
+      const fold = group.querySelector("[data-fold]");
+      const freshFold = freshGroup.querySelector("[data-fold]");
+      if (fold && freshFold) {  // the count and whether it shows; open or closed stays as the person left it
+        fold.hidden = freshFold.hidden;
+        fold.querySelector("[data-fold-count]").textContent = freshFold.querySelector("[data-fold-count]").textContent;
+      }
       group.querySelector("[data-empty]").hidden = freshGroup.querySelector("[data-empty]").hidden;
       if ((prev ? prev.nextElementSibling : list.firstElementChild) !== group) {
         if (prev) prev.after(group); else list.prepend(group);
@@ -450,7 +470,9 @@ function visitOf(row) {
   const service = row.querySelector(".what bdi");
   return {
     id: Number(row.dataset.id), status: row.dataset.status, name, due: Number(row.dataset.due), fee: Number(row.dataset.fee),
-    paid: Number(row.dataset.paid) || 0,
+    paid: Number(row.dataset.paid) || 0, earlier: Number(row.dataset.earlier) || 0,
+    patient: { id: Number(row.dataset.patient), name, file: row.dataset.file, phone: row.dataset.phone || "",
+               owed: Number(row.dataset.earlier) || 0 },
     invoiceId: row.dataset.invoice ? Number(row.dataset.invoice) : null, doctorId: Number(row.dataset.doctor),
     day: row.dataset.day, service: service ? service.textContent : "",
   };
@@ -464,8 +486,11 @@ function markActing(row) {
 
 const MESSAGES = {
   arrive: "arrived", call: "called", finish: "finished", "undo-arrive": "undone_arrive", "undo-call": "undone_call",
+  ready: "readied", "undo-ready": "undone_ready", "no-show": "marked_no_show", "undo-no-show": "undone_no_show",
 };
-const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"] };
+const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"], ready: ["undo-ready", "ready"],
+               "no-show": ["undo-no-show", "no_show"] };
+const UNDO_FLAG = { "undo-arrive": "undoArrive", "undo-call": "undoCall" };  // the others always exist
 
 async function quick(id, action, status, name) {
   const key = `${id}:${action}`;
@@ -483,7 +508,7 @@ async function quick(id, action, status, name) {
   if (!result.settled) { renderPending(); return; }
   if (isOk(result)) {
     const undo = UNDO[action];
-    const canUndo = undo && card.dataset[undo[0] === "undo-arrive" ? "undoArrive" : "undoCall"] === "1";
+    const canUndo = undo && (!UNDO_FLAG[undo[0]] || card.dataset[UNDO_FLAG[undo[0]]] === "1");
     toast(t(MESSAGES[action], { name }), canUndo ? { label: t("undo"), onClick: () => quick(id, undo[0], undo[1], name) } : null);
   } else {
     alertMessage(errorMessage(result, t("failed")));
@@ -500,11 +525,14 @@ card.addEventListener("click", (event) => {
   if (menu) menu.open = false;
   const v = visitOf(row);
   switch (button.dataset.act) {
-    case "arrive": case "call": case "undo-arrive": case "undo-call":
+    case "arrive": case "call": case "ready": case "undo-arrive": case "undo-call": case "no-show": case "undo-no-show":
       quick(v.id, button.dataset.act, v.status, v.name);
       break;
+    case "next":  // the next visit of a plan: the same patient and doctor, no search (desk review 4)
+      if (book) book.open({ patient: v.patient, doctorId: v.doctorId, opener: button });
+      break;
     case "finish":
-      if (config.perms.collect && v.due > 0) visitDialogs.finish(v, button);
+      if (config.perms.collect && (v.due > 0 || v.earlier > 0)) visitDialogs.finish(v, button);
       else quick(v.id, "finish", v.status, v.name);
       break;
     case "pay": case "invoice":
@@ -534,7 +562,12 @@ document.addEventListener("click", (event) => {
   const opener = event.target.closest("[data-open-book]");
   if (opener && book) book.open({ opener });
   const walkOpener = event.target.closest("[data-open-walkin]");
-  if (walkOpener && walkIn) walkIn.open({ opener: walkOpener });
+  if (walkOpener && walkIn) {
+    // The name or mobile already typed in the quick field goes with it, so nobody types it twice.
+    const typed = walkOpener.closest("[data-quick-book]") ? quickForm.elements.namedItem("q").value.trim() : "";
+    walkIn.open({ opener: walkOpener, query: typed });
+    if (typed) quickForm.reset();
+  }
 });
 
 const walkIn = initWalkIn({ onBooked: changed });
