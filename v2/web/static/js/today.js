@@ -492,7 +492,7 @@ const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"
                "no-show": ["undo-no-show", "no_show"] };
 const UNDO_FLAG = { "undo-arrive": "undoArrive", "undo-call": "undoCall" };  // the others always exist
 
-async function quick(id, action, status, name) {
+async function quick(id, action, status, name, doctorId) {
   const key = `${id}:${action}`;
   if (acting.has(key)) return;
   acting.set(key, true);
@@ -506,6 +506,10 @@ async function quick(id, action, status, name) {
   const now = list.querySelector(`.appt[data-id="${id}"]`);
   if (now) { now.classList.remove("saving"); now.querySelectorAll("[data-act]").forEach((b) => { b.disabled = false; }); }
   if (!result.settled) { renderPending(); return; }
+  if (isOk(result) && action === "call" && config.me.treats && doctorId === config.me.membership_id) {
+    window.location.assign(`/visits/${id}`);  // the doctor's own call-in opens the visit screen; the desk stays
+    return;
+  }
   if (isOk(result)) {
     const undo = UNDO[action];
     const canUndo = undo && (!UNDO_FLAG[undo[0]] || card.dataset[UNDO_FLAG[undo[0]]] === "1");
@@ -526,7 +530,7 @@ card.addEventListener("click", (event) => {
   const v = visitOf(row);
   switch (button.dataset.act) {
     case "arrive": case "call": case "ready": case "undo-arrive": case "undo-call": case "no-show": case "undo-no-show":
-      quick(v.id, button.dataset.act, v.status, v.name);
+      quick(v.id, button.dataset.act, v.status, v.name, v.doctorId);
       break;
     case "next":  // the next visit of a plan: the same patient and doctor, no search (desk review 4)
       if (book) book.open({ patient: v.patient, doctorId: v.doctorId, opener: button });

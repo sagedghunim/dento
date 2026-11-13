@@ -275,6 +275,7 @@ class MoneyInvariantTests(BillingTestCase):
         visits = []
         statuses = defaultdict(int)
         succeeded = defaultdict(int)
+        in_room = set()  # one patient in the room per doctor (Saged, 2026-11-13): "finish" aims at them
         for step in range(160):
             day = days[min(step // 55, 2)]
             with frozen(dt.datetime.combine(day, dt.time(19, 0), tzinfo=CAIRO)):
@@ -322,9 +323,13 @@ class MoneyInvariantTests(BillingTestCase):
                     r = call(desk, "POST", f"/api/v1/appointments/{target}/reschedule",
                              {"status": "booked", "doctor_id": doctors[0], "day": (day + dt.timedelta(days=1)).isoformat()})
                 else:
+                    if choice == "finish" and in_room:
+                        target = min(in_room)  # no draw from rng: the rest of the sequence stays as it was
                     source = {"arrive": "booked", "call": "waiting", "finish": "in_room"}[choice]
                     body = {"payment": {"amount": rng.randint(1, 3000), "method": "card"}} if choice == "finish" else {}
                     r = self.act(target, choice, source, client=desk, **body)
+                    if r.status_code < 300:
+                        (in_room.add if choice == "call" else in_room.discard)(target)
                 if r is not None:
                     self.assertLess(r.status_code, 500, r.content)
                     statuses[r.status_code] += 1

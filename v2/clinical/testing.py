@@ -43,7 +43,13 @@ class M2TestCase(M1TestCase):
         r = call(desk, "POST", "/api/v1/appointments/walk-in", body)
         self.assertEqual(r.status_code, 201, r.content)
         visit = r.json()["appointment"]
-        self.assertEqual(self.act(visit["id"], "call", "waiting", client=desk).status_code, 200)
+        r = self.act(visit["id"], "call", "waiting", client=desk)
+        if r.status_code == 409 and r.json()["error"]["code"] == "doctor_busy":
+            # One patient in the room per doctor (Saged, 2026-11-13): the earlier one is finished first.
+            busy = r.json()["error"]["appointment_id"]
+            self.assertEqual(self.act(busy, "finish", "in_room", client=desk).status_code, 200)
+            r = self.act(visit["id"], "call", "waiting", client=desk)
+        self.assertEqual(r.status_code, 200, r.content)
         return visit
 
     def booked(self, hhmm="10:00"):

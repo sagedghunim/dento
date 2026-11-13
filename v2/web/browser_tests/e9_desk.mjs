@@ -7,7 +7,7 @@
 // HAMADA_BT_SHOTS=<folder> takes Today at 1280 px and at 390 px.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BASE, browser, check, signIn, sleep } from "./lib.mjs";
+import { BASE, browser, check, freeRoom, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 const SHOTS = process.env.HAMADA_BT_SHOTS || "";
@@ -134,6 +134,8 @@ export async function run() {
     await page.eval(`document.querySelector("#walkin-dialog [data-close]").click()`);
 
     // 3. The earlier balance, collected with the finish, once on a double click.
+    await freeRoom(api, doctor.id);  // first, so the balances read below already count that finish
+    await sleep(6000);  // the queue's next poll shows it
     const owing = await page.eval(`(() => { const r = [...document.querySelectorAll(".appt")].find((x) => Number(x.dataset.earlier) > 0);
       return r ? { patient: Number(r.dataset.patient), earlier: Number(r.dataset.earlier), name: r.dataset.name } : null; })()`);
     if (!owing) {

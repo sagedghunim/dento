@@ -64,6 +64,18 @@ def summaries(fixture, day):
     return clinic, doctors
 
 
+def free_rooms(fixture):
+    """Every visit in the room becomes done, straight in the table (counters untouched): a doctor has one patient in
+    the room at a time (Saged, 2026-11-13), and some fixtures need a free room before they call someone in."""
+    import datetime as dt
+
+    from scheduling.models import Appointment
+
+    with clinic_transaction(fixture.id, fixture.shard):
+        Appointment.objects.filter(clinic_id=fixture.id, status="in_room").update(
+            status="done", finished_at=dt.datetime.now(dt.UTC))
+
+
 class M1TestCase(ShardTestCase):
     """Clinic A on shard 1 and clinic B on shard 2. The owners work a queue; A's doctor works 20-minute slots."""
 

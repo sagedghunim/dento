@@ -21,15 +21,15 @@ export function check(ok, message) {
 
 // --- signing in and the API, as the browser does it (CSRF cookie, X-Membership, a request key) ---
 
-export async function signIn() {
+export async function signIn(user = USER) {
   const jar = {};
   const keep = (r) => { for (const c of r.headers.getSetCookie()) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
   const cookie = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
   keep(await fetch(BASE + "/login"));
   const headers = (extra = {}) => ({ "Content-Type": "application/json", Cookie: cookie(), "X-CSRFToken": jar.hamada_csrftoken || "", Origin: BASE, ...extra });
-  let r = await fetch(BASE + "/api/v1/auth/login", { method: "POST", headers: headers(), body: JSON.stringify({ username: USER, password: PASSWORD }) });
+  let r = await fetch(BASE + "/api/v1/auth/login", { method: "POST", headers: headers(), body: JSON.stringify({ username: user, password: PASSWORD }) });
   keep(r);
-  if (r.status !== 200) throw new Error(`sign-in failed for ${USER}: ${r.status} ${await r.text()}`);
+  if (r.status !== 200) throw new Error(`sign-in failed for ${user}: ${r.status} ${await r.text()}`);
   r = await fetch(BASE + "/api/v1/me", { headers: headers() });
   const me = await r.json();
   const place = me.clinics.find((c) => c.name.includes(CLINIC)) || me.clinics[0];
@@ -53,6 +53,15 @@ export async function signIn() {
 export async function bookingsOf(api, name) {
   const today = (await api("GET", "/api/v1/today")).data;
   return today.queues.flatMap((q) => q.appointments).filter((a) => a.patient.name === name && a.status !== "cancelled");
+}
+
+// A doctor has one patient in the room at a time (Saged, 2026-11-13): finish whoever of theirs is in the room
+// before a test calls someone in for them. Development data only.
+export async function freeRoom(api, doctorId) {
+  const today = (await api("GET", "/api/v1/today")).data;
+  for (const a of today.queues.flatMap((q) => q.appointments)) {
+    if (a.status === "in_room" && a.doctor_id === doctorId) await api("POST", `/api/v1/appointments/${a.id}/finish`, { status: "in_room" });
+  }
 }
 
 // --- the browser ---

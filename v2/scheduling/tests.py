@@ -10,7 +10,7 @@ from core.testing import call
 from scheduling import rules
 from scheduling.jobs import recompute_clinic, sweep_clinic
 from scheduling.models import Appointment
-from scheduling.testing import M1TestCase, frozen, summaries, today
+from scheduling.testing import M1TestCase, free_rooms, frozen, summaries, today
 
 CAIRO = ZoneInfo("Africa/Cairo")
 
@@ -210,6 +210,7 @@ class TransitionMatrixTests(M1TestCase):
     STATUSES = ["booked", "waiting", "in_room", "done", "cancelled", "no_show"]
 
     def _in_status(self, status):
+        free_rooms(self.a)  # one patient in the room per doctor: each subtest starts with the room free
         appt = self.book().json()["appointment"]
         now = dt.datetime.now(dt.UTC)
         times = {"booked": {}, "waiting": {"arrived_at": now}, "in_room": {"arrived_at": now, "called_at": now},
@@ -420,11 +421,11 @@ class TimeTests(M1TestCase):
             desk = self.a.client("assistant")
             booked = self.book(client=desk).json()["appointment"]
             waiting = self.book(client=desk, arrive=True).json()["appointment"]
-            in_room = self.book(client=desk, arrive=True).json()["appointment"]
-            self.act(in_room["id"], "call", "waiting", client=desk)
             done = self.book(client=desk, arrive=True).json()["appointment"]
             self.act(done["id"], "call", "waiting", client=desk)
             self.act(done["id"], "finish", "in_room", client=desk)
+            in_room = self.book(client=desk, arrive=True).json()["appointment"]
+            self.act(in_room["id"], "call", "waiting", client=desk)  # one patient in the room at a time
         self.assertEqual(sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T04:29")), {})
         self.assertEqual(self.appointment(booked["id"]).status, "booked")
         counts = sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T04:30"))
@@ -545,6 +546,7 @@ class QueryCountTests(M1TestCase):
                                                    payment={"amount": 100, "method": "cash"}))
             appt = self.book(patient_id=patient, arrive=True).json()["appointment"]
             status = self.count(lambda: self.act(appt["id"], "call", "waiting"))
+            self.act(appt["id"], "finish", "in_room")  # the room is free for the next measure
             return today_full, today_304, booking, status
 
         small = measure()

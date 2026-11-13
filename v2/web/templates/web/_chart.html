@@ -1,0 +1,112 @@
+{% load i18n hamada %}{# The dental chart and its tooth panel: the teeth page and the visit screen (teeth.js). #}
+<div class="chart-layout" data-chart-layout>
+  <section class="card chart-card" aria-labelledby="chart-title">
+    <div class="card-head">
+      <h2 id="chart-title">{% translate "Teeth" %}</h2>
+      <div class="segmented" role="radiogroup" aria-label="{% translate "Teeth set" %}">
+        <label><input type="radio" name="dentition" value="permanent"{% if not start_primary %} checked{% endif %}><span>{% translate "Permanent" %}</span></label>
+        <label><input type="radio" name="dentition" value="primary"{% if start_primary %} checked{% endif %}><span>{% translate "Primary" %}</span></label>
+      </div>
+    </div>
+    <div class="chart-scroll">
+      {# Anatomical order, read left to right as dental charts are: the patient's right is on the left. #}
+      {% for set_name, set in teeth.items %}
+      <div class="dentition" dir="ltr" data-dentition="{{ set_name }}"{% if set_name == "primary" and not start_primary or set_name == "permanent" and start_primary %} hidden{% endif %}>
+        <div class="jaw-half q-ur">{% for t in set.upper.0 %}{% include "web/_tooth.html" with jaw="upper" %}{% endfor %}</div>
+        <div class="midline" aria-hidden="true"></div>
+        <div class="jaw-half q-ul">{% for t in set.upper.1 %}{% include "web/_tooth.html" with jaw="upper" %}{% endfor %}</div>
+        <div class="jaw-half q-lr">{% for t in set.lower.0 %}{% include "web/_tooth.html" with jaw="lower" %}{% endfor %}</div>
+        <div class="jaw-half q-ll">{% for t in set.lower.1 %}{% include "web/_tooth.html" with jaw="lower" %}{% endfor %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="chart-hint">{% translate "Tap a tooth to view its history and record findings." %}</p>
+    <ul class="legend" aria-label="{% translate "Key" %}">
+      {% for code, label in legend %}{% if code != "open_root_canal" %}<li><span class="key" data-condition="{{ code }}" aria-hidden="true"></span>{{ label }}</li>{% endif %}{% endfor %}
+      <li><span class="key key-done" aria-hidden="true"></span>{% translate "Has procedures" %}</li>
+      <li><span class="key key-ring" aria-hidden="true"></span>{% translate "In progress" %}</li>
+      <li><span class="key-rct" aria-hidden="true">RCT</span>{% translate "Open root canal" %}</li>
+    </ul>
+  </section>
+
+  <aside class="tooth-panel card" data-panel hidden aria-labelledby="panel-title">
+    <div class="panel-head">
+      <div>
+        <h2 id="panel-title" tabindex="-1">{% translate "Tooth" %} <bdi class="ltr num" data-panel-no></bdi></h2>
+        <p class="panel-state"><span class="key" data-panel-key aria-hidden="true"></span><span data-panel-state></span></p>
+      </div>
+      <button type="button" class="icon-btn" data-panel-close aria-label="{% translate "Close" %}" title="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="panel-body">
+      {% if perms.record %}
+      <section class="panel-part" data-part="finding" aria-labelledby="finding-title">
+        <form novalidate>
+          <h3 id="finding-title">{% translate "Findings" %}</h3>
+          <fieldset class="conditions">
+            <legend class="visually-hidden">{% translate "Condition" %}</legend>
+            {% for code, label in legend %}<label class="cond"><input type="radio" name="condition" value="{{ code }}"><span><span class="key" data-condition="{{ code }}" aria-hidden="true"></span>{{ label }}</span></label>{% endfor %}
+          </fieldset>
+          {% include "web/_surfaces.html" %}
+          <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" autocomplete="off" dir="auto"></label>
+          <p class="form-error" data-error role="alert"></p>
+          <div class="panel-actions">
+            <button type="submit" class="btn" data-submit>{% translate "Save the finding" %}</button>
+            <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+          </div>
+        </form>
+      </section>
+      {% if can_record %}
+      <section class="panel-part" data-part="procedure" aria-labelledby="procedure-title">
+        <form novalidate>
+          <h3 id="procedure-title">{% translate "Record a procedure" %}</h3>
+          <p class="card-sub">{% translate "It is added to this visit's bill." %}</p>
+          <div class="plan-picks" data-plan-picks></div>
+          {% if procedures %}
+          <label class="field">{% translate "Procedure" %}
+            <select name="procedure_id">
+              <option value="">{% translate "Pick the procedure" %}</option>
+              {% for p in procedures %}<option value="{{ p.id }}" data-condition="{{ p.condition }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
+            </select>
+          </label>
+          {% include "web/_surfaces.html" %}
+          <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="500" autocomplete="off" dir="auto"></label>
+          {% else %}<p class="muted">{% translate "This section's list has no tooth procedures yet." %}</p>{% endif %}
+          <p class="form-error" data-error role="alert"></p>
+          <div class="panel-actions">
+            {% if procedures %}<button type="submit" class="btn" data-submit>{% translate "Record and add to the bill" %}</button>{% endif %}
+            <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+          </div>
+        </form>
+      </section>
+      {% elif visit %}
+      <p class="notice panel-note">{% translate "Procedures are recorded once the patient has arrived." %}</p>
+      {% endif %}
+      {% if procedures %}
+      <section class="panel-part" data-part="plan" aria-labelledby="plan-title">
+        <form novalidate>
+          <h3 id="plan-title">{% translate "Add to the treatment plan" %}</h3>
+          <label class="field">{% translate "Procedure" %}
+            <select name="procedure_id">
+              <option value="">{% translate "Pick the procedure" %}</option>
+              {% for p in procedures %}<option value="{{ p.id }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
+            </select>
+          </label>
+          <p class="form-error" data-error role="alert"></p>
+          <div class="panel-actions">
+            <button type="submit" class="btn ghost" data-submit>{% translate "Add to plan" %}</button>
+            <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+          </div>
+        </form>
+      </section>
+      {% endif %}
+      {% endif %}
+      <section class="panel-part" aria-labelledby="history-title">
+        <h3 id="history-title">{% translate "History" %}</h3>
+        <ol class="history" data-history></ol>
+        <p class="muted" data-history-status role="status"></p>
+        <button type="button" class="btn ghost" data-history-more hidden>{% translate "Load more" %}</button>
+      </section>
+    </div>
+  </aside>
+</div>
+{{ chart|json_script:"chart-data" }}

@@ -182,6 +182,7 @@ function procedurePart(section) {
     const result = await submitter.run("POST", `/api/v1/appointments/${data.appointment_id}/procedures`, body, label);
     if (!result || !isOk(result)) return;
     const record = result.data.procedure;
+    window.dispatchEvent(new CustomEvent("hamada:procedure-recorded", { detail: result.data }));  // the visit screen's list
     done.add(record.tooth);
     if (record.plan_item_id) planItems = planItems.filter((i) => i.id !== record.plan_item_id);
     changed(record.tooth, result.data.tooth);

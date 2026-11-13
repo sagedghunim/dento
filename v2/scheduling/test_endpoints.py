@@ -13,7 +13,7 @@ from core.routing import clinic_transaction
 from core.testing import call
 from patients.models import Patient
 from scheduling.models import Appointment
-from scheduling.testing import M1TestCase, today
+from scheduling.testing import M1TestCase, free_rooms, today
 from summaries.models import ClinicDay
 
 FULL = ["billing.discount", "billing.refund"]  # what the assistant template lacks among the M1 codes
@@ -31,8 +31,14 @@ def objects(test, fixture):
         assert r.status_code == 201, r.content
         return r.json()["appointment"]
 
+    free_rooms(fixture)  # a doctor has one patient in the room at a time (Saged, 2026-11-13)
     booked, waiting, in_room = book(), book(arrive=True), book(arrive=True)
     call(client, "POST", f"/api/v1/appointments/{in_room['id']}/call", {"status": "waiting"})
+    # A waiting visit on another day: the owner's room is taken today, so "call" is tried on this one.
+    callable_ = book(day=(today(fixture) + dt.timedelta(days=1)).isoformat())
+    with clinic_transaction(fixture.id, fixture.shard):
+        Appointment.objects.filter(clinic_id=fixture.id, id=callable_["id"]).update(
+            status="waiting", arrived_at=dt.datetime.now(dt.UTC))
     assisted, readied = book(arrive=True), book(arrive=True)
     call(client, "POST", f"/api/v1/appointments/{assisted['id']}/assist", {"status": "waiting"})
     call(client, "POST", f"/api/v1/appointments/{readied['id']}/ready", {"status": "waiting"})
@@ -45,6 +51,7 @@ def objects(test, fixture):
     call(client, "POST", f"/api/v1/appointments/{no_show['id']}/no-show", {"status": "booked"})
     unpaid_invoice = call(client, "POST", f"/api/v1/appointments/{unpaid['id']}/invoice").json()["invoice"]
     return SimpleNamespace(booked=booked["id"], waiting=waiting["id"], in_room=in_room["id"], paid=paid["id"],
+                           callable=callable_["id"],
                            assisted=assisted["id"], readied=readied["id"], no_show=no_show["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
                            unpaid_invoice=unpaid_invoice["id"], patient=booked["patient"]["id"], owner=owner,
@@ -70,7 +77,7 @@ def mutating(test, o):
                     {"patient_id": o.patient, "note": "x"}, ["appointments.book", "appointments.queue"]),
         "arrive": ("POST", f"/api/v1/appointments/{o.booked}/arrive", {"status": "booked"},
                    {"status": "booked", "note": 1}, ["appointments.queue"]),
-        "call": ("POST", f"/api/v1/appointments/{o.waiting}/call", {"status": "waiting"},
+        "call": ("POST", f"/api/v1/appointments/{o.callable}/call", {"status": "waiting"},
                  {"status": "waiting", "note": 1}, ["appointments.queue"]),
         "undo arrive": ("POST", f"/api/v1/appointments/{o.waiting}/undo-arrive", {"status": "waiting"},
                         {"status": "waiting", "note": 1}, ["appointments.queue"]),

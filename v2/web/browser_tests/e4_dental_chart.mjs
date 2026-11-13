@@ -4,7 +4,7 @@
 // With HAMADA_BT_SHOTS=<folder> it also takes the 1280 px and 390 px screenshots.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { browser, check, signIn, sleep } from "./lib.mjs";
+import { browser, check, freeRoom, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 const SHOTS = process.env.HAMADA_BT_SHOTS || "";
@@ -18,12 +18,14 @@ async function shot(page, name) {
   console.log(`  screenshot: ${name}`);
 }
 
-async function inRoom(api) {
+async function inRoom(api, me) {
   const config = (await api("GET", "/api/v1/clinic")).data;
-  const doctor = config.doctors.find((d) => d.today.some((s) => s.mode === "queue")) || config.doctors[0];
+  // The signed-in doctor's own visit: a doctor books only for themselves (Saged, 2026-11-13).
+  const doctor = config.doctors.find((d) => d.id === me) || config.doctors.find((d) => d.today.some((s) => s.mode === "queue")) || config.doctors[0];
   const service = config.services.find((s) => s.kind === "procedure").id;
   const booked = (await api("POST", "/api/v1/appointments", { doctor_id: doctor.id, service_id: service, arrive: true,
                                                               new_patient: { full_name: `Bt Teeth ${stamp}` } })).data.appointment;
+  await freeRoom(api, doctor.id);
   await api("POST", `/api/v1/appointments/${booked.id}/call`, { status: "waiting" });
   return booked;
 }
@@ -31,8 +33,8 @@ async function inRoom(api) {
 const history = async (api, patient, tooth) => (await api("GET", `/api/v1/patients/${patient}/teeth/${tooth}/history`)).data.items.length;
 
 export async function run() {
-  const { session, api } = await signIn();
-  const visit = await inRoom(api);
+  const { session, membership, api } = await signIn();
+  const visit = await inRoom(api, membership);
   const p = visit.patient.id;
   // Something on the chart for the screenshots: findings, a root canal left open and an extraction.
   for (const [tooth, condition, surfaces] of [[36, "caries", ["O", "D"]], [46, "open_root_canal", []], [18, "extracted", []],

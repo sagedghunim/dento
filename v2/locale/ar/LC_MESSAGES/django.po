@@ -1141,10 +1141,6 @@ msgstr "تعديل"
 msgid "Visits"
 msgstr "الزيارات"
 
-msgid ""
-"Newest first. Visit notes and prescriptions come with the doctor's screens."
-msgstr "الأحدث أولًا. ملاحظات الزيارات والروشتات تأتي مع شاشات الطبيب."
-
 msgid "Fee"
 msgstr "المبلغ"
 
@@ -3237,3 +3233,99 @@ msgstr "مع المساعد:"
 
 msgid "Ready for the doctor:"
 msgstr "جاهز للطبيب:"
+
+msgid "Add at least one medicine."
+msgstr "أضف دواء واحد على الأقل."
+
+msgid "Add procedure"
+msgstr "إضافة إجراء"
+
+msgid "Allergies:"
+msgstr "حساسية:"
+
+msgid "Check the allergy: {name} ({allergy})"
+msgstr "انتبه للحساسية: {name} ({allergy})"
+
+msgid "Chronic conditions:"
+msgstr "أمراض مزمنة:"
+
+msgid "Enter the tooth number."
+msgstr "اكتب رقم السن."
+
+msgid "Finishing isn't confirmed yet. Use Try again at the top."
+msgstr "إنهاء الكشف لم يتأكد بعد. اضغط «حاول مرة أخرى» بالأعلى."
+
+msgid "First visit"
+msgstr "أول زيارة"
+
+msgid "For example: filling 36, cleaning"
+msgstr "مثلًا: حشو 36، تنظيف"
+
+msgid "In the room"
+msgstr "في الكشف"
+
+msgid "Newest first, with the doctor's notes."
+msgstr "الأحدث أولًا، مع ملاحظات الطبيب."
+
+msgid "No procedures yet."
+msgstr "لا توجد إجراءات بعد."
+
+msgid "Notes (optional)"
+msgstr "ملاحظات (اختياري)"
+
+msgid "Notes not saved yet: no connection. Retrying…"
+msgstr "الملاحظات لم تُحفظ بعد: لا يوجد اتصال. نحاول مرة أخرى…"
+
+msgid "Notes saved"
+msgstr "الملاحظات محفوظة"
+
+msgid "Prescription {n}"
+msgstr "روشتة {n}"
+
+msgid "Prescription {n} saved"
+msgstr "تم حفظ الروشتة {n}"
+
+msgid "Procedure added: {name}"
+msgstr "تمت إضافة الإجراء: {name}"
+
+msgid "Procedures this visit"
+msgstr "إجراءات هذه الزيارة"
+
+msgid "Returning"
+msgstr "متابع"
+
+msgid "Save the prescription"
+msgstr "حفظ الروشتة"
+
+msgid "Saving the notes…"
+msgstr "جارٍ حفظ الملاحظات…"
+
+msgid "The chart couldn't load. Close it and open it again."
+msgstr "تعذر تحميل المخطط. اقفله وافتحه مرة أخرى."
+
+msgid "The doctor already has a patient in the room. Finish that visit first."
+msgstr "الطبيب معه مريض في الكشف الآن. أنهِ هذا الكشف أولًا."
+
+msgid "The notes aren't saved yet. Check the connection and try again."
+msgstr "الملاحظات لم تُحفظ بعد. تأكد من الاتصال وحاول مرة أخرى."
+
+msgid ""
+"This note was changed on another screen. Your text stays here and will be "
+"saved over it. Their text:"
+msgstr ""
+"تم تعديل هذه الملاحظات من شاشة أخرى. نصك باقٍ هنا وسيُحفظ مكانه. النص الآخر:"
+
+msgid "Time with the doctor"
+msgstr "المدة مع الطبيب"
+
+msgid "Visit"
+msgstr "الزيارة"
+
+msgid "Visit notes"
+msgstr "ملاحظات الزيارة"
+
+msgid "Write a prescription"
+msgstr "كتابة روشتة"
+
+msgid "Done with this visit"
+msgstr "خلص الكشف"

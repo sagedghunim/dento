@@ -159,6 +159,24 @@ class ConcurrencyTests(TransactionTestCase):
         _, doctors = summaries(self.a, tomorrow)
         self.assertEqual(doctors[self.owner_id]["booked"], 5)
 
+    def test_two_call_ins_for_one_doctor_put_one_patient_in_the_room(self):
+        """A doctor has one patient in the room at a time (Saged, 2026-11-13): two desks calling two patients at
+        once for the same doctor get one 200 and one 409 doctor_busy, never two patients in the room."""
+        desk = self.a.client("assistant")
+        waiting = [call(desk, "POST", "/api/v1/appointments", {
+            "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "arrive": True,
+            "new_patient": {"full_name": f"Caller {i}"}}).json()["appointment"]["id"] for i in range(2)]
+        ca, cb = self.clients(2)
+        with self.assertNoLogs("core.api", "WARNING"):
+            results = self.run_together([
+                lambda: call(ca, "POST", f"/api/v1/appointments/{waiting[0]}/call", {"status": "waiting"}),
+                lambda: call(cb, "POST", f"/api/v1/appointments/{waiting[1]}/call", {"status": "waiting"}),
+            ])
+        self.assertEqual(sorted(r.status_code for r in results), [200, 409])
+        self.assertEqual([r.json()["error"]["code"] for r in results if r.status_code == 409], ["doctor_busy"])
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(Appointment.objects.filter(clinic_id=self.a.id, status="in_room").count(), 1)
+
     def test_book_collect_print_against_finish_with_payment_on_one_doctor_day(self):
         desk = self.a.client("assistant")
         in_room = []
@@ -166,8 +184,12 @@ class ConcurrencyTests(TransactionTestCase):
             appt = call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "arrive": True,
                 "new_patient": {"full_name": f"Room {i}"}}).json()["appointment"]
-            call(desk, "POST", f"/api/v1/appointments/{appt['id']}/call", {"status": "waiting"})
             in_room.append(appt["id"])
+        # Four in the room for one doctor at once can't be made through "call" (one at a time, Saged 2026-11-13):
+        # the race under test is finish against booking, so they are put there directly.
+        with clinic_transaction(self.a.id, self.a.shard):
+            Appointment.objects.filter(clinic_id=self.a.id, id__in=in_room).update(
+                status="in_room", called_at=dt.datetime.now(dt.UTC))
         clients = self.clients(8)
         jobs = []
         for i in range(4):

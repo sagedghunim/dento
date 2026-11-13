@@ -1,7 +1,7 @@
 // M1 decision R2: "collected" only when the answer shows the money. The desk opens "Finish and collect";
 // meanwhile the doctor finishes the visit from another screen. The desk's tap gets 409 already_finished:
 // the dialog stays open, says nothing was collected, and "Collect now" takes the payment with a new key.
-import { BASE, browser, check, signIn, sleep } from "./lib.mjs";
+import { BASE, browser, check, freeRoom, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 
@@ -13,6 +13,7 @@ export async function run() {
   const service = config.services.find((s) => s.kind === "consultation").id;
   const booked = (await api("POST", "/api/v1/appointments", { doctor_id: doctor.id, service_id: service, arrive: true,
                                                               new_patient: { full_name: `Bt Finish ${stamp}` } })).data.appointment;
+  await freeRoom(api, doctor.id);
   await api("POST", `/api/v1/appointments/${booked.id}/call`, { status: "waiting" });
   const fee = booked.fee;
 

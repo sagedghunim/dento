@@ -10,7 +10,9 @@ import { bookingsOf, browser, check, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 const SHOTS = process.env.HAMADA_BT_SHOTS || "";
-const GROUP = "visit";  // a group the demo doctor holds whole, with no owner-only permission
+// The group to switch: "visit" when it is wholly on or off for the assistant, else the first switch the signed-in
+// person may use that isn't partly on (a partly-on group opens its details instead of switching, commit 48efbfa).
+let GROUP = "visit";
 
 async function shot(page, name, full = false) {
   if (!SHOTS) return;
@@ -51,6 +53,12 @@ export async function run() {
     await page.eval(`document.querySelector('[data-overview] [data-person="${assistant.id}"]').click()`);
     await page.until(`document.querySelectorAll("[data-matrix] thead th.matrix-col").length === 1`, 3000, "only that person's column");
     check(await page.eval(`!document.querySelector("[data-person-bar]").hidden`), "their details button shows beside the table");
+
+    GROUP = await page.eval(`(() => { const ok = [...document.querySelectorAll('button.toggle[data-member="${assistant.id}"][data-group]')]
+      .filter((b) => !b.disabled && b.getAttribute("aria-pressed") !== "mixed").map((b) => b.dataset.group);
+      return ok.includes("visit") ? "visit" : ok[0] || ""; })()`);
+    check(Boolean(GROUP), `a group the signed-in person may switch for the assistant (${GROUP})`);
+    const original = assistant.groups[GROUP];
 
     // A double click on one switch saves once.
     const before = assistant.groups[GROUP];
@@ -141,6 +149,12 @@ export async function run() {
     await page.eval(`document.querySelector('#walkin-dialog [data-close]').click()`);
     // The one phone screenshot, at the end: the team page at 390 px.
     if (teamPhoneShot) { await page.open("/team"); await shot(page, "v2-team-390.png", true); }
+
+    // Put the assistant's group back as it was (development data).
+    const last = (await teamNow()).members.find((m) => m.id === assistant.id);
+    if (last.groups[GROUP] !== original) {
+      await api("PUT", `/api/v1/team/members/${assistant.id}/permissions`, { version: last.version, groups: { [GROUP]: original === "on" } });
+    }
 
     // An expired session: a page load goes to sign-in.
     await page.cdp("Network.deleteCookies", { name: "hamada_session", url: (await page.eval("location.origin")) });

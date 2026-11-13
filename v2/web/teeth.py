@@ -107,12 +107,12 @@ def _teeth(chart, done, labels):
             "primary": {"upper": rows(UPPER_PRIMARY), "lower": rows(LOWER_PRIMARY)}}
 
 
-def _render(request, ctx, patient, visit=None):
+def chart_context(ctx, patient, visit=None):
+    """What the chart part (_chart.html) renders: the teeth page and the visit screen's chart share it."""
     from clinical.selectors import chart, plans
 
     from .pages import _perms
 
-    record_access(ctx, patient["id"], AuditAccess.Action.HISTORY)
     labels = dict(conditions())
     data = chart(ctx, patient["id"])
     done = _with_procedures(ctx, patient["id"])
@@ -144,11 +144,17 @@ def _render(request, ctx, patient, visit=None):
                                "recorded": bool(t["id"])} for t in data["teeth"]},
         "done": sorted(done), "procedures": procedures, "plan_items": open_items,
     }
-    return render(request, "web/teeth.html", {
-        "ctx": ctx, "nav_active": "today" if visit else "patients", "patient": patient, "visit": visit,
+    return {
+        "ctx": ctx, "patient": patient, "visit": visit,
         "teeth": teeth, "start_primary": primary_only, "legend": conditions(), "perms": perms,
         "can_record": can_record, "procedures": procedures, "chart": config,
-    })
+    }
+
+
+def _render(request, ctx, patient, visit=None):
+    record_access(ctx, patient["id"], AuditAccess.Action.HISTORY)
+    return render(request, "web/teeth.html", {**chart_context(ctx, patient, visit),
+                                              "nav_active": "today" if visit else "patients"})
 
 
 def _not_found(request, ctx):

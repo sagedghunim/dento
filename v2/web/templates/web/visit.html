@@ -1,0 +1,130 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Visit" %}{% endblock %}
+{% block content %}
+<div class="visit" data-visit>
+  <section class="card visit-band" aria-labelledby="visit-patient">
+    <div class="band-top">
+      <div class="band-who">
+        <p class="muted">{% translate "In the room" %} · <bdi dir="auto">{{ visit.service.name }}</bdi> · {% translate "Turn" %} {{ visit.queue_no|num }}</p>
+        <h1 id="visit-patient"><bdi dir="auto">{{ patient.full_name }}</bdi></h1>
+        <p class="band-facts">
+          {% if patient.age is not None %}<span>{% translate "Age:" %} {{ patient.age|digits }}</span>{% endif %}
+          {% if patient.sex == "m" %}<span>{% translate "Male" %}</span>{% elif patient.sex == "f" %}<span>{% translate "Female" %}</span>{% endif %}
+          <span>{% translate "File" %} {{ patient.file_no|num }}</span>
+          {% if visit.is_new %}<span class="pill new">{% translate "New patient" %}</span>{% else %}<span class="pill grey">{% translate "Returning" %}</span>{% endif %}
+        </p>
+      </div>
+      <p class="visit-timer"><span class="visually-hidden">{% translate "Time with the doctor" %}</span><span class="timer-num ltr num" data-timer role="timer" aria-live="off">0:00</span></p>
+    </div>
+    <div class="band-links">
+      {% if patient.phone %}<a class="btn ghost" href="tel:{{ patient.phone }}" aria-label="{% translate "Call" %} {{ patient.phone }}">{{ patient.phone|phone }}</a>{% endif %}
+      {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" target="_blank" rel="noopener">{% translate "Patient file" %}</a>{% endif %}
+    </div>
+    {% if patient.allergies or patient.chronic_conditions %}
+    <ul class="health-flags">
+      {% if patient.allergies %}<li class="flag-allergy"><strong>{% translate "Allergies:" %}</strong> <bdi dir="auto">{{ patient.allergies }}</bdi></li>{% endif %}
+      {% if patient.chronic_conditions %}<li class="flag-chronic"><strong>{% translate "Chronic conditions:" %}</strong> <bdi dir="auto">{{ patient.chronic_conditions }}</bdi></li>{% endif %}
+    </ul>
+    {% endif %}
+    <p class="last-visit">{% if last %}<strong>{% translate "Last visit:" %}</strong> {{ last.day|shortday }} · <bdi dir="auto">{% if last.procedures %}{{ last.procedures|join:" · " }}{% else %}{{ last.service }}{% endif %}</bdi>{% if last.note %}<span class="last-note"><bdi dir="auto">{{ last.note|truncatechars:160 }}</bdi></span>{% endif %}{% else %}<strong>{% translate "First visit" %}</strong>{% endif %}</p>
+  </section>
+
+  <section class="card visit-notes" aria-labelledby="notes-title">
+    <div class="card-head">
+      <h2 id="notes-title"><label for="visit-notes">{% translate "Visit notes" %}</label></h2>
+      <span class="save-state" data-save-state role="status" aria-live="polite"></span>
+    </div>
+    <textarea id="visit-notes" class="notes-box" name="notes" maxlength="5000" dir="auto" rows="8" spellcheck="false" placeholder="{% translate "For example: filling 36, cleaning" %}" data-notes>{{ record.note.notes|default:"" }}</textarea>
+    <div class="notice" data-note-conflict hidden>
+      <p>{% translate "This note was changed on another screen. Your text stays here and will be saved over it. Their text:" %}</p>
+      <p class="their-text"><bdi dir="auto" data-their-text></bdi></p>
+    </div>
+  </section>
+
+  {% if dental %}
+  <details class="card chart-fold" data-chart-fold data-chart-url="/visits/{{ visit.id }}/chart" data-teeth-js="{% static 'js/teeth.js' %}">
+    <summary>{% translate "Dental chart" %}</summary>
+    <div class="chart-slot" data-chart-slot><p class="muted" data-chart-status role="status"></p></div>
+  </details>
+  {% endif %}
+
+  <section class="card" aria-labelledby="procs-title" data-procs-card>
+    <div class="card-head">
+      <h2 id="procs-title">{% translate "Procedures this visit" %}</h2>
+      <strong class="num" data-procs-total>{{ record.invoice.total|default:0|money }}</strong>
+    </div>
+    <ul class="proc-list" data-procedures>
+      {% for p in record.procedures %}<li><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span><span class="num">{{ p.amount|money }}</span></li>{% endfor %}
+    </ul>
+    <p class="empty-note" data-no-procedures{% if record.procedures %} hidden{% endif %}>{% translate "No procedures yet." %}</p>
+    {% if perms.record and config.procedures %}
+    <div class="add-proc" data-add-procedure>
+      <form class="add-proc-form" novalidate>
+        <div class="add-proc-fields">
+          <label class="field grow-field">{% translate "Procedure" %}
+            <select name="procedure_id">
+              <option value="">{% translate "Pick the procedure" %}</option>
+              {% for p in config.procedures %}<option value="{{ p.id }}" data-unit="{{ p.unit }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="field tooth-field" data-tooth-field hidden>{% translate "Tooth" %}<input name="tooth" dir="ltr" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="36"></label>
+        </div>
+        <p class="form-error" data-error role="alert"></p>
+        <div class="appt-actions">
+          <button type="submit" class="btn" data-submit><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add procedure" %}</button>
+          <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if perms.prescribe %}
+  <section class="card" aria-labelledby="rx-title">
+    <div class="card-head">
+      <h2 id="rx-title">{% translate "Prescription" %}</h2>
+      <button type="button" class="btn ghost" data-open-rx>{% translate "Write a prescription" %}</button>
+    </div>
+    <ul class="proc-list" data-rx-list>
+      {% for r in record.prescriptions %}<li><span>{% translate "Prescription" %} {{ r.number|num }}</span></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if perms.finish %}
+  <div class="visit-foot">
+    <p class="form-error" data-finish-error role="alert"></p>
+    <button type="button" class="btn finish-btn" data-finish>{% translate "Done with this visit" %}</button>
+  </div>
+  {% endif %}
+</div>
+
+{% if perms.prescribe %}
+<dialog class="sheet" id="rx-dialog" aria-labelledby="rx-dialog-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="rx-dialog-title">{% translate "Write a prescription" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body">
+    <div class="rx-picks" data-rx-templates></div>
+    <div class="rx-add">
+      <label class="field grow-field">{% translate "Medicine" %}<input name="medicine" list="rx-medicines" dir="auto" autocomplete="off" maxlength="120"></label>
+      <datalist id="rx-medicines" data-rx-medicines></datalist>
+      <button type="button" class="btn ghost" data-rx-add>{% translate "Add" %}</button>
+    </div>
+    <ol class="rx-write-lines" data-rx-lines></ol>
+    <label class="field">{% translate "Notes (optional)" %}<textarea name="notes" maxlength="1000" dir="auto" rows="2"></textarea></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save the prescription" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+{{ config|json_script:"visit-data" }}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/room.js' %}"></script>{% endblock %}

@@ -195,7 +195,9 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
         extra_set, extra_params = ", cancel_reason = %s", [reason]
     if action == "arrive":
         extra_where = " AND day = %s"  # arrive is allowed only on the visit's business day
-    params = [target, now, now, ctx.membership_id, *extra_params, ctx.clinic_id, appointment_id, source]
+    if action == "call":
+        _one_in_room(ctx, appointment_id)
+    params =[target, now, now, ctx.membership_id, *extra_params, ctx.clinic_id, appointment_id, source]
     if action == "arrive":
         params.append(today)
     changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = %s, {column} = %s, updated_at = %s, '
@@ -241,6 +243,28 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     if not (action == "finish" and next_visit is not None):
         deltas.write_doctors(ctx)  # a next visit's booking already wrote them all, with its turn, in one statement
     return deltas.write_clinics(ctx)[day]
+
+
+def _one_in_room(ctx, appointment_id):
+    """A doctor has one patient in the room at a time (Saged, 2026-11-13): calling a second is 409 doctor_busy.
+
+    A transaction-level advisory lock on the doctor serialises two call-ins for the same doctor, so the second
+    reads the first's committed row and is refused. Only call-ins take it, so it joins no other lock order.
+    The check is on the visit's own day (index appointment_turn_uniq on clinic, day, doctor).
+    """
+    # One statement reads the visit and, only if it can be called in, waits for the doctor's lock.
+    found = sql.row(ctx, "SELECT a.doctor_id, a.day, a.status, CASE WHEN a.status IN ('waiting', 'ready') THEN "
+                         "pg_advisory_xact_lock(hashtextextended('in_room:' || a.clinic_id || ':' || a.doctor_id, 0)) END "
+                         'FROM "scheduling_appointment" a WHERE a.clinic_id = %s AND a.id = %s', [ctx.clinic_id, appointment_id])
+    if found is None or found[2] not in TRANSITIONS["call"][0]:
+        return  # the conditional UPDATE answers: 404, a harmless repeat, or status_changed
+    doctor_id, day = found[0], found[1]
+    # A new statement, so a new snapshot: it sees a call-in that committed while this one waited for the lock.
+    busy = sql.row(ctx, 'SELECT id FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s AND doctor_id = %s '
+                        "AND status = 'in_room' AND id <> %s LIMIT 1", [ctx.clinic_id, day, doctor_id, appointment_id])
+    if busy is not None:
+        raise ApiError("doctor_busy", _("The doctor already has a patient in the room. Finish that visit first."), 409,
+                       fields={"status": "doctor_busy"}, extra={"appointment_id": busy[0]})
 
 
 def undo(ctx, appointment_id, action, seen):

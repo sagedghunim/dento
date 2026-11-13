@@ -74,6 +74,13 @@ def _has_field(model, name):
     return True
 
 
+def _treats(ctx):
+    """The member's own call-in opens the visit screen (web.visit_pages)."""
+    from .visit_pages import treats
+
+    return ctx.can("visits.notes") and treats(ctx)
+
+
 def clinic_config(ctx, today):
     """What the dialogs need, embedded in the page with json_script (no patient data)."""
     from clinics.models import Membership, Schedule, Service
@@ -95,7 +102,7 @@ def clinic_config(ctx, today):
     effective = clinic_settings.effective(ctx.clinic.settings)
     return {
         "services": services, "doctors": doctors, "sections": places.sections(ctx),
-        "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role},
+        "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "treats": _treats(ctx)},
         "today": today.isoformat(), "last_day": (today + dt.timedelta(days=365)).isoformat(),
         "digits": effective["digits"], "print_language": effective["print_language"],
         "perms": _perms(ctx),
@@ -234,6 +241,12 @@ def today_page(request, ctx):
     if nav.is_manager(ctx) or (request.path == "/" and ctx.can("reports.view") and not any(
             ctx.can(code) for code in QUEUE_CODES)):
         return redirect("/overview")
+    # A doctor with a patient in the room goes back to that visit: it stays put until "Finish" (Saged, 2026-11-13).
+    from .visit_pages import open_visit
+
+    in_room = open_visit(ctx)
+    if in_room is not None:
+        return redirect(f"/visits/{in_room}")
     if not any(ctx.can(code) for code in QUEUE_CODES):
         if ctx.can("patients.view"):
             return redirect("/patients")
@@ -353,11 +366,27 @@ def patient_page(request, ctx, patient_id):
     today = business_day(ctx.clinic)
     record_access(ctx, patient.id, AuditAccess.Action.OPEN)
     visits = patient_visits(ctx, patient.id, VISITS_PAGE, None)
+    _with_notes(ctx, visits["items"])
     payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None)
     return render(request, "web/patient.html", {
         "ctx": ctx, "nav_active": "patients", "patient": selectors.file_payload(patient, today),
         "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
         "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
+
+
+def _with_notes(ctx, items):
+    """Each visit's notes in the patient's history, for those who read clinical notes: one statement for the page."""
+    if not items or not ctx.can("clinical.view"):
+        return items
+    from core import sql
+
+    rows = sql.rows(ctx, 'SELECT appointment_id, complaint, diagnosis, notes FROM "clinical_visit_note" '
+                         "WHERE clinic_id = %s AND appointment_id = ANY(%s::bigint[])",
+                    [ctx.clinic_id, [v["id"] for v in items]])
+    notes = {r[0]: " · ".join(part for part in r[1:] if part) for r in rows}
+    for v in items:
+        v["note_text"] = notes.get(v["id"], "")
+    return items
 
 
 def _more(request, ctx, patient_id, kind):
@@ -370,6 +399,7 @@ def _more(request, ctx, patient_id, kind):
     record_access(ctx, patient.id, AuditAccess.Action.HISTORY)
     if kind == "visits":
         found = patient_visits(ctx, patient.id, VISITS_PAGE, paging.day_cursor(request))
+        _with_notes(ctx, found["items"])
         template = "web/_visit_rows.html"
     else:
         found = patient_payments(ctx, patient.id, PAYMENTS_PAGE, paging.time_cursor(request))

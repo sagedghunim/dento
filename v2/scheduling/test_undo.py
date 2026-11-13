@@ -11,7 +11,7 @@ from audit.models import AuditChange
 from core.routing import clinic_transaction
 from core.testing import ShardTestCase, call
 from scheduling.models import Appointment
-from scheduling.testing import M1TestCase, add_schedule, services_of, summaries, today
+from scheduling.testing import M1TestCase, add_schedule, free_rooms, services_of, summaries, today
 
 UNDO = {"undo-arrive": ("waiting", "booked", "arrived_at"), "undo-call": ("in_room", "waiting", "called_at")}
 STATUSES = ["booked", "waiting", "in_room", "done", "cancelled", "no_show"]
@@ -167,6 +167,8 @@ class UndoRaceTests(TransactionTestCase):
         desk = self.a.client("assistant")
         outcomes = []
         for _round in range(6):
+            if other == "call":
+                free_rooms(self.a)  # one patient in the room per doctor (Saged, 2026-11-13): each round starts free
             appointment_id = self.visit(desk, start_status)
             version = summaries(self.a, today(self.a))[0]["version"]
             c1, c2 = self.a.client("assistant"), self.a.client("assistant")
