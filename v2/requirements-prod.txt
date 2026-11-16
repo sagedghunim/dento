@@ -1,0 +1,4 @@
+# The hosted server: the app's requirements plus the web server and static files.
+-r requirements.txt
+gunicorn==23.0.0
+whitenoise==6.9.0

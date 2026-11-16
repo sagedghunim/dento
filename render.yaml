@@ -1,0 +1,33 @@
+# Render blueprint for the hosted demo (free plan). The databases are on Neon; their connection
+# values are entered in Render's dashboard, never committed.
+services:
+  - type: web
+    name: dento
+    runtime: docker
+    plan: free
+    rootDir: v2
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /login
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: .onrender.com
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: https://*.onrender.com
+      - key: PGSSLMODE
+        value: require
+      - key: PGPORT
+        value: "5432"
+      - key: PGDATABASE
+        value: hamada_dir
+      - key: HAMADA_SHARDS
+        value: shard_1=hamada_s001,shard_2=hamada_s002
+      - key: PGHOST
+        sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: HAMADA_FIELD_KEY
+        sync: false

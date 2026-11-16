@@ -79,8 +79,16 @@ INSTALLED_APPS = [
 # Background jobs live in each app's jobs.py (design 3.1).
 PROCRASTINATE_AUTODISCOVER_MODULE_NAME = "jobs"
 
+# Hosted without a separate web server (render.yaml): WhiteNoise serves the collected static files.
+try:
+    import whitenoise  # noqa: F401
+    _WHITENOISE = ["whitenoise.middleware.WhiteNoiseMiddleware"]
+except ImportError:
+    _WHITENOISE = []
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    *_WHITENOISE,
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
