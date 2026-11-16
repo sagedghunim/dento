@@ -110,4 +110,8 @@ def team_page(request, ctx):
         clinic = ctx.clinic
         context["profile"] = {"name": clinic.name, "name_en": clinic.name_en, "city": clinic.city,
                               "phone": clinic.phone}
+        from clinics import settings as clinic_settings
+
+        effective = clinic_settings.effective(clinic.settings)
+        context["booking"] = {key: effective[key] for key in ("booking_deposit", "booking_deposit_amount")}
     return render(request, "web/team.html", context)

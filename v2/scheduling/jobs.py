@@ -89,6 +89,16 @@ def _sweep(clinic_id, alias, now):
                    updated_at = %s, updated_by_id = NULL
              WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')""",
                 [now, now, ctx.clinic_id, [r["id"] for r in rows]])
+        # A visit that didn't happen charges no visit fee (as the desk's own "didn't come"): a booking deposit stays
+        # on its bill and nothing is owed. Only the few that have a bill, in id order (appointment, then invoice).
+        missed = [r for r in rows if r["status"] != "in_room"]
+        if missed:
+            billed = {r[0] for r in sql.rows(ctx, 'SELECT appointment_id FROM "billing_invoice" WHERE clinic_id = %s '
+                                                  "AND appointment_id = ANY(%s::bigint[]) AND status = 'open'",
+                                             [ctx.clinic_id, [r["id"] for r in missed]])}
+            for r in missed:
+                if r["id"] in billed:
+                    billing.set_visit_line(ctx, r["id"], r["service_id"], 0, "no_show")
         in_room = [r for r in rows if r["status"] == "in_room"]
         if in_room:
             invoiced = {r[0] for r in sql.rows(ctx, 'SELECT appointment_id FROM "billing_invoice" WHERE clinic_id = %s '

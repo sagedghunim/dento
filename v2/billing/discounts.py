@@ -211,7 +211,7 @@ def apply(ctx, invoice_id, type_id, expected):
     if discount > invoice["subtotal"]:
         raise ApiError("discount_too_large", _("The discount can't be more than the invoice."), 409,
                        fields={"discount": "range"})
-    if invoice["paid"] > invoice["subtotal"] - discount:
+    if not services.fits(invoice, invoice["subtotal"] - discount):
         raise services._paid_exceeds()
     updated = services.write_discount(ctx, invoice["id"], discount, kind["id"], kind["name"], percent)
     return _written(ctx, invoice, appointment, updated)

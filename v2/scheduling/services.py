@@ -10,6 +10,7 @@ from django.utils.translation import gettext as _
 
 from audit.services import record_change
 from billing import services as billing
+from clinics import settings as clinic_settings
 from clinics.services import take_numbers
 from core import sql
 from core.days import business_day
@@ -70,9 +71,24 @@ def book(ctx, request, deltas=None):
     payment = request["payment"]
     if request["new_patient"] is not None:
         ctx.require("patients.edit")
+    is_deposit = bool(payment is not None and payment.get("deposit"))
     if payment is not None:
         ctx.require("billing.collect")
-        if day != today:
+        if is_deposit:
+            # A booking deposit (Saged, 2026-11-16): for any day, and the clinic's own amount, never the screen's.
+            # Not for a patient who is here now (a walk-in, or "here now" in Book): they pay at the visit, so a
+            # deposit is only ever money taken before the visit.
+            asked = clinic_settings.deposit(clinic)
+            if request["arrive"]:
+                raise ApiError("invalid", _("A patient who is here now pays at the visit, not a deposit."),
+                               fields={"payment.deposit": "here_now"})
+            if not asked:
+                raise ApiError("deposit_off", _("This clinic doesn't take a deposit with bookings."), 409,
+                               fields={"payment": "deposit_off"})
+            if payment["amount"] != asked:
+                raise ApiError("deposit_changed", _("The deposit amount changed. Reload and try again."), 409,
+                               fields={"payment.amount": "changed"}, extra={"amount": asked})
+        elif day != today:
             raise ApiError("payment_not_today", _("A payment with a booking is only for today. Book, then take the payment."),
                            fields={"payment": "not_today"})
     if request["arrive"]:
@@ -108,8 +124,16 @@ def book(ctx, request, deltas=None):
     else:
         fields = patients.clean_fields(request["new_patient"], today)
         eligible, has_arrived = False, False
-    fee, is_follow_up = rules.fee_for(service, eligible)
-    if payment is not None and payment["amount"] > fee:
+    visit_price = ""
+    if request.get("follow_up_id") is not None:
+        # The plan session's own visit fee (set on the follow-up when the doctor added it; it never changes after),
+        # read here without a lock; `claim` below locks the follow-up and checks whose it is.
+        from clinical.followups import visit_price_of
+
+        found_price = visit_price_of(ctx, request["follow_up_id"])
+        visit_price = found_price if service.kind == "consultation" else ""
+    fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
+    if payment is not None and payment["amount"] > fee and not is_deposit:
         raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"})
 
     # Writes, in the global lock order.
@@ -136,7 +160,7 @@ def book(ctx, request, deltas=None):
             section_id=service.section_id, day=day, queue_no=queue_no, starts_at=starts_at, ends_at=ends_at,
             is_extra=is_extra,
             status="waiting" if request["arrive"] else "booked", source=request["source"], fee=fee,
-            is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"],
+            is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"], visit_price=visit_price,
             arrived_at=now if request["arrive"] else None, created_at=now, created_by_id=ctx.membership_id,
             updated_at=now, updated_by_id=ctx.membership_id)
     except IntegrityError as error:
@@ -151,7 +175,8 @@ def book(ctx, request, deltas=None):
                   "section_id": service.section_id}
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
-                                            invoice_number=invoice_number, today=today, shift_id=shift_id)
+                                            invoice_number=invoice_number, today=today, shift_id=shift_id,
+                                            deposit=is_deposit)
     if request.get("follow_up_id") is not None:
         # The plan's session this booking is for: claimed under its row lock, or the whole booking is refused
         # (two people booking one session, a resend under a new key). Today's strip hears through the version.
@@ -168,6 +193,7 @@ def book(ctx, request, deltas=None):
         "id": appointment.id, "day": day, "queue_no": queue_no, "status": appointment.status, "starts_at": starts_at,
         "ends_at": ends_at, "is_extra": is_extra, "source": request["source"], "fee": fee, "is_follow_up": is_follow_up,
         "is_new": not has_arrived, "auto_closed": False, "note": request["note"], "arrived_at": appointment.arrived_at,
+        "visit_price": visit_price,
         "called_at": None, "finished_at": None, "cancelled_at": None, "cancel_reason": "", "created_at": now,
         "doctor_id": doctor.doctor_id,
         "patient_id": patient["id"], "patient_name": patient["full_name"], "patient_phone": patient["phone"],
@@ -214,12 +240,13 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
                            "RETURNING id, status, day, doctor_id, patient_id, service_id, fee, is_follow_up, "
                            '(SELECT name FROM "clinics_service" s WHERE s.clinic_id = "scheduling_appointment".clinic_id '
                            'AND s.id = "scheduling_appointment".service_id), section_id, arrived_at, called_at, '
-                           "finished_at", params)
+                           "finished_at, visit_price", params)
     if changed is None:
         return _unchanged(ctx, appointment_id, action, target, today,
                           with_payment=payment is not None or earlier is not None or next_visit is not None)
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
-                            "service_name", "section_id", "arrived_at", "called_at", "finished_at"), changed))
+                            "service_name", "section_id", "arrived_at", "called_at", "finished_at", "visit_price"),
+                           changed))
     day, doctor_id = appointment["day"], appointment["doctor_id"]
     deltas = Deltas().clinic_day(day)
     if action == "arrive":
@@ -320,7 +347,7 @@ def mark_no_show(ctx, appointment_id, seen):
     today = business_day(ctx.clinic)
     changed = sql.row(ctx, 'UPDATE "scheduling_appointment" SET status = %s, updated_at = %s, updated_by_id = %s '
                            "WHERE clinic_id = %s AND id = %s AND status = 'booked' AND day = %s "
-                           "AND (starts_at IS NULL OR starts_at <= %s) RETURNING day, doctor_id",
+                           "AND (starts_at IS NULL OR starts_at <= %s) RETURNING day, doctor_id, service_id",
                       ["no_show", now, ctx.membership_id, ctx.clinic_id, appointment_id, today, now])
     if changed is None:
         current = Appointment.objects.filter(clinic_id=ctx.clinic_id, id=appointment_id).values_list(
@@ -335,9 +362,11 @@ def mark_no_show(ctx, appointment_id, seen):
         if status == "booked":
             raise ApiError("not_yet", _("This booking's time hasn't come yet."), 409, fields={"status": "not_yet"})
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
-    day, doctor_id = changed
+    day, doctor_id, service_id = changed
     record_change(ctx, "appointment.no_show", "appointment", appointment_id,
                   before={"status": "booked"}, after={"status": "no_show"})
+    # A visit that didn't happen charges no visit fee: a deposit taken with the booking stays, and nothing is owed.
+    billing.set_visit_line(ctx, appointment_id, service_id, 0, "no_show")
     deltas = Deltas().doctor_day(day, doctor_id, no_shows=1).clinic_day(day)
     deltas.write_doctors(ctx)
     return deltas.write_clinics(ctx)[day]
@@ -356,7 +385,7 @@ def undo_no_show(ctx, appointment_id, seen):
     try:
         changed = sql.row(ctx, 'UPDATE "scheduling_appointment" SET status = %s, updated_at = %s, updated_by_id = %s '
                                "WHERE clinic_id = %s AND id = %s AND status = 'no_show' AND day = %s "
-                               "AND NOT auto_closed RETURNING day, doctor_id",
+                               "AND NOT auto_closed RETURNING day, doctor_id, service_id, fee",
                           ["booked", timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, today])
     except IntegrityError as error:
         if _constraint(error) in SLOT_CONSTRAINTS:
@@ -373,9 +402,11 @@ def undo_no_show(ctx, appointment_id, seen):
         if status == "no_show" and day != today:
             raise _only_today()
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
-    day, doctor_id = changed
+    day, doctor_id, service_id, fee = changed
     record_change(ctx, "appointment.undo_no_show", "appointment", appointment_id,
                   before={"status": "no_show"}, after={"status": "booked"})
+    if fee:
+        billing.set_visit_line(ctx, appointment_id, service_id, fee, "undo_no_show", only_from=0)  # the fee is back
     deltas = Deltas().doctor_day(day, doctor_id, no_shows=-1).clinic_day(day)
     deltas.write_doctors(ctx)
     return deltas.write_clinics(ctx)[day]
@@ -402,7 +433,10 @@ def _unchanged(ctx, appointment_id, action, target, today, with_payment=False):
 
 
 def _recheck_follow_up(ctx, appointment):
-    """The follow-up rule is checked again at arrival; the fee changes only while the visit has no invoice."""
+    """The follow-up rule is checked again at arrival. A plan session keeps its own visit fee rule (visit_price).
+
+    The fee changes while the visit has no invoice, or while its invoice holds nothing but a booking deposit:
+    then the visit's line changes with it (billing.set_visit_line), or neither does."""
     found = sql.row(ctx, f"""
         SELECT s.kind, s.price, fu.price, fu.is_active, {rules.history_sql("%s")},
                EXISTS (SELECT 1 FROM "billing_invoice" i WHERE i.clinic_id = %s AND i.appointment_id = %s AND i.status = 'open')
@@ -413,11 +447,17 @@ def _recheck_follow_up(ctx, appointment):
                                             rules.follow_up_window(ctx.clinic), appointment["id"]), appointment["patient_id"]),
         ctx.clinic_id, appointment["id"], ctx.clinic_id, appointment["service_id"]])
     kind, price, follow_price, follow_active, eligible, _arrived, has_invoice = found
-    if has_invoice:
-        return
     service = rules.ServiceInfo(appointment["service_id"], "", kind, price, follow_price if follow_active else None)
-    fee, is_follow_up = rules.fee_for(service, eligible)
+    fee, is_follow_up = rules.fee_for(service, eligible, appointment.get("visit_price") or "")
     if (fee, is_follow_up) != (appointment["fee"], appointment["is_follow_up"]):
+        if has_invoice:
+            invoice = billing.open_invoice(ctx, appointment["id"])
+            only_deposit = invoice is not None and 0 < invoice["deposit"] and invoice["paid"] <= invoice["deposit"]
+            if fee != appointment["fee"] and not (only_deposit and billing.set_visit_line(
+                    ctx, appointment["id"], appointment["service_id"], fee, "arrival", only_from=appointment["fee"])):
+                return
+            if fee == appointment["fee"] and not only_deposit:
+                return
         sql.run(ctx, 'UPDATE "scheduling_appointment" SET fee = %s, is_follow_up = %s WHERE clinic_id = %s AND id = %s',
                 [fee, is_follow_up, ctx.clinic_id, appointment["id"]])
 

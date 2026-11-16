@@ -6,7 +6,7 @@ open invoice (audited): voids and refunds keep their rows.
 
 from django.db import models
 from django.db.models import F, Q
-from django.db.models.functions import Now
+from django.db.models.functions import Greatest, Now
 from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
@@ -62,6 +62,9 @@ class Invoice(models.Model):
     discount = models.BigIntegerField(default=0)
     total = models.BigIntegerField(default=0)
     paid = models.BigIntegerField(default=0)
+    # What is still held of a booking deposit (Saged, 2026-11-16), part of `paid`. Only up to it may `paid` be more
+    # than `total`: a deposit is taken before the visit's charges are known. A refund of the deposit lowers it.
+    deposit = models.BigIntegerField(default=0, db_default=0)
     # The discount type applied, with its name and percent as they were then (the receipt prints the name; a percent
     # is computed again whenever a line is added or removed). All empty for a free-typed discount or none.
     discount_type = models.ForeignKey(DiscountType, null=True, blank=True, on_delete=models.PROTECT,
@@ -84,7 +87,9 @@ class Invoice(models.Model):
             models.CheckConstraint(condition=Q(status__in=["open", "void"]), name="invoice_status_valid"),
             models.CheckConstraint(condition=Q(discount__gte=0, discount__lte=F("subtotal")), name="invoice_discount_valid"),
             models.CheckConstraint(condition=Q(total=F("subtotal") - F("discount")), name="invoice_total_valid"),
-            models.CheckConstraint(condition=Q(paid__gte=0, paid__lte=F("total")), name="invoice_paid_valid"),
+            models.CheckConstraint(condition=Q(paid__gte=0, paid__lte=Greatest(F("total"), F("deposit"))),
+                                   name="invoice_paid_fits"),
+            models.CheckConstraint(condition=Q(deposit__gte=0, deposit__lte=F("paid")), name="invoice_deposit_valid"),
             models.CheckConstraint(condition=~Q(status="void") | Q(paid=0), name="invoice_void_unpaid"),
             models.CheckConstraint(condition=Q(number__gt=0), name="invoice_number_positive"),
             CompositeForeignKey(fields=["clinic", "patient"], to="patients.Patient", to_fields=["clinic", "id"],
@@ -173,6 +178,7 @@ class Payment(models.Model):
     day = models.DateField()  # the business day the money moved
     received_by_id = models.BigIntegerField(null=True, blank=True)
     note = models.CharField(max_length=200, blank=True, default="")
+    is_deposit = models.BooleanField(default=False, db_default=False)  # taken with a booking, before the visit
     # F1: the register shift open when it was taken (cash needs one; other methods join it when one is open).
     shift = models.ForeignKey("finance.Shift", null=True, blank=True, on_delete=models.PROTECT, db_constraint=False,
                               db_index=False, related_name="+")

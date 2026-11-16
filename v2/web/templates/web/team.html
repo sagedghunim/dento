@@ -90,6 +90,24 @@
 {{ profile|json_script:"profile-data" }}
 {{ sections|json_script:"sections-data" }}
 
+{# Booking (Saged, 2026-11-16): an optional deposit taken with a booking, ticked in Book by default. #}
+<section class="card" aria-labelledby="booking-title" data-booking-card>
+  <h2 id="booking-title">{% translate "Booking" %}</h2>
+  <form novalidate data-booking-form>
+    <label class="check"><input type="checkbox" name="booking_deposit"{% if booking.booking_deposit %} checked{% endif %}> {% translate "Ask for a deposit when booking" %}</label>
+    <div class="grid-form" data-deposit-amount{% if not booking.booking_deposit %} hidden{% endif %}>
+      <label class="field">{% translate "Deposit (EGP)" %}<input name="booking_deposit_amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    </div>
+    <p class="muted">{% translate "The deposit is paid on the visit's bill. If the patient doesn't come, the clinic keeps it; refund it from the bill when needed." %}</p>
+    <div class="form-actions">
+      <p class="form-error" data-error role="alert"></p>
+      <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+      <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+    </div>
+  </form>
+</section>
+{{ booking|json_script:"booking-data" }}
+
 <dialog class="sheet small" id="section-dialog" aria-labelledby="section-title">
 <form novalidate>
   <header class="dialog-head">

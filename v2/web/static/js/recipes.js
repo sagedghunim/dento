@@ -19,6 +19,8 @@ if (card && dialog) {
   const english = document.documentElement.lang === "en";
   let procedures = [];
   let editing = null;
+  let stepNo = 0;  // each step's radio group needs its own name
+  const PRICES = [["none", "vp_none"], ["follow_up", "vp_follow_up"], ["consultation", "vp_consultation"]];
   wireClose(dialog);
 
   const labelOf = (step) => (english && step.label_en ? step.label_en : step.label);
@@ -44,7 +46,39 @@ if (card && dialog) {
     status.textContent = shown.length ? "" : q ? t("proc_none") : t("recipe_none");
   }
 
-  function addStep(step = { days: 7, label: "", label_en: "" }) {
+  // A step's visit fee (chips) and the procedure done in that session (one of this procedure's section, or none).
+  function moreFields(step) {
+    const more = el("div", "recipe-more");
+    const prices = el("fieldset", "group");
+    prices.append(el("legend", null, t("recipe_visit_price")));
+    const chips = el("div", "chips");
+    stepNo += 1;
+    for (const [value, key] of PRICES) {
+      const chip = el("label", "chip");
+      const input = el("input");
+      input.type = "radio";
+      input.name = `visit_price_${stepNo}`;
+      input.value = value;
+      input.checked = (step.visit_price || "none") === value;
+      chip.append(input, el("span", null, t(key)));
+      chips.append(chip);
+    }
+    prices.append(chips);
+    const select = el("select");
+    select.name = "procedure_id";
+    select.append(Object.assign(el("option", null, t("recipe_no_proc")), { value: "" }));
+    for (const p of procedures.filter((x) => x.section_id === editing.section_id)) {
+      select.append(Object.assign(el("option", null, p.name), { value: String(p.id) }));
+    }
+    select.value = step.procedure_id ? String(step.procedure_id) : "";
+    if (step.procedure_id && select.value !== String(step.procedure_id)) select.value = "";  // no longer offered
+    const procLabel = el("label", "field", t("recipe_proc"));
+    procLabel.append(select);
+    more.append(prices, procLabel);
+    return more;
+  }
+
+  function addStep(step = { days: 7, label: "", label_en: "", visit_price: "none", procedure_id: null }) {
     const li = el("li", "recipe-step");
     li.step = step;
     const name = el("input");
@@ -68,7 +102,7 @@ if (card && dialog) {
     remove.type = "button";
     remove.setAttribute("aria-label", t("remove"));
     remove.addEventListener("click", () => li.remove());
-    li.append(nameLabel, daysLabel, remove);
+    li.append(nameLabel, daysLabel, remove, moreFields(step));
     steps.append(li);
     return name;
   }
@@ -93,8 +127,12 @@ if (card && dialog) {
       if (!text) return null;
       if (!Number.isInteger(days) || days < 1 || days > 730) return null;
       const old = li.step;
-      out.push(english ? { days, label: old.label || text, label_en: text }
-        : { days, label: text, label_en: old.label === text ? old.label_en || "" : "" });
+      const extra = {
+        visit_price: (li.querySelector('input[type="radio"]:checked') || { value: "none" }).value,
+        procedure_id: Number(li.querySelector('[name="procedure_id"]').value) || null,
+      };
+      out.push(english ? { days, label: old.label || text, label_en: text, ...extra }
+        : { days, label: text, label_en: old.label === text ? old.label_en || "" : "", ...extra });
     }
     return out;
   }
@@ -127,7 +165,7 @@ if (card && dialog) {
     status.textContent = t("loading");
     const result = await get("/api/v1/procedures");
     if (!isOk(result)) { status.textContent = errorMessage(result, t("failed")); return; }
-    procedures = result.data.items.map((p) => ({ id: p.id, name: p.name, follow_up: p.follow_up || [] }));
+    procedures = result.data.items.map((p) => ({ id: p.id, name: p.name, section_id: p.section_id, follow_up: p.follow_up || [] }));
     render();
   })();
 }

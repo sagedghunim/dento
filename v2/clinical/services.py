@@ -732,8 +732,16 @@ def _duplicate_procedure():
     return ApiError("duplicate", _("This procedure is already in the list."), 409, fields={"name_ar": "duplicate"})
 
 
+def _check_recipe(ctx, section_id, values):
+    if "follow_up" in values:
+        from .followups import check_recipe
+
+        check_recipe(ctx, section_id, values["follow_up"].obj)
+
+
 def create_procedure(ctx, section, values):
     _check_range(values)
+    _check_recipe(ctx, section["id"], values)
     found = _savepoint_insert(ctx, f"""
         INSERT INTO "clinical_procedure" (clinic_id, section_id, name_ar, name_en, category, unit, price, typical_min,
                                           typical_max, description, description_en, internal_cost, condition,
@@ -753,11 +761,12 @@ def update_procedure(ctx, procedure_id, values):
     """Absolute values. A price change goes to the change log with before and after (design 8)."""
     if not values:
         raise ApiError("invalid", _("Send the changes."), fields={"changes": "required"})
-    before = sql.row(ctx, 'SELECT price, internal_cost, typical_min, typical_max FROM "clinical_procedure" '
+    before = sql.row(ctx, 'SELECT price, internal_cost, typical_min, typical_max, section_id FROM "clinical_procedure" '
                           "WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE", [ctx.clinic_id, procedure_id])
     if before is None:
         raise not_found("procedure")
-    before = dict(zip(("price", "internal_cost", "typical_min", "typical_max"), before))
+    before = dict(zip(("price", "internal_cost", "typical_min", "typical_max", "section_id"), before))
+    _check_recipe(ctx, before.pop("section_id"), values)
     _check_range({**{k: v for k, v in before.items() if k.startswith("typical")}, **values})
     assignments = ", ".join(f"{name} = %s" for name in values)
     found = _savepoint_insert(ctx, f'UPDATE "clinical_procedure" SET {assignments} WHERE clinic_id = %s AND id = %s '

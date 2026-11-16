@@ -7,6 +7,12 @@ clinic-days. Recording a procedure takes the package before the invoice (7a); it
 keeps that from cycling. Invoice endpoints read the invoice without a lock first only to learn its
 appointment, which never changes.
 
+A booking deposit (Saged, 2026-11-16) is a payment taken with the booking (scheduling.services.book) through the
+same `collect`. The invoice remembers how much of it is still held (`deposit`): only up to that may `paid` be more
+than `total` (`fits`), because a deposit is taken before the visit's charges are known. What is paid over the total is
+a credit the desk refunds by hand; nothing ever owes a negative amount. The visit's own line follows the visit
+(`set_visit_line`): a no-show stops charging it, and the arrival recompute changes it, while only the deposit is paid.
+
 Discount types (billing.discounts) add no lock to this order: applying one holds the appointment and the invoice
 and reads the type without a lock (the invoice keeps its own copy of the name and the percent); managing them takes
 the clinic row (6) and then the type's row, and nothing else.
@@ -29,12 +35,18 @@ APPOINTMENT_LOCK_SQL = """
       JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
      WHERE a.clinic_id = %s AND a.id = %s FOR NO KEY UPDATE OF a"""
 INVOICE_COLUMNS = ("id, number, status, patient_id, appointment_id, subtotal, discount, total, paid, discount_type_id, "
-                   "discount_name, discount_percent")
+                   "discount_name, discount_percent, deposit")
 INVOICE_FIELDS = tuple(name.strip() for name in INVOICE_COLUMNS.split(","))
 
 
 def _invoice(values):
     return dict(zip(INVOICE_FIELDS, values))
+
+
+def fits(invoice, total):
+    """Whether what is paid fits a bill of `total`: within it, or within the booking deposit still held (the one
+    case where more is paid than is charged yet). The invoice table checks the same (invoice_paid_fits)."""
+    return invoice["paid"] <= max(total, invoice["deposit"])
 
 
 def percent_of(subtotal, percent):
@@ -89,21 +101,23 @@ def line_description(appointment):
     return appointment["service_name"][:200]
 
 
-def create_invoice(ctx, appointment, number, paid=0):
-    """The visit's invoice with one line for its service at the appointment's fee (one statement)."""
+def create_invoice(ctx, appointment, number, paid=0, deposit=0):
+    """The visit's invoice with one line for its service at the appointment's fee (one statement). `deposit` is
+    the part of `paid` that is a booking deposit."""
     fee = appointment["fee"]
     now = timezone.now()
     found = sql.row(ctx, f"""
         WITH inv AS (
             INSERT INTO "billing_invoice" (clinic_id, number, patient_id, appointment_id, status, subtotal, discount,
-                                           total, paid, created_at, created_by_id)
-            VALUES (%s, %s, %s, %s, 'open', %s, 0, %s, %s, %s, %s) RETURNING {INVOICE_COLUMNS}),
+                                           total, paid, deposit, created_at, created_by_id)
+            VALUES (%s, %s, %s, %s, 'open', %s, 0, %s, %s, %s, %s, %s) RETURNING {INVOICE_COLUMNS}),
         line AS (
             INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price,
                                                 amount, from_list, created_by_id, created_at)
             SELECT %s, inv.id, 'service', %s, %s, 1, %s, %s, true, %s, %s FROM inv)
         SELECT {INVOICE_COLUMNS} FROM inv""", [
-        ctx.clinic_id, number, appointment["patient_id"], appointment["id"], fee, fee, paid, now, ctx.membership_id,
+        ctx.clinic_id, number, appointment["patient_id"], appointment["id"], fee, fee, paid, deposit, now,
+        ctx.membership_id,
         ctx.clinic_id, appointment["service_id"], line_description(appointment), fee, fee, ctx.membership_id, now])
     return _invoice(found)
 
@@ -122,22 +136,26 @@ def ensure_invoice(ctx, appointment, number=None, paid=0):
     return create_invoice(ctx, appointment, number, paid), True
 
 
-def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=None, today=None, shift_id=None):
+def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=None, today=None, shift_id=None,
+            deposit=False):
     """Take a payment for a locked appointment and record its summary changes in `deltas`.
 
     `today` is the request's business day when the caller already worked it out, so one request
     never straddles two days. `shift_id` is the open cash shift when the caller already took it (booking takes
-    it before its doctor-day, design 5.0 8a). Returns (payment dict, invoice dict).
+    it before its doctor-day, design 5.0 8a). `deposit` is a booking deposit: only with a new booking (so the
+    invoice is new), and it may be more than the fee. Returns (payment dict, invoice dict).
     """
     if amount <= 0:
         raise ApiError("invalid", _("Enter an amount."), fields={"amount": "range"})
     invoice = None if invoice_number is not None else open_invoice(ctx, appointment["id"])
+    if deposit and invoice is not None:
+        raise ApiError("invalid", "a deposit is taken with the booking", fields={"payment.deposit": "booking"})
     if invoice is None:
-        if amount > appointment["fee"]:
+        if amount > appointment["fee"] and not deposit:
             raise _over_balance()
         if invoice_number is None:
             invoice_number = take_numbers(ctx, "invoice")[0]
-        invoice = create_invoice(ctx, appointment, invoice_number, paid=amount)
+        invoice = create_invoice(ctx, appointment, invoice_number, paid=amount, deposit=amount if deposit else 0)
     else:
         updated = sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid + %s WHERE clinic_id = %s AND id = %s '
                                f"AND status = 'open' AND paid + %s <= total RETURNING {INVOICE_COLUMNS}",
@@ -150,7 +168,7 @@ def collect(ctx, appointment, amount, method, deltas, note="", invoice_number=No
     if section_id is None and "section_id" not in appointment:
         section_id = _section_of(ctx, appointment["id"])
     payment = _insert_payment(ctx, invoice, appointment["patient_id"], appointment["doctor_id"], "payment", method,
-                              amount, today, note, section_id=section_id, shift_id=shift_id)
+                              amount, today, note, section_id=section_id, shift_id=shift_id, is_deposit=deposit)
     deltas.doctor_day(today, appointment["doctor_id"], collected=amount)
     deltas.money_day(today, section_id, method, collected=amount)
     deltas.clinic_day(today, collected=amount)
@@ -172,7 +190,7 @@ def _section_of(ctx, appointment_id):
 
 
 def _insert_payment(ctx, invoice, patient_id, doctor_id, kind, method, amount, day, note, refund_of=None,
-                    section_id=None, shift_id=None):
+                    section_id=None, shift_id=None, is_deposit=False):
     """Every payment and refund row comes through here, so the register rule (F1) holds in one place:
     cash always joins an open shift, opening one when none is open (finance.services.shift_for); other
     methods join one when it is open.
@@ -189,25 +207,28 @@ def _insert_payment(ctx, invoice, patient_id, doctor_id, kind, method, amount, d
         payment_id = sql.row(ctx, """
             INSERT INTO "billing_payment" (clinic_id, invoice_id, patient_id, doctor_id, kind, method, amount,
                                            refunded, refund_of_id, received_at, day, received_by_id, note, shift_id,
-                                           section_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+                                           section_id, is_deposit)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
             ctx.clinic_id, invoice["id"], patient_id, doctor_id, kind, method, amount, refund_of, now, day,
-            ctx.membership_id, note, shift_id, section_id])[0]
+            ctx.membership_id, note, shift_id, section_id, is_deposit])[0]
         return {"id": payment_id, "invoice_id": invoice["id"], "patient_id": patient_id, "doctor_id": doctor_id,
                 "kind": kind, "method": method, "amount": amount, "refunded": 0, "refund_of_id": refund_of,
-                "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id}
+                "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id,
+                "is_deposit": is_deposit}
     payment_id, shift_id = sql.row(ctx, """
         INSERT INTO "billing_payment" (clinic_id, invoice_id, patient_id, doctor_id, kind, method, amount, refunded,
-                                       refund_of_id, received_at, day, received_by_id, note, shift_id, section_id)
-        SELECT %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, s.id, %s
+                                       refund_of_id, received_at, day, received_by_id, note, shift_id, section_id,
+                                       is_deposit)
+        SELECT %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, s.id, %s, %s
           FROM (SELECT 1) one LEFT JOIN (SELECT id FROM "finance_shift" WHERE clinic_id = %s AND status = 'open'
                                           FOR SHARE) s ON true
         RETURNING id, shift_id""", [
         ctx.clinic_id, invoice["id"], patient_id, doctor_id, kind, method, amount, refund_of, now, day,
-        ctx.membership_id, note, section_id, ctx.clinic_id])
+        ctx.membership_id, note, section_id, is_deposit, ctx.clinic_id])
     return {"id": payment_id, "invoice_id": invoice["id"], "patient_id": patient_id, "doctor_id": doctor_id,
             "kind": kind, "method": method, "amount": amount, "refunded": 0, "refund_of_id": refund_of,
-            "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id}
+            "received_at": now, "day": day, "note": note, "shift_id": shift_id, "section_id": section_id,
+            "is_deposit": is_deposit}
 
 
 def pay(ctx, appointment_id, amount, method, note=""):
@@ -356,7 +377,7 @@ def remove_line(ctx, invoice_id, line_id):
     if percent is None and invoice["discount"] > left:
         raise ApiError("discount_exceeds", _("Lower the discount before removing this line."), 409)
     discount = invoice["discount"] if percent is None else percent_of(left, percent)
-    if invoice["paid"] > left - discount:
+    if not fits(invoice, left - discount):
         raise _paid_exceeds()
     if line[1] == "package":
         void_packages(ctx, invoice["id"], line_id)  # F7: refused once a session was used
@@ -406,7 +427,7 @@ def set_discount(ctx, invoice_id, discount, expected):
     if discount > invoice["subtotal"]:
         raise ApiError("discount_too_large", _("The discount can't be more than the invoice."), 409,
                        fields={"discount": "range"})
-    if invoice["paid"] > invoice["subtotal"] - discount:
+    if not fits(invoice, invoice["subtotal"] - discount):
         raise _paid_exceeds()
     updated = write_discount(ctx, invoice["id"], discount)
     before = {"discount": invoice["discount"]}
@@ -450,18 +471,20 @@ def refund(ctx, payment_id, amount, method=None, note=""):
     invoice, appointment = _lock_invoice(ctx, original[1])
     updated = sql.row(ctx, 'UPDATE "billing_payment" SET refunded = refunded + %s WHERE clinic_id = %s AND id = %s '
                            "AND kind = 'payment' AND refunded + %s <= amount "
-                           "RETURNING patient_id, doctor_id, method, amount, refunded, section_id",
+                           "RETURNING patient_id, doctor_id, method, amount, refunded, section_id, is_deposit",
                       [amount, ctx.clinic_id, payment_id, amount])
     if updated is None:
         raise ApiError("over_refund", _("The refund is more than what is left of this payment."), 409,
                        fields={"amount": "over_refund"})
-    patient_id, doctor_id, original_method, original_amount, refunded, section_id = updated
+    patient_id, doctor_id, original_method, original_amount, refunded, section_id, was_deposit = updated
     today = business_day(ctx.clinic)
     method = method or original_method
     row = _insert_payment(ctx, invoice, patient_id, doctor_id, "refund", method, amount, today, note,
                           refund_of=payment_id, section_id=section_id)
-    invoice = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid - %s WHERE clinic_id = %s AND id = %s '
-                                    f"RETURNING {INVOICE_COLUMNS}", [amount, ctx.clinic_id, invoice["id"]]))
+    # A refunded deposit is no longer held: the bill's allowance to hold more than its total shrinks with it.
+    invoice = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid - %s, deposit = deposit - %s '
+                                    f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
+                               [amount, amount if was_deposit else 0, ctx.clinic_id, invoice["id"]]))
     record_change(ctx, "payment.refund", "payment", payment_id, before={"refunded": refunded - amount},
                   after={"refunded": refunded}, amount=amount, refund_id=row["id"])
     deltas = Deltas()
@@ -474,6 +497,41 @@ def refund(ctx, payment_id, amount, method=None, note=""):
     deltas.write_doctors(ctx)
     versions = deltas.write_clinics(ctx)
     return row, invoice, versions[visit_day]
+
+
+# --- The visit's own line (Saged, 2026-11-16) ------------------------------------------------------------------
+
+
+def set_visit_line(ctx, appointment_id, service_id, amount, reason, only_from=None):
+    """Under the appointment's lock: the visit's own line (its service, the first such line) now charges `amount`.
+
+    Used when the visit is marked "didn't come" (0: a visit that didn't happen charges no fee, so a kept deposit
+    owes nothing), when that is undone (the fee again, `only_from=0`), and by the arrival recompute. It never
+    takes the ground from under money already paid: refused (False, nothing changes) when the bill has no such
+    line, when a typed discount wouldn't fit what is left, or when more was paid than the new total and the
+    deposit held (`fits`). A percent discount is computed again. Audited. Returns True when the line changed.
+    """
+    invoice = open_invoice(ctx, appointment_id)
+    if invoice is None:
+        return False
+    line = sql.row(ctx, 'SELECT id, amount FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s '
+                        "AND kind = 'service' AND service_id = %s AND qty = 1 ORDER BY id LIMIT 1",
+                   [ctx.clinic_id, invoice["id"], service_id])
+    if line is None or line[1] == amount or (only_from is not None and line[1] != only_from):
+        return False
+    left = invoice["subtotal"] - line[1] + amount
+    percent = invoice["discount_percent"]
+    if percent is None and invoice["discount"] > left:
+        return False
+    discount = invoice["discount"] if percent is None else percent_of(left, percent)
+    if not fits(invoice, left - discount):
+        return False
+    sql.run(ctx, 'UPDATE "billing_invoice_line" SET unit_price = %s, amount = %s WHERE clinic_id = %s AND id = %s',
+            [amount, amount, ctx.clinic_id, line[0]])
+    move_subtotal(ctx, invoice["id"], amount - line[1])
+    record_change(ctx, "invoice.visit_fee", "invoice", invoice["id"], before={"line": line[0], "amount": line[1]},
+                  after={"amount": amount}, reason=reason)
+    return True
 
 
 # --- The visit (design E3) ------------------------------------------------------------------------------------

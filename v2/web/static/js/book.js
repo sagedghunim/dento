@@ -75,6 +75,7 @@ export function initBook({ onBooked, defaults } = {}) {
   const todayOnly = dialog.querySelector("[data-today-only]");
   const collectFields = dialog.querySelector("[data-collect-fields]");
   const submitButton = dialog.querySelector("[data-submit]");
+  const depositBox = dialog.querySelector("[data-deposit-box]");
   let patient = null;
   let quoteSeq = 0;
   let searchController = null;
@@ -218,7 +219,7 @@ export function initBook({ onBooked, defaults } = {}) {
   form.addEventListener("change", (event) => {
     if (event.target.name === "section") { filterBySection(); when.loadMonth(true); when.refresh(); }
     if (event.target.name === "service") quote();
-    if (event.target.name === "collect" || event.target.name === "arrive") labels();
+    if (event.target.name === "collect" || event.target.name === "arrive" || event.target.name === "deposit") labels();
     if (event.target.name === "amount") field("amount").dataset.touched = "1";
     if (event.target.name === "source") { try { localStorage.setItem("hamada.source", event.target.value); } catch (e) { /* none */ } }
     if (event.target.name === "print") { try { localStorage.setItem("hamada.print", field("print").checked ? "1" : ""); } catch (e) { /* none */ } }
@@ -234,6 +235,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!doctor || !service || !day) { fee.textContent = ""; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(day)}`;
     if (patient) url += `&patient=${patient.id}`;
+    if (plan && patient) url += `&follow_up=${session().id}`;  // a plan session's own visit price
     const result = await get(url);
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = errorMessage(result, ""); return; }
@@ -251,7 +253,19 @@ export function initBook({ onBooked, defaults } = {}) {
     const collect = today && field("collect") && field("collect").checked && lastFee !== 0;
     if (collectFields) collectFields.hidden = !collect;
     const arrive = today && field("arrive") && field("arrive").checked;
-    submitButton.textContent = collect ? t("book_collect") : arrive ? t("book_arrive") : t("book");
+    const deposit = takesDeposit(today, collect, arrive);
+    if (depositBox) {
+      depositBox.hidden = !config.deposit || collect || arrive;
+      depositBox.querySelector("[data-deposit-label]").textContent = t("deposit_amount", { amount: moneyText(config.deposit) });
+      depositBox.querySelector("[data-deposit-methods]").hidden = !deposit;
+    }
+    submitButton.textContent = collect || deposit ? t("book_collect") : arrive ? t("book_arrive") : t("book");
+  }
+
+  // The booking deposit (Saged, 2026-11-16): the clinic's amount, ticked by default. Not with "collect now" (that is
+  // the payment) nor for a patient who is here now (they pay at the visit).
+  function takesDeposit(today, collect, arrive) {
+    return Boolean(depositBox && config.deposit && !collect && !arrive && field("deposit").checked);
   }
 
   // --- saving: one request, one key per dialog until a definite answer ---
@@ -270,8 +284,11 @@ export function initBook({ onBooked, defaults } = {}) {
     if (plan && patient) out.follow_up_id = session().id;
     const today = isToday();
     out.arrive = Boolean(today && field("arrive") && field("arrive").checked);
-    if (today && field("collect") && field("collect").checked && lastFee !== 0) {
+    const collect = today && field("collect") && field("collect").checked && lastFee !== 0;
+    if (collect) {
       out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
+    } else if (takesDeposit(today, false, out.arrive)) {
+      out.payment = { amount: config.deposit, method: form.querySelector('[name="deposit_method"]:checked').value, deposit: true };
     }
     return out;
   }
@@ -295,11 +312,12 @@ export function initBook({ onBooked, defaults } = {}) {
     const b = submitter.unknown ? submitter.unknown.body : body();
     const problem = submitter.unknown ? "" : check(b);
     if (problem) { submitter.say(problem); return; }
-    const printing = Boolean(b.payment && field("print") && field("print").checked);
+    const printing = Boolean(b.payment && isToday() && field("print") && field("print").checked);
     const tab = printing ? openPrintTab() : null;  // opened in the tap, where Safari allows it
     const who = patient ? patient.name : (b.new_patient && b.new_patient.full_name) || "";
     const label = [t("booking"), who, b.payment ? moneyText(b.payment.amount) : ""].filter(Boolean).join(" · ");
     const result = await submitter.run("POST", "/api/v1/appointments", b, label);
+    if (result && !isOk(result)) depositAnswer(result);
     if (!result || !isOk(result)) { if (tab) tab.close(); return; }
     const appointment = result.data.appointment;
     const bookedSession = b.follow_up_id ? session() : null;
@@ -323,6 +341,16 @@ export function initBook({ onBooked, defaults } = {}) {
     if (onBooked) onBooked(result.data, bookedSession);
     if (more) nextSession();  // straight on to the plan's next session
   });
+
+  // The deposit was turned off or changed meanwhile: the dialog shows the clinic's setting now (nothing was booked).
+  function depositAnswer(result) {
+    const error = result.data && result.data.error;
+    if (!error || !depositBox) return;
+    if (error.code === "deposit_off") config.deposit = 0;
+    else if (error.code === "deposit_changed" && Number.isInteger(error.amount)) config.deposit = error.amount;
+    else return;
+    labels();
+  }
 
   // --- opening ---
 

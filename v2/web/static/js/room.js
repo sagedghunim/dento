@@ -198,15 +198,23 @@ if (adder) {
     }
     if (!isOk(result)) return;
     closeConfirm();
+    if (body.plan_item_id) {  // the plan's session is done: its one-tap offer goes
+      const offer = adder.querySelector(`[data-plan-item="${body.plan_item_id}"]`);
+      if (offer) offer.remove();
+      const box = adder.querySelector("[data-plan-offer]");
+      if (box && !box.querySelector("[data-plan-item]")) box.hidden = true;
+    }
     addProcedure(result.data);
     toast(t("proc_added", { name: nameOf(result.data.procedure) }));
     search.value = "";
     results.replaceChildren();
   }
 
-  function choose(p) {
+  function choose(p, planItem) {
     if (submitter.unknown || adder.dataset.busy) return;
     submitter.say("");
+    // The procedure the plan set for this session: recorded against its plan item (which keeps its tooth and price).
+    if (planItem) { record({ procedure_id: p.id, plan_item_id: planItem }); return; }
     if (p.unit !== "tooth") { record({ procedure_id: p.id }); return; }
     chosen = p;  // a tooth procedure: the number is optional, one more tap records it
     adder.querySelector("[data-proc-name]").textContent = p.name;
@@ -217,7 +225,7 @@ if (adder) {
 
   adder.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-proc]");
-    if (chip && !chip.disabled) { const p = catalogue.get(Number(chip.dataset.proc)); if (p) choose(p); }
+    if (chip && !chip.disabled) { const p = catalogue.get(Number(chip.dataset.proc)); if (p) choose(p, Number(chip.dataset.planItem) || null); }
   });
   cancel.addEventListener("click", closeConfirm);
   adder.querySelector("[data-discard]").addEventListener("click", closeConfirm);

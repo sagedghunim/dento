@@ -20,7 +20,8 @@ def _any_queue_code(ctx):
         ctx.require(QUEUE_CODES[0])
 
 
-def _payment(data, name="payment"):
+def _payment(data, name="payment", deposit=False):
+    """{amount, method}. With `deposit` (booking only) it may also say "deposit": true: the booking deposit."""
     value = data.get(name)
     if value is None:
         return None
@@ -28,8 +29,13 @@ def _payment(data, name="payment"):
         raise ApiError("invalid", f"{name} must be an object", fields={name: "object"})
     from billing.models import METHODS
 
-    return {"amount": parse_money(value.get("amount"), "amount", low=1),
-            "method": validate.choice(value, "method", METHODS)}
+    payment = {"amount": parse_money(value.get("amount"), "amount", low=1),
+               "method": validate.choice(value, "method", METHODS)}
+    if value.get("deposit") is not None:
+        if not deposit:
+            raise ApiError("invalid", _("A deposit is taken only with a booking."), fields={f"{name}.deposit": "booking"})
+        payment["deposit"] = validate.boolean(value, "deposit")
+    return payment
 
 
 def _appointment_id(value):
@@ -89,7 +95,7 @@ def book_view(request, ctx, data):
         "source": validate.choice({"source": data.get("source") or "clinic"}, "source",
                                   ["clinic", "phone", "online", "whatsapp"]),
         "note": validate.text(data, "note", 500, required=False),
-        "payment": _payment(data),
+        "payment": _payment(data, deposit=True),
         # The follow-up this booking is for (clinical.followups.claim), linked in the same transaction.
         "follow_up_id": (validate.ident(data.get("follow_up_id"), "follow_up_id")
                          if data.get("follow_up_id") is not None else None),
@@ -105,9 +111,11 @@ def quote_view(request, ctx, data):
     day = validate.iso_day(params["day"]) if params.get("day") else business_day(ctx.clinic)
     rules.check_day(ctx.clinic, day)  # the same days booking accepts (chief judge M1, R6)
     patient = params.get("patient")
+    follow_up = params.get("follow_up")  # the plan session being booked: its own visit fee rule
     return selectors.quote(ctx, validate.ident(params.get("doctor"), "doctor"),
                            validate.ident(params.get("service"), "service"), day,
-                           validate.ident(patient, "patient") if patient else None)
+                           validate.ident(patient, "patient") if patient else None,
+                           validate.ident(follow_up, "follow_up") if follow_up else None)
 
 
 @api("GET")

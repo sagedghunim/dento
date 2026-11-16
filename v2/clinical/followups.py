@@ -20,7 +20,9 @@ from core.days import business_day
 from core.errors import ApiError
 from core.i18n import pick
 from core.numbers import parse_int
-from core.validate import ident, text
+from core.validate import choice, ident, text
+
+from .models import VISIT_PRICES
 
 MAX_STEPS = 6
 MAX_DAYS = 730
@@ -31,7 +33,9 @@ TOP = 6
 
 
 def clean_recipe(value):
-    """[{"days", "label", "label_en"}], at most six steps, soonest first. [] turns the recipe off."""
+    """[{"days", "label", "label_en", "visit_price", "procedure_id"}], at most six steps, soonest first. [] turns the
+    recipe off. `visit_price` is what the session's visit itself costs (VISIT_PRICES, "none" when not given) and
+    `procedure_id` the procedure usually done in it (or null): see check_recipe for its section."""
     if value in (None, ""):
         return []
     if not isinstance(value, list) or len(value) > MAX_STEPS:
@@ -41,12 +45,48 @@ def clean_recipe(value):
         if not isinstance(step, dict):
             raise ApiError("invalid", "each step must be an object", fields={f"follow_up.{index}": "object"})
         try:
+            procedure = step.get("procedure_id")
             steps.append({"days": parse_int(step.get("days"), "days", 1, MAX_DAYS),
-                          "label": text(step, "label", 80), "label_en": text(step, "label_en", 80, required=False)})
+                          "label": text(step, "label", 80), "label_en": text(step, "label_en", 80, required=False),
+                          "visit_price": choice({"visit_price": step.get("visit_price") or "none"}, "visit_price",
+                                                VISIT_PRICES),
+                          "procedure_id": ident(procedure, "procedure_id") if procedure is not None else None})
         except ApiError as error:
             error.fields = {f"follow_up.{index}.{field}": code for field, code in error.fields.items()}
             raise
     return sorted(steps, key=lambda s: s["days"])
+
+
+def check_recipe(ctx, section_id, steps):
+    """A step's procedure is an offered procedure of the recipe's own section; another place's id is 404."""
+    ids = sorted({s["procedure_id"] for s in steps if s.get("procedure_id") is not None})
+    if not ids:
+        return
+    known = {r[0]: r for r in sql.rows(ctx, 'SELECT id, section_id, is_active FROM "clinical_procedure" '
+                                            "WHERE clinic_id = %s AND id = ANY(%s::bigint[])", [ctx.clinic_id, ids])}
+    for index, step in enumerate(steps):
+        found = known.get(step.get("procedure_id")) if step.get("procedure_id") is not None else True
+        if found is None:
+            from .services import not_found
+
+            raise not_found("procedure")
+        if found is not True and (found[1] != section_id or not found[2]):
+            raise ApiError("invalid", _("This procedure belongs to another section."),
+                           fields={f"follow_up.{index}.procedure_id": "section"})
+
+
+def visit_price_of(ctx, item_id):
+    """A follow-up's visit fee rule (VISIT_PRICES), for booking it. One the member may not see is 404."""
+    from .services import not_found
+
+    where, params = _visible(ctx)
+    found = sql.row(ctx, f"""
+        SELECT i.visit_price FROM "clinical_plan_item" i
+          JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.visit_id
+         WHERE i.clinic_id = %s AND i.id = %s{where}""", [ctx.clinic_id, item_id, *params])
+    if found is None:
+        raise not_found("plan_item")
+    return found[0]
 
 
 def _visible(ctx):
@@ -70,8 +110,8 @@ def upcoming(ctx, patient_id, today=None):
     """What comes next for this patient: the follow-ups not booked yet, and the booked ones still ahead."""
     today = today or business_day(ctx.clinic)
     rows = sql.dicts(ctx, """
-        SELECT i.id, i.procedure_id, c.name_ar, c.name_en, i.label, i.tooth, i.due_on, i.visit_id,
-               (b.id IS NOT NULL) AS booked, b.day AS booked_day
+        SELECT i.id, i.procedure_id, c.name_ar, c.name_en, i.label, i.tooth, i.due_on, i.visit_id, i.price,
+               (b.id IS NOT NULL) AS booked, b.day AS booked_day, b.id AS booked_id
           FROM "clinical_plan" p
           JOIN "clinical_plan_item" i ON i.clinic_id = p.clinic_id AND i.plan_id = p.id
           LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
@@ -83,7 +123,8 @@ def upcoming(ctx, patient_id, today=None):
     return [{"id": r["id"], "procedure_id": r["procedure_id"], "name": pick(r["name_ar"], r["name_en"]) or r["label"],
              "tooth": r["tooth"], "due_on": r["due_on"].isoformat(), "days": (r["due_on"] - today).days,
              "visit_id": r["visit_id"], "booked": r["booked"],
-             "booked_day": r["booked_day"].isoformat() if r["booked_day"] else None} for r in rows]
+             "booked_day": r["booked_day"].isoformat() if r["booked_day"] else None,
+             "appointment_id": r["booked_id"], "price": r["price"]} for r in rows]
 
 
 def clean_items(items):
@@ -114,7 +155,7 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
     if appointment["status"] in ("booked", "cancelled", "no_show"):
         raise ApiError("visit_closed", _("Follow-ups are added in a visit that has arrived."), 409,
                        fields={"status": appointment["status"]})
-    rows = []  # (procedure_id, label, days, price)
+    rows = []  # (procedure_id, label, days, price, visit_price)
     if recipe_of is not None:
         procedure = services._procedure(ctx, recipe_of, active=False)
         if procedure["section_id"] != appointment["section_id"]:
@@ -122,7 +163,16 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
         steps = procedure["follow_up"] or []
         if not steps:
             raise ApiError("invalid", _("This procedure has no follow-up sessions."), fields={"recipe_of": "empty"})
-        rows = [(None, pick(step["label"], step.get("label_en", "")), step["days"], 0) for step in steps]
+        # A step's procedure (the one done in that session) joins the item at its list price, when it is still offered
+        # in this section; the doctor then records it in one tap from the session's visit.
+        ids = sorted({step["procedure_id"] for step in steps if step.get("procedure_id")})
+        offered = {r[0]: r[1] for r in sql.rows(
+            ctx, 'SELECT id, price FROM "clinical_procedure" WHERE clinic_id = %s AND id = ANY(%s::bigint[]) '
+                 "AND section_id = %s AND is_active", [ctx.clinic_id, ids, appointment["section_id"]])} if ids else {}
+        for step in steps:
+            done_in = step.get("procedure_id") if step.get("procedure_id") in offered else None
+            rows.append((done_in, pick(step["label"], step.get("label_en", "")), step["days"],
+                         offered[done_in] if done_in else 0, step.get("visit_price") or "none"))
     else:
         cleaned = clean_items(items)
         ids = sorted({item["procedure_id"] for item in cleaned if item["procedure_id"] is not None})
@@ -131,7 +181,7 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
                  "AND id = ANY(%s::bigint[])", [ctx.clinic_id, ids])} if ids else {}
         for index, item in enumerate(cleaned):
             if item["procedure_id"] is None:
-                rows.append((None, item["label"], item["days"], 0))
+                rows.append((None, item["label"], item["days"], 0, "none"))
                 continue
             procedure = known.get(item["procedure_id"])
             if procedure is None:
@@ -139,7 +189,7 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
             if procedure[1] != appointment["section_id"] or not procedure[3]:
                 raise ApiError("invalid", _("This procedure belongs to another section."),
                                fields={f"items.{index}.procedure_id": "section"})
-            rows.append((procedure[0], "", item["days"], procedure[2]))  # the list price, never one from the screen
+            rows.append((procedure[0], "", item["days"], procedure[2], "none"))  # the list price, never the screen's
     plan = sql.row(ctx, 'SELECT id FROM "clinical_plan" WHERE clinic_id = %s AND patient_id = %s AND section_id = %s '
                         "ORDER BY created_at DESC, id DESC LIMIT 1 FOR NO KEY UPDATE",
                    [ctx.clinic_id, appointment["patient_id"], appointment["section_id"]])
@@ -153,12 +203,12 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
     if count + len(rows) > services.MAX_PLAN_ITEMS:
         raise ApiError("invalid", _("A plan has 1 to 60 items."), fields={"items": "count"})
     values, params = [], []
-    for offset, (procedure_id, label, days, price) in enumerate(rows, 1):
-        values.append("(%s, %s, %s, %s, %s, %s, '', %s, 'planned', %s, %s, %s)")
+    for offset, (procedure_id, label, days, price, visit_price) in enumerate(rows, 1):
+        values.append("(%s, %s, %s, %s, %s, %s, '', %s, 'planned', %s, %s, %s, %s)")
         params += [ctx.clinic_id, plan[0], procedure_id, label, last + offset, tooth, price,
-                   appointment["day"] + dt.timedelta(days=days), appointment_id, now]
+                   appointment["day"] + dt.timedelta(days=days), appointment_id, now, visit_price]
     sql.run(ctx, 'INSERT INTO "clinical_plan_item" (clinic_id, plan_id, procedure_id, label, position, tooth, area, '
-                 f"price, status, due_on, visit_id, updated_at) VALUES {', '.join(values)}", params)
+                 f"price, status, due_on, visit_id, updated_at, visit_price) VALUES {', '.join(values)}", params)
     _tell_today(ctx, {appointment["day"]})
     return appointment["patient_id"]
 

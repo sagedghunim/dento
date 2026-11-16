@@ -53,7 +53,7 @@
     <table class="lines payments">
       <thead><tr><th>{% translate "Payments" %}</th><th class="n">{% translate "Amount" %}</th></tr></thead>
       <tbody>
-        {% for p in r.payments %}<tr><td>{% if p.kind == "refund" %}{% translate "Refund" %}{% else %}{{ methods|get_item:p.method }}{% endif %} · {{ p.received_at|shortday }} {{ p.received_at|clock }}</td><td class="n">{% if p.kind == "refund" %}−{% endif %}{{ p.amount|money }}</td></tr>{% endfor %}
+        {% for p in r.payments %}<tr data-payment{% if p.deposit %} data-deposit{% endif %}><td>{% if p.kind == "refund" %}{% translate "Refund" %}{% else %}{% if p.deposit %}{% translate "Deposit" %} · {% endif %}{{ methods|get_item:p.method }}{% endif %} · {{ p.received_at|shortday }} {{ p.received_at|clock }}</td><td class="n">{% if p.kind == "refund" %}−{% endif %}{{ p.amount|money }}</td></tr>{% endfor %}
       </tbody>
     </table>
     {% endif %}

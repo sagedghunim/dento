@@ -107,6 +107,7 @@ def clinic_settings_view(request, ctx, data):
     if stale:
         raise ApiError("stale", _("Someone changed these settings meanwhile. Reload and try again."), 409,
                        fields={key: "changed" for key in stale})
+    clinic_settings.check_together({**clinic_settings.effective(clinic.settings), **changes})
     before = {key: current[key] for key in [*changes, *day_changes]}
     if day_changes:
         services.change_day_settings(ctx, clinic, day_changes)

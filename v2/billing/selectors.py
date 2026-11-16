@@ -13,7 +13,7 @@ from core.days import business_day, local_iso
 from core.errors import ApiError
 
 INVOICE_SQL = """
-    SELECT i.id, i.number, i.status, i.subtotal, i.discount, i.total, i.paid, i.created_at, i.voided_at,
+    SELECT i.id, i.number, i.status, i.subtotal, i.discount, i.total, i.paid, i.deposit, i.created_at, i.voided_at,
            i.patient_id, p.full_name, p.phone, p.file_no, i.appointment_id, a.day, a.queue_no, a.doctor_id, a.service_id,
            m.display_name, m.title, i.discount_type_id, i.discount_name, i.discount_percent,
            d.desk_can_apply AS discount_desk
@@ -30,17 +30,21 @@ def _not_found():
 
 
 def summary(invoice):
-    """The short form actions answer with."""
+    """The short form actions answer with. `due` is never negative: with a booking deposit more may be paid than
+    is charged yet, and that is `credit` (the desk refunds it by hand). `deposit` is the deposit still held."""
+    open_ = invoice["status"] == "open"
     return {"id": invoice["id"], "number": invoice["number"], "status": invoice["status"],
             "subtotal": invoice["subtotal"], "discount": invoice["discount"], "total": invoice["total"],
-            "paid": invoice["paid"], "due": invoice["total"] - invoice["paid"] if invoice["status"] == "open" else 0}
+            "paid": invoice["paid"], "due": max(0, invoice["total"] - invoice["paid"]) if open_ else 0,
+            "credit": max(0, invoice["paid"] - invoice["total"]) if open_ else 0,
+            "deposit": invoice.get("deposit", 0)}
 
 
 def payment_payload(clinic, p):
     return {"id": p["id"], "invoice_id": p["invoice_id"], "kind": p["kind"], "method": p["method"],
             "amount": p["amount"], "refunded": p["refunded"], "refund_of_id": p["refund_of_id"],
             "doctor_id": p["doctor_id"], "received_at": local_iso(clinic, p["received_at"]),
-            "day": p["day"].isoformat(), "note": p["note"]}
+            "day": p["day"].isoformat(), "note": p["note"], "deposit": bool(p.get("is_deposit"))}
 
 
 def invoice(ctx, invoice_id):
@@ -69,7 +73,7 @@ def invoice(ctx, invoice_id):
         line["removable"] = i["status"] == "open" and may_remove_line(ctx, line, i["service_id"], today)
         line["created_at"] = local_iso(ctx.clinic, line["created_at"])
     payments = sql.dicts(ctx, "SELECT id, invoice_id, kind, method, amount, refunded, refund_of_id, doctor_id, received_at, "
-                              'day, note FROM "billing_payment" WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
+                              'day, note, is_deposit FROM "billing_payment" WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
                          [ctx.clinic_id, invoice_id])
     clinic = ctx.clinic
     body = summary(i)
@@ -110,7 +114,7 @@ def patient_payments(ctx, patient_id, size, after):
         where += " AND (received_at, id) < (%s, %s)"
         params += [after[0], after[1]]
     rows = sql.dicts(ctx, "SELECT id, invoice_id, kind, method, amount, refunded, refund_of_id, doctor_id, received_at, "
-                          f'day, note FROM "billing_payment" {where} ORDER BY received_at DESC, id DESC LIMIT %s',
+                          f'day, note, is_deposit FROM "billing_payment" {where} ORDER BY received_at DESC, id DESC LIMIT %s',
                      [*params, size + 1])
     more = len(rows) > size
     rows = rows[:size]
@@ -120,18 +124,20 @@ def patient_payments(ctx, patient_id, size, after):
 
 def payment(ctx, payment_id):
     found = sql.dicts(ctx, "SELECT id, invoice_id, kind, method, amount, refunded, refund_of_id, doctor_id, received_at, "
-                           'day, note FROM "billing_payment" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, payment_id])
+                           'day, note, is_deposit FROM "billing_payment" WHERE clinic_id = %s AND id = %s',
+                      [ctx.clinic_id, payment_id])
     if not found:
         raise ApiError("not_found", _("This payment wasn't found."), 404)
     return found[0]
 
 
 def invoice_row(ctx, invoice_id):
-    found = sql.row(ctx, 'SELECT id, number, status, subtotal, discount, total, paid, appointment_id '
+    found = sql.row(ctx, 'SELECT id, number, status, subtotal, discount, total, paid, appointment_id, deposit '
                          'FROM "billing_invoice" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, invoice_id])
     if found is None:
         raise _not_found()
-    return dict(zip(("id", "number", "status", "subtotal", "discount", "total", "paid", "appointment_id"), found))
+    return dict(zip(("id", "number", "status", "subtotal", "discount", "total", "paid", "appointment_id", "deposit"),
+                    found))
 
 
 def day_sums(ctx, day):
@@ -192,7 +198,7 @@ def visit_invoice(ctx, appointment_id):
     if found is None:
         return None
     body = invoice(ctx, found[0])
-    body["remaining"] = body["total"] - body["paid"]
+    body["remaining"] = body["due"]  # never negative: a deposit over the total is the bill's `credit`
     return body
 
 

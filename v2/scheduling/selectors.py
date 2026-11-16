@@ -28,7 +28,8 @@ ROW_SQL = """
            a.created_at,
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name, s.name_en AS service_name_en,
-           i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid
+           i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid,
+           a.visit_price
       FROM "scheduling_appointment" a
       JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
       JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
@@ -57,15 +58,17 @@ def payload(clinic, r):
     """One appointment as every endpoint answers it. `r` holds ROW_SQL's columns."""
     invoice = None
     if r["invoice_id"]:
+        # With a booking deposit more may be paid than is charged yet: that is a credit, and nothing is due.
         invoice = {"id": r["invoice_id"], "number": r["invoice_number"], "total": r["invoice_total"],
-                   "paid": r["invoice_paid"]}
-        due = r["invoice_total"] - r["invoice_paid"]
+                   "paid": r["invoice_paid"], "credit": max(0, r["invoice_paid"] - r["invoice_total"])}
+        due = max(0, r["invoice_total"] - r["invoice_paid"])
     else:
         due = r["fee"] if r["status"] in OPEN_STATUSES else 0
     return {
         "id": r["id"], "day": r["day"].isoformat(), "queue_no": r["queue_no"], "status": r["status"],
         "starts_at": _iso(clinic, r["starts_at"]), "ends_at": _iso(clinic, r["ends_at"]), "is_extra": r["is_extra"],
         "source": r["source"], "fee": r["fee"], "is_follow_up": r["is_follow_up"], "is_new": r["is_new"],
+        "visit_price": r.get("visit_price") or "",
         "auto_closed": r["auto_closed"], "note": r["note"], "arrived_at": _iso(clinic, r["arrived_at"]),
         "with_assistant_at": _iso(clinic, r.get("with_assistant_at")), "ready_at": _iso(clinic, r.get("ready_at")),
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
@@ -379,8 +382,9 @@ def month(ctx, doctor_id, first, section_id=None):
             "today": today.isoformat(), "days": days}
 
 
-def quote(ctx, doctor_id, service_id, day, patient_id=None):
-    """The fee and follow-up flag the booking would use (design 5.1)."""
+def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None):
+    """The fee and follow-up flag the booking would use (design 5.1). With `follow_up_id` (a plan session being
+    booked) the session's own visit fee rule decides, as in booking; `visit_price` says which rule applied."""
     doctor, service = rules.doctor_day_and_service(ctx, doctor_id, service_id, day)
     eligible = False
     if patient_id is not None:
@@ -391,8 +395,14 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None):
         if found is None:
             raise rules.not_found("patient")
         eligible = found[1]
-    fee, is_follow_up = rules.fee_for(service, eligible)
-    return {"fee": fee, "is_follow_up": is_follow_up, "service_price": service.price,
+    visit_price = ""
+    if follow_up_id is not None:
+        from clinical.followups import visit_price_of
+
+        found_price = visit_price_of(ctx, follow_up_id)
+        visit_price = found_price if service.kind == "consultation" else ""
+    fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
+    return {"fee": fee, "is_follow_up": is_follow_up, "visit_price": visit_price, "service_price": service.price,
             "follow_up_price": service.follow_up_price, "section_id": service.section_id,
             "doctor_works": bool(doctor.sessions_in(service.section_id))}
 

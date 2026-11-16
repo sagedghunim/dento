@@ -3,7 +3,7 @@
 // definite answer), with the member's version; a 409 `stale` reads the team again and says so.
 import { errorMessage, get, isOk } from "./api.js";
 import { Submitter, el, openDialog, wireClose } from "./dialogs.js";
-import { asciiDigits } from "./numbers.js";
+import { amountInput, asciiDigits, parsePiastres } from "./numbers.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
 
@@ -24,6 +24,7 @@ const bdi = (text, className) => { const node = el("bdi", className, text); node
 
 if (team) initTeam();
 initSettings();
+initBooking();
 
 // --- the team ---------------------------------------------------------------------------------------------------
 
@@ -685,5 +686,48 @@ function initSettings() {
       return;
     }
     if (isStale(result)) { dialog.close(); reloadWith(errorMessage(result, t("failed"))); }
+  });
+}
+
+// --- booking: the optional deposit (settings.manage; Saged, 2026-11-16) ------------------------------------------
+// PUT settings/clinic with the values it replaces; the server refuses "on" without an amount.
+
+function initBooking() {
+  const card = document.querySelector("[data-booking-card]");
+  if (!card) return;
+  const now = readJson("booking-data") || { booking_deposit: false, booking_deposit_amount: 0 };
+  const form = card.querySelector("[data-booking-form]");
+  const on = form.elements.namedItem("booking_deposit");
+  const amount = form.elements.namedItem("booking_deposit_amount");
+  const amountBox = card.querySelector("[data-deposit-amount]");
+  const submitter = new Submitter(card);
+  amount.value = now.booking_deposit_amount ? amountInput(now.booking_deposit_amount) : "";
+  on.addEventListener("change", () => { amountBox.hidden = !on.checked; if (on.checked && !amount.value) amount.focus(); });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (card.dataset.busy) return;
+    let body = submitter.unknown && submitter.unknown.body;
+    if (!body) {
+      const changes = { booking_deposit: on.checked };
+      if (on.checked || amount.value.trim()) {
+        const piastres = parsePiastres(amount.value);
+        if (!piastres || piastres <= 0) { submitter.say(t("deposit_need_amount")); amount.focus(); return; }
+        changes.booking_deposit_amount = piastres;
+      }
+      for (const key of Object.keys(changes)) if (changes[key] === now[key]) delete changes[key];
+      if (!Object.keys(changes).length) { submitter.say(t("team_nothing_changed")); return; }
+      body = { changes, expected: Object.fromEntries(Object.keys(changes).map((k) => [k, now[k]])) };
+    }
+    const result = await submitter.run("PUT", "/api/v1/settings/clinic", body, t("settings_saved"));
+    if (!result) return;
+    if (isOk(result)) {
+      const fresh = result.data.settings;
+      now.booking_deposit = fresh.booking_deposit;
+      now.booking_deposit_amount = fresh.booking_deposit_amount;
+      toast(t("settings_saved"));
+      return;
+    }
+    if (isStale(result)) reloadWith(errorMessage(result, t("failed")));
   });
 }

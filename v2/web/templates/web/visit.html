@@ -55,6 +55,10 @@
     {% if perms.record and config.procedures %}
     <div class="add-proc" data-add-procedure>
       <form novalidate>
+        {% if plan_offer %}<div class="plan-offer" data-plan-offer>
+          <p class="muted">{% translate "Planned for this session" %}</p>
+          <div class="chips">{% for o in plan_offer %}<button type="button" class="chip-btn" data-run data-proc="{{ o.procedure_id }}" data-plan-item="{{ o.plan_item_id }}"><bdi dir="auto">{{ o.name }}</bdi> <span class="count num">{{ o.price|money }}</span></button>{% endfor %}</div>
+        </div>{% endif %}
         <div class="chips" data-top-procedures>
           {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi> <span class="count num">{{ p.price|money }}</span></button>{% endfor %}
         </div>

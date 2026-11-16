@@ -241,8 +241,20 @@ def history_params(ctx, doctor_id, day, window, exclude_id=0):
     return [ctx.clinic_id, doctor_id, start, day, exclude_id, ctx.clinic_id, exclude_id]
 
 
-def fee_for(service, eligible):
-    """(fee, is_follow_up). A consultation in the window takes its follow-up service's price."""
+def fee_for(service, eligible, visit_price=""):
+    """(fee, is_follow_up). A consultation in the window takes its follow-up service's price.
+
+    `visit_price` is a plan session's own rule (Saged, 2026-11-16), which then decides instead of the window:
+    "none" charges no visit fee (the procedure done in the session is charged on its own), "follow_up" the
+    clinic's follow-up price (the full price when it has none), "consultation" the full price. It applies to a
+    consultation only: when the desk books the session on another service, that service's price stands.
+    """
+    if service.kind == "consultation" and visit_price:
+        if visit_price == "none":
+            return 0, True
+        if visit_price == "follow_up" and service.follow_up_price is not None:
+            return service.follow_up_price, True
+        return service.price, False
     if service.kind == "consultation" and eligible and service.follow_up_price is not None:
         return service.follow_up_price, True
     return service.price, service.kind == "follow_up"

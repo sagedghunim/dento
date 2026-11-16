@@ -74,6 +74,9 @@ class Appointment(models.Model):
     # The discount the doctor suggests for this visit (Saged, 2026-11-13). It changes no money: the desk applies it.
     suggested_discount_type = models.ForeignKey("billing.DiscountType", null=True, blank=True, on_delete=models.PROTECT,
                                                 db_constraint=False, db_index=False, related_name="+")
+    # A plan session's visit fee rule (clinical.models.VISIT_PRICES), copied from its plan item at booking so the
+    # arrival-time recompute keeps it; "" for any other visit (the follow-up rule decides).
+    visit_price = models.CharField(max_length=12, blank=True, default="", db_default="")
     # The slot index reads only this column, so status changes stay HOT updates (design 4.4).
     holds_slot = models.GeneratedField(
         expression=Q(starts_at__isnull=False, is_extra=False) & ~Q(status__in=["cancelled", "no_show"]),
@@ -97,6 +100,8 @@ class Appointment(models.Model):
             models.CheckConstraint(condition=Q(source__in=SOURCES), name="appointment_source_valid"),
             models.CheckConstraint(condition=Q(fee__gte=0), name="appointment_fee_not_negative"),
             models.CheckConstraint(condition=Q(queue_no__gt=0), name="appointment_queue_no_positive"),
+            models.CheckConstraint(condition=Q(visit_price__in=["", "none", "follow_up", "consultation"]),
+                                   name="appointment_visit_price_valid"),
             models.CheckConstraint(
                 condition=Q(starts_at__isnull=True, ends_at__isnull=True)
                 | Q(starts_at__isnull=False, ends_at__isnull=False, ends_at__gt=F("starts_at")),

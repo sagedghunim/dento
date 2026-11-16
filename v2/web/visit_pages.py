@@ -137,12 +137,19 @@ def visit_page(request, ctx, appointment_id):
     by_id = {p["id"]: p for p in config["procedures"]}
     top = [by_id[i] for i in followups.top_procedures(ctx, visit["doctor_id"], visit["section_id"], today) if i in by_id]         if by_id else []
     config["top"] = [p["id"] for p in top]
+    # The plan session this visit was booked for, when its step names the procedure done in it (Saged, 2026-11-16):
+    # one tap records it against the plan item, at the plan's price (from `upcoming`, read above: no extra query).
+    plan_offer = [{"plan_item_id": u["id"], "procedure_id": u["procedure_id"], "name": by_id[u["procedure_id"]]["name"],
+                   "price": u["price"]}
+                  for u in config["upcoming"] if u["appointment_id"] == visit["id"] and u["procedure_id"] in by_id]
+    config["plan_offer"] = [{k: o[k] for k in ("plan_item_id", "procedure_id")} for o in plan_offer]
     done = sum(p["amount"] for p in record["procedures"])
     # The small bill: the consultation, then each procedure. The invoice's own total once it has one.
     bill = {"fee": visit["fee"], "total": record["invoice"]["total"] if record["invoice"] else visit["fee"] + done}
     return render(request, "web/visit.html", {
         "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms,
         "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
+        "plan_offer": plan_offer,
         "dental": perms["chart"] and teeth.is_dental(ctx, visit["section_id"]),
         "discount_types": _discount_types(ctx, visit["id"]) if perms["record"] else [],
     })

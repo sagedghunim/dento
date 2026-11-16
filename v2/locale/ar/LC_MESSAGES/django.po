@@ -3722,3 +3722,64 @@ msgstr "متوقف"
 
 msgid "The discounts changed meanwhile. They were loaded again."
 msgstr "الخصومات اتغيّرت في نفس الوقت، واتحمّلت تاني."
+
+msgid "A deposit is taken only with a booking."
+msgstr "العربون بيتاخد مع الحجز بس."
+
+msgid "A patient who is here now pays at the visit, not a deposit."
+msgstr "المريض الموجود دلوقتي بيدفع في الزيارة، مش عربون."
+
+msgid "Ask for a deposit when booking"
+msgstr "اطلب عربون مع الحجز"
+
+msgid "Booking"
+msgstr "الحجز"
+
+msgid "Deposit"
+msgstr "عربون"
+
+msgid "Deposit (EGP)"
+msgstr "العربون (جنيه)"
+
+msgid "Deposit {amount}"
+msgstr "عربون {amount}"
+
+msgid "Enter the deposit amount."
+msgstr "اكتب مبلغ العربون."
+
+msgid "Follow-up price"
+msgstr "سعر الإعادة"
+
+msgid "Full consultation"
+msgstr "كشف كامل"
+
+msgid "No visit fee"
+msgstr "من غير كشف"
+
+msgid "None"
+msgstr "مفيش"
+
+msgid "Paid over the bill"
+msgstr "مدفوع زيادة عن الفاتورة"
+
+msgid "Planned for this session"
+msgstr "المتخطط للجلسة دي"
+
+msgid "Procedure done in this session"
+msgstr "الإجراء اللي بيتعمل في الجلسة"
+
+msgid "The deposit amount changed. Reload and try again."
+msgstr "مبلغ العربون اتغيّر. حمّل الصفحة تاني وجرّب."
+
+msgid ""
+"The deposit is paid on the visit's bill. If the patient doesn't come, the "
+"clinic keeps it; refund it from the bill when needed."
+msgstr ""
+"العربون بيتسجل مدفوع على فاتورة الزيارة. لو المريض ماجاش العيادة بتحتفظ بيه،"
+" ولو لازم يترجع رجّعه من الفاتورة."
+
+msgid "The visit fee in this session"
+msgstr "سعر الكشف في الجلسة دي"
+
+msgid "This clinic doesn't take a deposit with bookings."
+msgstr "العيادة دي مش بتاخد عربون مع الحجز."

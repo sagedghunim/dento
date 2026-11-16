@@ -31,10 +31,15 @@ export function initPay({ onChanged } = {}) {
   wireClose(dialog);
 
   const money = (p) => moneyNode(p, t("money_pattern"));
+  // A payment's words: a booking deposit says so, with its day when that isn't today (Saged, 2026-11-16).
+  const dayShort = (iso) => localDigits(`${Number(iso.slice(8, 10))}/${Number(iso.slice(5, 7))}`);
+  const paymentName = (p) => (p.deposit ? `${t("deposit")} · ${methodName(p.method)}` : methodName(p.method));
 
   function sums() {
-    const s = invoice || { total: visit.fee, discount: 0, paid: 0, due: visit.due };
-    for (const key of ["total", "discount", "paid", "due"]) dialog.querySelector(`[data-sum="${key}"]`).replaceChildren(money(s[key]));
+    const s = invoice || { total: visit.fee, discount: 0, paid: 0, due: visit.due, credit: 0 };
+    for (const key of ["total", "discount", "paid", "due", "credit"]) dialog.querySelector(`[data-sum="${key}"]`).replaceChildren(money(s[key] || 0));
+    // More paid than the bill (a deposit over a smaller bill): the desk refunds it by hand.
+    dialog.querySelector("[data-credit-row]").hidden = !(s.credit > 0);
     return s;
   }
 
@@ -83,7 +88,9 @@ export function initPay({ onChanged } = {}) {
     dialog.querySelector("[data-payments]").replaceChildren(...payments.map((p) => {
       const li = el("li");
       const what = el("span");
-      what.append(p.kind === "refund" ? t("refund_row") : methodName(p.method), " · ", clockNode(p.received_at));
+      what.append(p.kind === "refund" ? t("refund_row") : paymentName(p), " · ");
+      if (p.day && p.day !== config.today) what.append(dayShort(p.day), " ");
+      what.append(clockNode(p.received_at));
       if (p.refunded) what.append(" · ", t("refunded_part"), " ", money(p.refunded));
       const amt = el("span", "amt");
       amt.append(p.kind === "refund" ? "−" : "", money(p.amount));
@@ -95,7 +102,7 @@ export function initPay({ onChanged } = {}) {
     if (refund) {
       refund.hidden = !refundable.length;
       field("refund_of").replaceChildren(...refundable.map((p) => {
-        const option = el("option", null, `${methodName(p.method)} · ${moneyText(p.amount - p.refunded)}`);
+        const option = el("option", null, `${paymentName(p)} · ${moneyText(p.amount - p.refunded)}`);
         option.value = p.id;
         option.dataset.left = p.amount - p.refunded;
         return option;

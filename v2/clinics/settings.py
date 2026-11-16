@@ -15,7 +15,11 @@ DEFAULTS = {
     "solo": False,              # a single clinic run by its owner alone (no assistant); never a center
     # The booking times of a queue session (no slot length of its own), in minutes (Saged, 2026-11-13).
     "booking_step_minutes": 60,
+    # An optional deposit taken with a booking (Saged, 2026-11-16): off by default; the amount in piastres.
+    "booking_deposit": False,
+    "booking_deposit_amount": 0,
 }
+MAX_DEPOSIT = 100_000_00  # EGP 100,000
 
 _RULES = {
     "follow_up_days": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
@@ -27,6 +31,8 @@ _RULES = {
     "letterhead_bottom_mm": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 120,
     "solo": lambda v: isinstance(v, bool),
     "booking_step_minutes": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 120 and v % 5 == 0,
+    "booking_deposit": lambda v: isinstance(v, bool),
+    "booking_deposit_amount": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_DEPOSIT,
 }
 
 
@@ -47,3 +53,15 @@ def validated(changes, kind="clinic"):
     if changes.get("solo") and kind == "center":
         raise ApiError("invalid", _("A medical center can't be run by one person alone."), fields={"solo": "center"})
     return changes
+
+
+def check_together(values):
+    """Rules across settings, on the values as they would be stored: a deposit that is asked for has an amount."""
+    if values["booking_deposit"] and values["booking_deposit_amount"] <= 0:
+        raise ApiError("invalid", _("Enter the deposit amount."), fields={"booking_deposit_amount": "required"})
+
+
+def deposit(clinic):
+    """The booking deposit this place asks for, in piastres; 0 when it asks for none."""
+    values = effective(clinic.settings)
+    return values["booking_deposit_amount"] if values["booking_deposit"] else 0

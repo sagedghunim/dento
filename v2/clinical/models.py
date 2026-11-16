@@ -20,6 +20,9 @@ SURFACES = ["M", "O", "D", "B", "L"]
 # FDI numbers: 11-48 permanent, 51-85 primary.
 TEETH = [q * 10 + n for q in (1, 2, 3, 4) for n in range(1, 9)] + [q * 10 + n for q in (5, 6, 7, 8) for n in range(1, 6)]
 PLAN_ITEM_STATUSES = ["planned", "in_progress", "done", "dropped"]
+# What the visit itself costs when a plan's session is booked (Saged, 2026-11-16): nothing (the procedure done in it is
+# charged on its own), the clinic's follow-up price, or the full consultation.
+VISIT_PRICES = ["none", "follow_up", "consultation"]
 
 
 def _clinic():
@@ -349,6 +352,8 @@ class PlanItem(models.Model):
     visit = _ref("scheduling.Appointment", null=True)  # the visit that suggested it
     appointment = _ref("scheduling.Appointment", null=True)  # booked for it
     snoozed_until = models.DateField(null=True, blank=True)  # the desk's "later": hidden until this day
+    # The visit fee when this session is booked (VISIT_PRICES). Items from before 2026-11-16 are "none".
+    visit_price = models.CharField(max_length=12, default="none", db_default="none")
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -365,6 +370,7 @@ class PlanItem(models.Model):
             _fk("visit", "scheduling.Appointment", "plan_item_visit_fk"),
             _fk("appointment", "scheduling.Appointment", "plan_item_booked_fk"),
             models.CheckConstraint(condition=Q(procedure__isnull=False) | ~Q(label=""), name="plan_item_has_what"),
+            models.CheckConstraint(condition=Q(visit_price__in=VISIT_PRICES), name="plan_item_visit_price_valid"),
         ]
         # Unfinished treatment (F6): only the open items, so the list reads them, not every plan.
         # Follow-ups to book: the desk's list reads the planned items with a suggested day, by day.

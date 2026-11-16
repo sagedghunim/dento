@@ -106,6 +106,8 @@ def clinic_config(ctx, today):
         "today": today.isoformat(), "last_day": (today + dt.timedelta(days=365)).isoformat(),
         "digits": effective["digits"], "print_language": effective["print_language"],
         "perms": _perms(ctx),
+        # The booking deposit to offer in Book, ticked by default (Saged, 2026-11-16); 0 when off or not allowed.
+        "deposit": clinic_settings.deposit(ctx.clinic) if ctx.can("billing.collect") else 0,
     }
 
 

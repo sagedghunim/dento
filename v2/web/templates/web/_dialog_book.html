@@ -73,6 +73,13 @@
       {% if config.perms.view_patients %}<label class="check"><input type="checkbox" name="print"> {% translate "Print the receipt" %}</label>{% endif %}
       {% endif %}
     </div>
+    {% if config.deposit %}
+    {# The clinic's booking deposit (Saged, 2026-11-16): ticked by default, the desk can untick it. Not for "here now". #}
+    <div class="subsection" data-deposit-box>
+      <label class="check"><input type="checkbox" name="deposit" checked> <span data-deposit-label></span></label>
+      <fieldset class="group" data-deposit-methods><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="deposit_method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
+    </div>
+    {% endif %}
     <p class="fee-line" data-fee role="status"></p>
   </div>
   <footer class="dialog-foot">
