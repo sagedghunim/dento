@@ -1,5 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": { "api/index.py": { "maxDuration": 30, "excludeFiles": "{.venv,web/browser_tests,**/__pycache__,**/test_*.py,**/tests.py}/**" } },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30,
+      "excludeFiles": "{.venv,web/browser_tests,**/__pycache__,**/test_*.py,**/tests.py}/**"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "regions": [
+    "cle1"
+  ]
 }

@@ -4,3 +4,5 @@ procrastinate==3.10.0
 polib==1.2.0
 segno==1.6.6
 whitenoise==6.9.0
+cryptography==46.0.3
+tzdata==2026.6
