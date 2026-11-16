@@ -5,5 +5,5 @@ set -e
 python manage.py migrate_all
 python manage.py compile_translations
 python manage.py collectstatic --noinput -v 0
-python manage.py seed_demo
+DJANGO_DEBUG=1 python manage.py seed_demo  # demo data only: the command refuses to run without DEBUG
 exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 60 --access-logfile -
