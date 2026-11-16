@@ -241,10 +241,21 @@ if (adder) {
     record(body);
   });
 
-  const top = new Set(data.top || []);
+  // The search (Saged, 2026-11-17): from two letters, Arabic or English, either name or the section's name
+  // ("تج" finds the cosmetic ones). Spelling variants match (أ إ آ ا, ة ه, ى ي); a word that starts with what was
+  // typed comes first. The quick chips above are searched too.
+  const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  const haystack = new Map([...catalogue.values()].map((p) => [p.id, plain(`${p.name} ${p.find || ""}`)]));
   search.addEventListener("input", () => {
-    const q = search.value.trim().toLocaleLowerCase();
-    const found = q ? [...catalogue.values()].filter((p) => !top.has(p.id) && p.name.toLocaleLowerCase().includes(q)).slice(0, 8) : [];
+    const q = plain(search.value.trim());
+    const rank = (p) => {
+      const text = haystack.get(p.id);
+      if (!text.includes(q)) return -1;
+      return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
+    };
+    const found = q.length >= 2 ? [...catalogue.values()].map((p) => [rank(p), p]).filter(([r]) => r >= 0)
+      .sort((a, b) => a[0] - b[0]).slice(0, 12).map(([, p]) => p) : [];
     results.replaceChildren(...found.map((p) => {
       const b = el("button", "chip-btn");
       b.type = "button";
@@ -256,7 +267,7 @@ if (adder) {
       if (p.price != null) b.append(" ", el("span", "count num", moneyText(p.price)));
       return b;
     }));
-    if (q && !found.length) results.replaceChildren(el("span", "muted", t("proc_none")));
+    if (q.length >= 2 && !found.length) results.replaceChildren(el("span", "muted", t("proc_none")));
   });
   search.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;

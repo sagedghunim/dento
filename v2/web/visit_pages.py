@@ -93,10 +93,27 @@ def _discount_types(ctx, appointment_id):
              "suggested": bool(suggested and suggested["id"] == d["id"])} for d in found]
 
 
+# Procedure search (Saged, 2026-11-17): typing the start of a section's name finds all its procedures.
+CATEGORY_WORDS = {
+    "assessment": ("تقييم", "assessment"), "casting": ("جبس", "casting"), "consultation": ("استشارة", "consultation"),
+    "cosmetic": ("تجميل", "cosmetic"), "diagnosis": ("كشف", "تشخيص", "diagnosis"), "endodontics": ("عصب", "endodontics"),
+    "endoscopy": ("مناظير", "endoscopy"), "grooming": ("تنظيف", "grooming"), "imaging": ("أشعة", "imaging"),
+    "implants": ("زراعة", "implants"), "injectables": ("حقن", "injectables"), "injections": ("حقن", "injections"),
+    "laser": ("ليزر", "laser"), "orthodontics": ("تقويم", "orthodontics"), "packages": ("باقات", "packages"),
+    "pediatric": ("أطفال", "pediatric"), "periodontics": ("لثة", "periodontics"), "preventive": ("وقاية", "preventive"),
+    "procedures": ("إجراءات", "procedures"), "prosthodontics": ("تركيبات", "prosthodontics"),
+    "radiology": ("أشعة", "radiology", "x-ray"), "reports": ("تقارير", "reports"), "restorative": ("حشو", "restorative"),
+    "sessions": ("جلسات", "sessions"), "surgery": ("جراحة", "خلع", "surgery"), "tests": ("تحاليل", "tests"),
+    "treatment": ("علاج", "treatment"), "ultrasound": ("سونار", "ultrasound"), "vaccination": ("تطعيم", "vaccination"),
+}
+
+
 def _procedures(ctx, section_id):
     from clinical.selectors import procedures
 
     return [{"id": p["id"], "name": pick(p["name_ar"], p["name_en"]), "price": p["price"], "unit": p["unit"],
+             # What the search matches: both names and the section's words in both languages (Saged, 2026-11-17).
+             "find": " ".join(filter(None, (p["name_ar"], p["name_en"], *CATEGORY_WORDS.get(p["category"], ())))),
              # Its follow-up recipe, offered once it is recorded: the days and each session's name.
              "follow_up": [{"days": step["days"], "label": pick(step["label"], step.get("label_en", ""))}
                            for step in p["follow_up"] or []]}
