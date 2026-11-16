@@ -254,6 +254,46 @@
   </footer>
 </form>
 </dialog>
+
+<section class="card" aria-labelledby="discounts-title" data-discount-card>
+  <div class="card-head">
+    <div>
+      <h2 id="discounts-title">{% translate "Discount types" %}</h2>
+      <p class="card-sub">{% translate "The discounts the clinic gives. The doctor suggests one in the visit, and the front desk applies it in one tap." %}</p>
+    </div>
+    <button type="button" class="btn" data-discount-add>{% translate "Add a discount" %}</button>
+  </div>
+  <ul class="proc-list recipe-list" data-discount-list></ul>
+  <p class="muted" data-discount-status role="status"></p>
+</section>
+
+<dialog class="sheet small" id="discount-dialog" aria-labelledby="discount-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="discount-title" data-discount-heading>{% translate "Add a discount" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Name" %}<input name="name" maxlength="60" dir="auto" autocomplete="off" data-autofocus><span class="hint">{% translate "It is printed on the receipt." %}</span></label>
+    <fieldset class="group">
+      <legend>{% translate "How much" %}</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="kind" value="percent" checked><span>{% translate "A percent of the bill" %}</span></label>
+        <label class="chip"><input type="radio" name="kind" value="fixed"><span>{% translate "A fixed amount" %}</span></label>
+      </div>
+    </fieldset>
+    <label class="field"><span data-value-label>{% translate "Percent (1 to 100)" %}</span><input name="value" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    <label class="check"><input type="checkbox" name="desk_can_apply" checked> {% translate "The front desk can apply it" %}</label>
+    <p class="muted">{% translate "Without the tick, only someone who can give discounts applies it." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn danger" data-run data-discount-stop hidden>{% translate "Stop using it" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% if can_settings %}<script type="module" src="{% static 'js/recipes.js' %}"></script>{% endif %}{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% if can_settings %}<script type="module" src="{% static 'js/recipes.js' %}"></script><script type="module" src="{% static 'js/discounts.js' %}"></script>{% endif %}{% endblock %}

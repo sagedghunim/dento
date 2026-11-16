@@ -13,6 +13,36 @@ from core.constraints import CompositeForeignKey
 
 METHODS = ["cash", "card", "transfer", "wallet", "instapay", "other"]  # transfer: design E3
 LINE_KINDS = ["service", "procedure", "material", "package", "other"]  # package: F7
+DISCOUNT_KINDS = ["percent", "fixed"]
+
+
+class DiscountType(models.Model):
+    """A discount the clinic gives (Saged, 2026-11-13): a percent of the invoice or a fixed amount.
+
+    The doctor suggests one on a visit and the desk applies it in one tap. A stopped type stays for the invoices
+    that carry it.
+    """
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    name = models.CharField(max_length=60)
+    kind = models.CharField(max_length=7)
+    value = models.BigIntegerField()  # percent: 1 to 100; fixed: piastres
+    desk_can_apply = models.BooleanField(default=True)  # billing.collect is enough; otherwise billing.discount
+    is_active = models.BooleanField(default=True)
+    sort = models.SmallIntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "billing_discount_type"
+        constraints = [
+            # Also the index every read uses: a clinic has a dozen active types and few stopped ones.
+            models.UniqueConstraint(fields=["clinic", "id"], name="discount_type_clinic_id_uniq"),
+            models.UniqueConstraint(fields=["clinic", "name"], condition=Q(is_active=True),
+                                    name="discount_type_active_name_uniq"),
+            models.CheckConstraint(condition=Q(kind="percent", value__gte=1, value__lte=100)
+                                   | Q(kind="fixed", value__gte=1), name="discount_type_value_valid"),
+        ]
 
 
 class Invoice(models.Model):
@@ -32,6 +62,12 @@ class Invoice(models.Model):
     discount = models.BigIntegerField(default=0)
     total = models.BigIntegerField(default=0)
     paid = models.BigIntegerField(default=0)
+    # The discount type applied, with its name and percent as they were then (the receipt prints the name; a percent
+    # is computed again whenever a line is added or removed). All empty for a free-typed discount or none.
+    discount_type = models.ForeignKey(DiscountType, null=True, blank=True, on_delete=models.PROTECT,
+                                      db_constraint=False, db_index=False, related_name="+")
+    discount_name = models.CharField(max_length=60, blank=True, db_default="")
+    discount_percent = models.SmallIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     created_by_id = models.BigIntegerField(null=True, blank=True)
     voided_at = models.DateTimeField(null=True, blank=True)
@@ -55,6 +91,18 @@ class Invoice(models.Model):
                                 name="invoice_patient_fk"),
             CompositeForeignKey(fields=["clinic", "appointment"], to="scheduling.Appointment",
                                 to_fields=["clinic", "id"], name="invoice_appointment_fk"),
+            CompositeForeignKey(fields=["clinic", "discount_type"], to="billing.DiscountType",
+                                to_fields=["clinic", "id"], name="invoice_discount_type_fk"),
+            models.CheckConstraint(condition=Q(discount_type__isnull=False)
+                                   | Q(discount_name="", discount_percent__isnull=True),
+                                   name="invoice_discount_type_valid"),
+            # A percent discount is always that percent of the subtotal, half a piastre rounding up: a change of
+            # the lines that forgot to compute it again is refused (billing.services.percent_of is the same sum).
+            models.CheckConstraint(
+                condition=Q(discount_percent__isnull=True)
+                | Q(discount_percent__gte=1, discount_percent__lte=100,
+                    discount=(F("subtotal") * F("discount_percent") + 50) / 100),
+                name="invoice_discount_percent_valid"),
         ]
         indexes = [
             models.Index("clinic", "patient", F("created_at").desc(), F("id").desc(), name="invoice_patient_hist"),

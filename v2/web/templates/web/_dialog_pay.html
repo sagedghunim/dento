@@ -40,15 +40,18 @@
       </div>
     </section>
 
-    {% if config.perms.discount %}
-    <section class="subsection" aria-labelledby="pay-discount-title">
+    {# The clinic's discount types: one tap applies, a tap on the applied one removes it. The typed amount only with billing.discount. #}
+    <section class="subsection" data-discount-section hidden aria-labelledby="pay-discount-title">
       <h3 id="pay-discount-title">{% translate "Discount" %}</h3>
+      <p class="suggested-note" data-suggested hidden></p>
+      <div class="chips" data-discount-types role="group" aria-labelledby="pay-discount-title"></div>
+      {% if config.perms.discount %}
       <div class="form-row">
         <label class="field">{% translate "Discount (EGP)" %}<input name="discount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
         <button type="button" class="btn ghost" data-run="discount">{% translate "Save the discount" %}</button>
       </div>
+      {% endif %}
     </section>
-    {% endif %}
 
     <section class="subsection" data-payments-section hidden aria-labelledby="pay-payments-title">
       <h3 id="pay-payments-title">{% translate "Payments" %}</h3>

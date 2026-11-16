@@ -287,6 +287,15 @@ button.chip-btn {
 }
 button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-color: var(--teal); color: var(--teal-dark); }
 button.chip-btn .count { color: var(--muted); font-weight: 600; }
+button.chip-btn:disabled { opacity: .45; cursor: not-allowed; }
+/* The discount type the doctor suggested, until it is applied. */
+button.chip-btn.suggested:not([aria-pressed="true"]) { background: var(--amber-tint); border-color: var(--amber); }
+.suggested-note { margin: 0 0 8px; font-weight: 700; }
+.suggest-discount { margin-block-start: 12px; }
+.suggest-discount > .muted { margin: 0 0 8px; }
+[data-discount-types]:empty { display: none; }
+[data-discount-list] li.stopped strong { color: var(--muted); font-weight: 600; }
+[data-discount-types] + .form-row { margin-block-start: 10px; }
 
 /* ---------- toasts ---------- */
 .toast, .alert-toast {

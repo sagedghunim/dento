@@ -15,9 +15,11 @@ from core.errors import ApiError
 INVOICE_SQL = """
     SELECT i.id, i.number, i.status, i.subtotal, i.discount, i.total, i.paid, i.created_at, i.voided_at,
            i.patient_id, p.full_name, p.phone, p.file_no, i.appointment_id, a.day, a.queue_no, a.doctor_id, a.service_id,
-           m.display_name, m.title
+           m.display_name, m.title, i.discount_type_id, i.discount_name, i.discount_percent,
+           d.desk_can_apply AS discount_desk
       FROM "billing_invoice" i
       JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
+      LEFT JOIN "billing_discount_type" d ON d.clinic_id = i.clinic_id AND d.id = i.discount_type_id
       LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
       LEFT JOIN "clinics_membership" m ON m.clinic_id = a.clinic_id AND m.id = a.doctor_id
      WHERE i.clinic_id = %s AND i.id = %s"""
@@ -59,6 +61,7 @@ def invoice(ctx, invoice_id):
                            'WHERE clinic_id = %s AND invoice_id = %s ORDER BY id',
                       [ctx.clinic_id, invoice_id])
     # Each line says whether this person may remove it (design 5.3), so the screen offers "Remove" only then.
+    from .discounts import may_change
     from .services import may_remove_line
 
     today = business_day(ctx.clinic)
@@ -79,6 +82,11 @@ def invoice(ctx, invoice_id):
         if i["appointment_id"] else None,
         "lines": lines,
         "payments": [payment_payload(clinic, p) for p in payments],
+        # The discount type the invoice carries, as it was when applied (the receipt prints the name), and whether
+        # this person may replace or remove the present discount (the server checks again).
+        "discount_type": {"id": i["discount_type_id"], "name": i["discount_name"], "percent": i["discount_percent"]}
+        if i["discount_type_id"] else None,
+        "discount_changeable": i["status"] == "open" and may_change(ctx, i, i["discount_desk"]),
     })
     return body
 

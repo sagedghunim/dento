@@ -55,6 +55,11 @@ export function moneyText(piastres) {
   return (holder ? holder.textContent : "EGP %(amount)s").replace("%(amount)s", amountText(piastres));
 }
 
+// A whole percent with the sign that goes with the page's digits: "10%" or "١٠٪".
+export function percentText(value) {
+  return localDigits(value) + (arabicDigits() ? "٪" : "%");
+}
+
 // The amount as typed into a field: plain digits, no separators ("1250.5").
 export function amountInput(piastres) {
   const p = Math.max(0, Math.round(Number(piastres) || 0));

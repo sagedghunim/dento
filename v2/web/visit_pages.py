@@ -22,6 +22,7 @@ from core.days import business_day, local_iso
 from core.errors import ApiError
 from core.i18n import pick
 
+from . import format as fmt
 from . import teeth
 from .http import clinic_page, fragment
 
@@ -73,6 +74,19 @@ def _last_visit(ctx, patient_id, appointment_id):
     text = note(ctx, found[0])
     return {"day": found[1], "service": pick(found[2], found[3]), "procedures": done,
             "note": (text["notes"] or text["complaint"] or text["diagnosis"]) if text else ""}
+
+
+def _discount_types(ctx, appointment_id):
+    """The clinic's active discount types as the doctor's chips, the one suggested for this visit marked (two reads;
+    one when the clinic has none)."""
+    from billing import discounts
+
+    found = discounts.types(ctx)
+    if not found:
+        return []
+    suggested = discounts.suggested(ctx, appointment_id)
+    return [{"id": d["id"], "name": d["name"], "label": fmt.discount_label(d),
+             "suggested": bool(suggested and suggested["id"] == d["id"])} for d in found]
 
 
 def _procedures(ctx, section_id):
@@ -130,6 +144,7 @@ def visit_page(request, ctx, appointment_id):
         "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms,
         "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
         "dental": perms["chart"] and teeth.is_dental(ctx, visit["section_id"]),
+        "discount_types": _discount_types(ctx, visit["id"]) if perms["record"] else [],
     })
 
 

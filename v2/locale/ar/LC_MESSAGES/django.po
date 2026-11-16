@@ -3610,3 +3610,115 @@ msgstr "الجلسة دي اتحجزت خلاص."
 
 msgid "{name}: kept in Follow-ups."
 msgstr "{name}: موجود في المتابعات."
+
+msgid "This discount wasn't found."
+msgstr "الخصم ده مش موجود."
+
+msgid "This discount isn't used any more."
+msgstr "الخصم ده اتوقف ومبقاش مستخدم."
+
+msgid "A percent discount is from 1 to 100."
+msgstr "نسبة الخصم من 1 لـ 100."
+
+msgid "A clinic has up to 12 discount types. Stop one first."
+msgstr "العيادة ليها 12 نوع خصم بالكتير. وقّف واحد الأول."
+
+msgid "This discount is already in the list."
+msgstr "الخصم ده موجود في القائمة."
+
+msgid "Suggest a discount on a visit that has arrived."
+msgstr "اقترح الخصم بعد ما المريض يوصل."
+
+msgid "Suggest a discount"
+msgstr "اقترح خصم"
+
+msgid "The desk applies it when the patient pays."
+msgstr "الاستقبال بيطبّقه وقت الدفع."
+
+msgid "Suggested to the desk: {name}"
+msgstr "اتبعت للاستقبال: {name}"
+
+msgid "Suggestion removed"
+msgstr "اتشال الاقتراح"
+
+msgid "Discount applied: {name}"
+msgstr "اتطبّق الخصم: {name}"
+
+msgid "Discount removed"
+msgstr "اتشال الخصم"
+
+msgid "The doctor suggested: {name}"
+msgstr "الدكتور اقترح: {name}"
+
+msgid "Discount types"
+msgstr "أنواع الخصم"
+
+msgid ""
+"The discounts the clinic gives. The doctor suggests one in the visit, and "
+"the front desk applies it in one tap."
+msgstr ""
+"الخصومات اللي العيادة بتديها. الدكتور بيقترح واحد في الكشف، والاستقبال "
+"بيطبّقه بضغطة واحدة."
+
+msgid "Add a discount"
+msgstr "إضافة خصم"
+
+msgid "Edit the discount"
+msgstr "تعديل الخصم"
+
+msgid "It is printed on the receipt."
+msgstr "بيتطبع في الإيصال."
+
+msgid "How much"
+msgstr "قيمة الخصم"
+
+msgid "A percent of the bill"
+msgstr "نسبة من الفاتورة"
+
+msgid "A fixed amount"
+msgstr "مبلغ ثابت"
+
+msgid "Percent (1 to 100)"
+msgstr "النسبة (من 1 لـ 100)"
+
+msgid "The front desk can apply it"
+msgstr "الاستقبال يقدر يطبّقه"
+
+msgid "Without the tick, only someone who can give discounts applies it."
+msgstr "من غير العلامة، اللي معاه صلاحية الخصم بس هو اللي يطبّقه."
+
+msgid "Stop using it"
+msgstr "وقّف استخدامه"
+
+msgid "No discount types yet."
+msgstr "لسه مفيش أنواع خصم."
+
+msgid "The front desk applies it"
+msgstr "الاستقبال بيطبّقه"
+
+msgid "Needs the discount permission"
+msgstr "محتاج صلاحية الخصم"
+
+msgid "Enter a name, and a percent from 1 to 100 or an amount."
+msgstr "اكتب الاسم، ونسبة من 1 لـ 100 أو مبلغ."
+
+msgid "Discount saved: {name}"
+msgstr "اتحفظ الخصم: {name}"
+
+msgid "Discount stopped: {name}"
+msgstr "اتوقف الخصم: {name}"
+
+msgid "Move up"
+msgstr "طلّعه لفوق"
+
+msgid "Moved up: {name}"
+msgstr "اتنقل لفوق: {name}"
+
+msgid "Use it again"
+msgstr "استخدمه تاني"
+
+msgid "Stopped"
+msgstr "متوقف"
+
+msgid "The discounts changed meanwhile. They were loaded again."
+msgstr "الخصومات اتغيّرت في نفس الوقت، واتحمّلت تاني."

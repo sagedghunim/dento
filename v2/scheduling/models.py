@@ -71,6 +71,9 @@ class Appointment(models.Model):
     created_by_id = models.BigIntegerField(null=True, blank=True)
     updated_at = models.DateTimeField(default=timezone.now)  # never indexed
     updated_by_id = models.BigIntegerField(null=True, blank=True)
+    # The discount the doctor suggests for this visit (Saged, 2026-11-13). It changes no money: the desk applies it.
+    suggested_discount_type = models.ForeignKey("billing.DiscountType", null=True, blank=True, on_delete=models.PROTECT,
+                                                db_constraint=False, db_index=False, related_name="+")
     # The slot index reads only this column, so status changes stay HOT updates (design 4.4).
     holds_slot = models.GeneratedField(
         expression=Q(starts_at__isnull=False, is_extra=False) & ~Q(status__in=["cancelled", "no_show"]),
@@ -130,6 +133,8 @@ class Appointment(models.Model):
                                 name="appointment_service_fk"),
             CompositeForeignKey(fields=["clinic", "section"], to="clinics.Section", to_fields=["clinic", "id"],
                                 name="appointment_section_fk"),
+            CompositeForeignKey(fields=["clinic", "suggested_discount_type"], to="billing.DiscountType",
+                                to_fields=["clinic", "id"], name="appointment_suggested_discount_fk"),
         ]
         indexes = [
             models.Index("clinic", "patient", F("day").desc(), F("id").desc(), name="appointment_patient_hist"),

@@ -44,7 +44,7 @@
     </table>
     <dl class="totals">
       {% if r.discount %}<div><dt>{% translate "Subtotal" %}</dt><dd>{{ r.subtotal|money }}</dd></div>
-      <div><dt>{% translate "Discount" %}</dt><dd>{{ r.discount|money }}</dd></div>{% endif %}
+      <div><dt>{% translate "Discount" %}{% if r.discount_type %} (<bdi dir="auto">{{ r.discount_type.name }}</bdi>){% endif %}</dt><dd>{{ r.discount|money }}</dd></div>{% endif %}
       <div class="total"><dt>{% translate "Total" %}</dt><dd>{{ r.total|money }}</dd></div>
       <div><dt>{% translate "Paid" %}</dt><dd>{{ r.paid|money }}</dd></div>
       {% if r.due %}<div class="due"><dt>{% translate "Owed" %}</dt><dd>{{ r.due|money }}</dd></div>{% endif %}

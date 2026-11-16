@@ -62,6 +62,16 @@ def money_plain(piastres):
     return _("EGP %(amount)s") % {"amount": amount_text(piastres)}
 
 
+def percent(value):
+    """A whole percent in the clinic's digits, with the sign that goes with them: "10%" or "١٠٪"."""
+    return digits(value) + ("٪" if _digits.get() == "arab" else "%")
+
+
+def discount_label(kind):
+    """What a discount type takes off, for its chip: "10%" or "50 EGP"."""
+    return percent(kind["value"]) if kind["kind"] == "percent" else money_plain(kind["value"])
+
+
 def phone(value):
     """Egyptian mobiles in groups, 010 1234 5678; anything else as stored."""
     value = value or ""

@@ -4,10 +4,11 @@ from audit.models import AuditAccess
 from audit.services import record_access
 from core import validate
 from core.api import Result, api
+from core.errors import ApiError
 from core.numbers import parse_int, parse_money
 
-from . import selectors, services
-from .models import LINE_KINDS, METHODS
+from . import discounts, selectors, services
+from .models import DISCOUNT_KINDS, LINE_KINDS, METHODS
 
 ADDABLE_KINDS = [k for k in LINE_KINDS if k != "package"]  # a package line comes only from selling one (F7)
 
@@ -196,3 +197,102 @@ def patient_packages_view(request, ctx, data, patient_id):
     exists(ctx, patient_id)
     record_access(ctx, patient_id, AuditAccess.Action.HISTORY)
     return {"items": selectors.patient_packages(ctx, patient_id)}
+
+
+# --- Discount types (Saged, 2026-11-13) --------------------------------------------------------------------------
+
+
+def _type_id(value):
+    return validate.path_id(value, discounts.not_found())
+
+
+def _type_values(data, partial):
+    """name, kind, value (a whole percent, or piastres), desk_can_apply; a PATCH also is_active and sort.
+
+    The value's range depends on the kind, which a PATCH may leave as it is: the service checks the pair."""
+    values = {}
+    if not partial or "name" in data:
+        values["name"] = validate.text(data, "name", 60)
+    if not partial or "kind" in data:
+        values["kind"] = validate.choice(data, "kind", DISCOUNT_KINDS)
+    if not partial or "value" in data:
+        values["value"] = parse_int(data.get("value"), "value", 1, discounts.MAX_FIXED)
+    if "desk_can_apply" in data:
+        values["desk_can_apply"] = validate.boolean(data, "desk_can_apply")
+    if partial and "is_active" in data:
+        values["is_active"] = validate.boolean(data, "is_active")
+    if partial and "sort" in data:
+        values["sort"] = parse_int(data.get("sort"), "sort", 0, 32000)
+    return values
+
+
+@api("GET", perm="settings.manage")
+def discount_types_view(request, ctx, data):
+    """The clinic's discount types for Team & settings: the active ones, or all of them with ?all=1."""
+    return {"items": discounts.types(ctx, include_inactive=request.GET.get("all") == "1")}
+
+
+def _replay_type(ctx, stored):
+    return {"discount_type": discounts.get(ctx, stored["target_id"])}
+
+
+@api("POST", perm="settings.manage", replay=_replay_type)
+def create_discount_type_view(request, ctx, data):
+    """POST {name, kind: percent | fixed, value, desk_can_apply?}."""
+    values = _type_values(data, partial=False)
+    created = discounts.create(ctx, values["name"], values["kind"], values["value"], values.get("desk_can_apply", True))
+    return Result({"discount_type": created}, status=201, target_type="discount_type", target_id=created["id"])
+
+
+@api("PATCH", perm="settings.manage", replay=_replay_type)
+def update_discount_type_view(request, ctx, data, type_id):
+    """PATCH {name?, kind?, value?, desk_can_apply?, is_active?, sort?}: absolute values. is_active false stops it."""
+    type_id = _type_id(type_id)
+    updated = discounts.update(ctx, type_id, _type_values(data, partial=True))
+    return Result({"discount_type": updated}, target_type="discount_type", target_id=type_id)
+
+
+@api("PUT", perm="settings.manage")
+def order_discount_types_view(request, ctx, data):
+    """PUT {ids: [...]}: the active types in their new order (absolute, so a resend is harmless)."""
+    ids = data.get("ids")
+    if not isinstance(ids, list) or len(ids) > discounts.MAX_ACTIVE:
+        raise ApiError("invalid", "ids must be a list", fields={"ids": "list"})
+    return {"items": discounts.reorder(ctx, [validate.ident(i, "ids") for i in ids])}
+
+
+@api("GET", perm="billing.collect")
+def visit_discount_types_view(request, ctx, data, appointment_id):
+    """What the Pay dialog offers for this visit: the active types (each with `allowed` for this person) and the
+    type the doctor suggested. No patient data."""
+    return discounts.for_visit(ctx, validate.path_id(appointment_id, services.not_found("appointment")))
+
+
+@api("PUT", perm="billing.collect", replay=_replay_invoice)
+def discount_type_view(request, ctx, data, invoice_id):
+    """PUT {type_id: id | null, expected_discount}: apply this type to the invoice; null removes the type.
+
+    A type the desk may not apply also needs billing.discount (checked in the service, as a price not from the
+    list is)."""
+    invoice_id = _invoice_id(invoice_id)
+    if "type_id" not in data:
+        raise ApiError("invalid", "type_id is required (null removes the discount type)", fields={"type_id": "required"})
+    type_id = validate.ident(data["type_id"], "type_id") if data["type_id"] is not None else None
+    _, version = discounts.apply(ctx, invoice_id, type_id, parse_money(data.get("expected_discount"), "expected_discount"))
+    return Result(_invoice_answer(ctx, invoice_id, next(iter(version.values())) if version else None),
+                  target_type="invoice", target_id=invoice_id)
+
+
+def _replay_suggestion(ctx, stored):
+    return {"suggested": discounts.suggested(ctx, stored["target_id"])}
+
+
+@api("PUT", perm="procedures.record", replay=_replay_suggestion)
+def suggest_discount_view(request, ctx, data, appointment_id):
+    """PUT {type_id: id | null}: the discount the doctor suggests for this visit; null clears it. No money changes."""
+    appointment_id = validate.path_id(appointment_id, services.not_found("appointment"))
+    if "type_id" not in data:
+        raise ApiError("invalid", "type_id is required (null clears the suggestion)", fields={"type_id": "required"})
+    type_id = validate.ident(data["type_id"], "type_id") if data["type_id"] is not None else None
+    return Result({"suggested": discounts.suggest(ctx, appointment_id, type_id)}, target_type="appointment",
+                  target_id=appointment_id)

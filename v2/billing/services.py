@@ -6,6 +6,10 @@ SHARE, or opened by a cash entry when none is open), then doctor-days, then mone
 clinic-days. Recording a procedure takes the package before the invoice (7a); its appointment lock
 keeps that from cycling. Invoice endpoints read the invoice without a lock first only to learn its
 appointment, which never changes.
+
+Discount types (billing.discounts) add no lock to this order: applying one holds the appointment and the invoice
+and reads the type without a lock (the invoice keeps its own copy of the name and the percent); managing them takes
+the clinic row (6) and then the type's row, and nothing else.
 """
 
 from django.db import IntegrityError, transaction
@@ -24,12 +28,32 @@ APPOINTMENT_LOCK_SQL = """
       FROM "scheduling_appointment" a
       JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
      WHERE a.clinic_id = %s AND a.id = %s FOR NO KEY UPDATE OF a"""
-INVOICE_COLUMNS = "id, number, status, patient_id, appointment_id, subtotal, discount, total, paid"
+INVOICE_COLUMNS = ("id, number, status, patient_id, appointment_id, subtotal, discount, total, paid, discount_type_id, "
+                   "discount_name, discount_percent")
+INVOICE_FIELDS = tuple(name.strip() for name in INVOICE_COLUMNS.split(","))
 
 
 def _invoice(values):
-    return dict(zip(("id", "number", "status", "patient_id", "appointment_id", "subtotal", "discount", "total", "paid"),
-                    values))
+    return dict(zip(INVOICE_FIELDS, values))
+
+
+def percent_of(subtotal, percent):
+    """A percent discount in whole piastres, half a piastre rounding up. The invoice table checks the same sum
+    (invoice_discount_percent_valid) and move_subtotal computes it in SQL."""
+    return (subtotal * percent + 50) // 100
+
+
+def move_subtotal(ctx, invoice_id, amount):
+    """Under the invoice's lock: add `amount` (negative for a removed line) to the subtotal. An invoice that carries
+    a percent discount type gets its discount computed again in the same statement; any other discount stays.
+    Returns the invoice as it now is."""
+    discount = ("CASE WHEN discount_percent IS NULL THEN discount "
+                "ELSE ((subtotal + %(amount)s) * discount_percent + 50) / 100 END")
+    return _invoice(sql.row(ctx, f"""
+        UPDATE "billing_invoice"
+           SET subtotal = subtotal + %(amount)s, discount = {discount}, total = subtotal + %(amount)s - {discount}
+         WHERE clinic_id = %(clinic)s AND id = %(invoice)s RETURNING {INVOICE_COLUMNS}""",
+                            {"amount": amount, "clinic": ctx.clinic_id, "invoice": invoice_id}))
 
 
 def not_found(what):
@@ -284,8 +308,7 @@ def add_line(ctx, invoice_id, kind, service_id, description, qty, unit_price):
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
         ctx.clinic_id, invoice["id"], kind, service_id, description[:200], qty, unit_price, amount, from_list,
         ctx.membership_id, timezone.now()])[0]
-    sql.run(ctx, 'UPDATE "billing_invoice" SET subtotal = subtotal + %s, total = total + %s WHERE clinic_id = %s AND id = %s',
-            [amount, amount, ctx.clinic_id, invoice["id"]])
+    move_subtotal(ctx, invoice["id"], amount)
     version = Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
     return line_id, version
 
@@ -311,7 +334,10 @@ def may_remove_line(ctx, line, visit_service_id, today=None):
 
 
 def remove_line(ctx, invoice_id, line_id):
-    """Only while paid stays within the new total, and only for who may_remove_line allows. Audited."""
+    """Only while paid stays within the new total, and only for who may_remove_line allows. Audited.
+
+    A percent discount type is computed again on what is left. Any other discount must fit what is left first.
+    """
     invoice, appointment = _lock_invoice(ctx, invoice_id)
     _require_open(invoice)
     line = sql.row(ctx, 'SELECT id, kind, service_id, description, qty, unit_price, amount, from_list, created_by_id, '
@@ -324,20 +350,24 @@ def remove_line(ctx, invoice_id, line_id):
                            appointment["service_id"] if appointment else None):
         raise ApiError("forbidden", _("You don't have permission to do this."), 403)
     amount = line[6]
-    if invoice["paid"] > invoice["total"] - amount:
-        raise _paid_exceeds()
-    if invoice["discount"] > invoice["subtotal"] - amount:
+    left = invoice["subtotal"] - amount
+    percent = invoice["discount_percent"]
+    # The discount is named first: with it larger than what is left, "refund first" would send the desk the wrong way.
+    if percent is None and invoice["discount"] > left:
         raise ApiError("discount_exceeds", _("Lower the discount before removing this line."), 409)
+    discount = invoice["discount"] if percent is None else percent_of(left, percent)
+    if invoice["paid"] > left - discount:
+        raise _paid_exceeds()
     if line[1] == "package":
         void_packages(ctx, invoice["id"], line_id)  # F7: refused once a session was used
     elif line[1] == "procedure" and appointment:
         _return_package_session(ctx, appointment["id"], line_id)
-    sql.run(ctx, 'UPDATE "billing_invoice" SET subtotal = subtotal - %s, total = total - %s WHERE clinic_id = %s AND id = %s',
-            [amount, amount, ctx.clinic_id, invoice["id"]])
+    move_subtotal(ctx, invoice["id"], -amount)
     sql.run(ctx, 'DELETE FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, line_id])
     record_change(ctx, "invoice.line_remove", "invoice", invoice["id"],
                   before={"line": line[0], "kind": line[1], "service_id": line[2], "description": line[3],
-                          "qty": line[4], "unit_price": line[5], "amount": amount, "from_list": line[7]})
+                          "qty": line[4], "unit_price": line[5], "amount": amount, "from_list": line[7]},
+                  after={"discount": discount} if percent is not None else None)
     return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
 
 
@@ -362,10 +392,13 @@ def _paid_exceeds():
 
 
 def set_discount(ctx, invoice_id, discount, expected):
-    """An absolute discount with the value it replaces (design 5.3). Audited."""
+    """An absolute, free-typed discount with the value it replaces (design 5.3). Audited.
+
+    It takes the place of a discount type: the invoice forgets the type, its name and its percent.
+    """
     invoice, appointment = _lock_invoice(ctx, invoice_id)
     _require_open(invoice)
-    if invoice["discount"] == discount:
+    if invoice["discount"] == discount and invoice["discount_type_id"] is None:
         return invoice, None  # already so: a harmless repeat
     if invoice["discount"] != expected:
         raise ApiError("stale", _("The discount changed meanwhile. Reload and try again."), 409,
@@ -375,13 +408,21 @@ def set_discount(ctx, invoice_id, discount, expected):
                        fields={"discount": "range"})
     if invoice["paid"] > invoice["subtotal"] - discount:
         raise _paid_exceeds()
-    updated = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET discount = %s, total = subtotal - %s '
-                                    f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
-                               [discount, discount, ctx.clinic_id, invoice["id"]]))
-    record_change(ctx, "invoice.discount", "invoice", invoice["id"], before={"discount": invoice["discount"]},
-                  after={"discount": discount})
+    updated = write_discount(ctx, invoice["id"], discount)
+    before = {"discount": invoice["discount"]}
+    if invoice["discount_type_id"] is not None:
+        before["type"] = invoice["discount_type_id"]
+    record_change(ctx, "invoice.discount", "invoice", invoice["id"], before=before, after={"discount": discount})
     version = Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
     return updated, version
+
+
+def write_discount(ctx, invoice_id, discount, type_id=None, name="", percent=None):
+    """Under the invoice's lock: the discount and the type it came from (none for a free-typed amount)."""
+    return _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET discount = %s, total = subtotal - %s, '
+                                 "discount_type_id = %s, discount_name = %s, discount_percent = %s "
+                                 f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
+                            [discount, discount, type_id, name, percent, ctx.clinic_id, invoice_id]))
 
 
 def void(ctx, invoice_id):
@@ -442,6 +483,7 @@ def add_visit_line(ctx, appointment, kind, description, qty, unit_price, from_li
     """A line on a locked visit's invoice (a recorded procedure). Creates the invoice if it has none.
 
     Lock order: the appointment (held by the caller) -> the invoice (or the invoice counter for a new one).
+    A percent discount type on the invoice is computed again with the new line (move_subtotal).
     Returns (line id, invoice). The caller bumps the visit day's version.
     """
     invoice, _created = ensure_invoice(ctx, appointment)
@@ -453,10 +495,7 @@ def add_visit_line(ctx, appointment, kind, description, qty, unit_price, from_li
         VALUES (%s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
         ctx.clinic_id, invoice["id"], kind, item_id, description[:200], qty, unit_price, amount, from_list,
         ctx.membership_id, timezone.now()])[0]
-    updated = sql.row(ctx, f'UPDATE "billing_invoice" SET subtotal = subtotal + %s, total = total + %s '
-                           f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
-                      [amount, amount, ctx.clinic_id, invoice["id"]])
-    return line_id, _invoice(updated)
+    return line_id, move_subtotal(ctx, invoice["id"], amount)
 
 
 def lock_patient_invoices(ctx, patient_id, appointment_id):

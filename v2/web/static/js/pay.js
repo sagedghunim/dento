@@ -1,8 +1,11 @@
 // The Pay dialog (design 7.3, 5.3): what is owed, the bill's items, payments, discount, refund and void,
 // each offered by permission. Every change is one request with its own key (dialogs.Submitter).
+// Discount types (Saged, 2026-11-13): the clinic's types are chips, read for this visit each time the dialog opens
+// with the one the doctor suggested. One tap applies a type, a tap on the applied one removes it; the request
+// carries the discount the screen shows, so two people at once take effect once (409 `stale` reloads the bill).
 import { errorMessage, get, isOk } from "./api.js";
 import { Submitter, clockNode, el, openDialog, receiptUrl, rememberPaper, wireClose } from "./dialogs.js";
-import { amountInput, localDigits, moneyNode, moneyText, parsePiastres, parseWhole } from "./numbers.js";
+import { amountInput, localDigits, moneyNode, moneyText, parsePiastres, parseWhole, percentText } from "./numbers.js";
 import { t } from "./strings.js";
 import { toast } from "./shell.js";
 
@@ -20,6 +23,11 @@ export function initPay({ onChanged } = {}) {
   const retry = dialog.querySelector("[data-retry]");
   let visit = null;    // {id, name, service, due, fee, status}
   let invoice = null;  // the full invoice once it exists
+  let types = [];      // the clinic's active discount types: {id, name, kind, value, allowed}
+  let suggested = null;  // {id, name}: the type the doctor suggested for this visit
+  const discountSection = dialog.querySelector("[data-discount-section]");
+  const typeChips = dialog.querySelector("[data-discount-types]");
+  const suggestedNote = dialog.querySelector("[data-suggested]");
   wireClose(dialog);
 
   const money = (p) => moneyNode(p, t("money_pattern"));
@@ -67,10 +75,8 @@ export function initPay({ onChanged } = {}) {
       lines.replaceChildren(li);
     }
     form.querySelectorAll('[data-run="add-line"]').forEach((b) => { b.closest(".form-row").hidden = !(perms.collect && open); });
-    if (field("discount")) {
-      field("discount").closest(".subsection").hidden = !open;
-      if (!field("discount").dataset.touched) field("discount").value = amountInput(invoice ? invoice.discount : 0);
-    }
+    renderTypes(open);
+    if (field("discount") && !field("discount").dataset.touched) field("discount").value = amountInput(invoice ? invoice.discount : 0);
     // Payments and refunds
     const payments = invoice ? invoice.payments : [];
     dialog.querySelector("[data-payments-section]").hidden = !payments.length;
@@ -100,6 +106,44 @@ export function initPay({ onChanged } = {}) {
     if (voidBox) voidBox.hidden = !(invoice && open && invoice.paid === 0);
     dialog.querySelectorAll("[data-print]").forEach((b) => { b.hidden = !invoice || invoice.status !== "open"; });
     status.textContent = invoice && invoice.status === "void" ? t("bill_void") : invoice ? t("bill_no", { n: localDigits(invoice.number) }) : "";
+  }
+
+  // The discount types as chips. The applied one is pressed (also when its type was stopped since, so it can
+  // still be removed); the doctor's suggestion is marked and named. A chip this person may not use is disabled
+  // and carries no data-run, so the Submitter never enables it; the server checks every tap again.
+  function renderTypes(open) {
+    const applied = invoice && invoice.discount_type;
+    const shown = types.slice();
+    if (applied && !shown.some((d) => d.id === applied.id)) {
+      shown.push({ id: applied.id, name: applied.name, kind: applied.percent ? "percent" : "fixed",
+                   value: applied.percent || invoice.discount, allowed: true });
+    }
+    const locked = Boolean(invoice && invoice.discount_changeable === false);
+    typeChips.replaceChildren(...shown.map((d) => {
+      const on = Boolean(applied && applied.id === d.id);
+      const chip = el("button", "chip-btn");
+      chip.type = "button";
+      chip.dataset.type = d.id;
+      chip.setAttribute("aria-pressed", String(on));
+      const name = el("bdi", null, d.name);
+      name.dir = "auto";
+      chip.append(name, " ", el("span", "count num", d.kind === "percent" ? percentText(d.value) : moneyText(d.value)));
+      if (suggested && suggested.id === d.id) chip.classList.add("suggested");
+      if (d.allowed && !locked) chip.dataset.run = "discount-type"; else chip.disabled = true;
+      return chip;
+    }));
+    suggestedNote.hidden = !suggested;
+    suggestedNote.textContent = suggested ? t("doctor_suggested", { name: suggested.name }) : "";
+    discountSection.hidden = !(open && visit.status !== "cancelled" && (shown.length || field("discount")));
+  }
+
+  async function loadTypes() {
+    const forVisit = visit.id;
+    const result = await get(`/api/v1/appointments/${forVisit}/discount-types`);
+    if (!visit || visit.id !== forVisit || !isOk(result)) return;  // none offered; the typed amount still works
+    types = result.data.items;
+    suggested = result.data.suggested;
+    render();
   }
 
   function methodName(code) {
@@ -167,6 +211,25 @@ export function initPay({ onChanged } = {}) {
       result = await submitter.run("PUT", `/api/v1/invoices/${invoice.id}/discount`, { discount, expected_discount: invoice.discount }, `${t("bill")} · ${visit.name}`);
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("discount").dataset.touched; delete field("amount").dataset.touched; render(); toast(t("discount_saved")); }
       if (result && result.status === 409) await load();  // someone changed it meanwhile: show the current value
+    } else if (name === "discount-type") {
+      const typeId = Number(button.dataset.type);
+      const label = button.querySelector("bdi").textContent;
+      if (!(await ensureInvoice())) { afterUnknown(); return; }
+      const remove = Boolean(invoice.discount_type && invoice.discount_type.id === typeId);
+      result = await submitter.run("PUT", `/api/v1/invoices/${invoice.id}/discount-type`,
+        { type_id: remove ? null : typeId, expected_discount: invoice.discount }, [t("bill"), visit.name, label].join(" · "));
+      if (result && isOk(result)) {
+        invoice = result.data.invoice;
+        if (field("discount")) delete field("discount").dataset.touched;
+        delete field("amount").dataset.touched;
+        render();
+        toast(remove ? t("discount_removed") : t("discount_applied", { name: label }));
+      }
+      if (result && [403, 404, 409].includes(result.status)) {  // changed meanwhile, or no longer offered: show it as it is
+        const message = errorMessage(result, t("failed"));
+        await Promise.all([load(), loadTypes()]);
+        submitter.say(message);
+      }
     } else if (name === "refund") {
       const option = field("refund_of").selectedOptions[0];
       const amount = parsePiastres(field("refund_amount").value);
@@ -211,6 +274,8 @@ export function initPay({ onChanged } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog); return; }  // never a new key over an unknown one (R7)
     visit = { ...v };
     invoice = null;
+    types = [];
+    suggested = null;
     form.reset();
     submitter.reset();
     unknownState(false);
@@ -225,6 +290,7 @@ export function initPay({ onChanged } = {}) {
     render();
     openDialog(dialog);
     load();
+    if (perms.collect) loadTypes();
   }
 
   return { open };

@@ -4,7 +4,7 @@
 //   definite answer, so a resend after a lost answer never saves twice. The text waits in sessionStorage
 //   (this tab only, cleared once saved) so a reload or a sign-in never loses it.
 // - Leaving the page warns, except after the finish, a sign-out or a language switch.
-import { errorMessage, fetchText, get, isOk, membership, newKey, save, send } from "./api.js";
+import { discardPending, errorMessage, fetchText, get, isOk, membership, newKey, save, send } from "./api.js";
 import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { asciiDigits, localDigits, moneyText } from "./numbers.js";
 import { alertMessage, renderPending, toast } from "./shell.js";
@@ -253,6 +253,41 @@ if (adder) {
     event.preventDefault();
     const first = results.querySelector("[data-proc]");
     if (first) first.click();
+  });
+}
+
+// --- "Suggest a discount": one tap suggests one of the clinic's discount types, a second tap clears it. ---
+// It changes no money: the desk sees it in the Pay dialog and applies it. The request sets an absolute value and
+// keeps its key until a definite answer; a different tap drops an unconfirmed one, so it is never resent later.
+
+const suggestBox = document.querySelector("[data-suggest-discount]");
+if (suggestBox) {
+  const suggestError = suggestBox.querySelector("[data-suggest-error]");
+  let held = null;  // {key, typeId} whose answer was lost
+  suggestBox.addEventListener("click", async (event) => {
+    const chip = event.target.closest("[data-type]");
+    if (!chip || suggestBox.dataset.busy) return;
+    const typeId = chip.getAttribute("aria-pressed") === "true" ? null : Number(chip.dataset.type);
+    if (held && held.typeId !== typeId) { discardPending(held.key); held = null; }
+    const request = held || { key: newKey(), typeId };
+    suggestBox.dataset.busy = "1";
+    suggestError.textContent = "";
+    const result = await save("PUT", `/api/v1/appointments/${id}/suggested-discount`, { type_id: typeId },
+      { key: request.key, label: `${t("suggest_discount")} · ${chip.querySelector("bdi").textContent}` });
+    delete suggestBox.dataset.busy;
+    if (!result.settled) {
+      held = request;
+      renderPending();
+      if (!result.signedOut) suggestError.textContent = t("unknown");
+      return;
+    }
+    held = null;
+    if (!isOk(result)) { suggestError.textContent = errorMessage(result, t("failed")); return; }
+    const now = result.data.suggested;
+    suggestBox.querySelectorAll("[data-type]").forEach((b) => {
+      b.setAttribute("aria-pressed", String(Boolean(now) && Number(b.dataset.type) === now.id));
+    });
+    toast(now ? t("discount_suggested", { name: now.name }) : t("discount_unsuggested"));
   });
 }
 
