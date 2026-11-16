@@ -152,7 +152,8 @@ export function initWalkIn({ onBooked } = {}) {
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = ""; return; }
     lastFee = result.data.fee;
-    fee.textContent = t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(result.data.fee) });
+    // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
+    fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
     if (field("amount") && !field("amount").dataset.touched) field("amount").value = result.data.fee ? amountInput(result.data.fee) : "";
   }
 

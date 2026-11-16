@@ -20,7 +20,7 @@
     <p class="card-sub">{% translate "Newest first, with the doctor's notes." %}</p>
     <div class="table-scroll">
       <table class="table">
-        <thead><tr><th>{% translate "Day" %}</th><th>{% translate "Service" %}</th><th>{% translate "Status" %}</th><th class="num">{% translate "Fee" %}</th><th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
+        <thead><tr><th>{% translate "Day" %}</th><th>{% translate "Service" %}</th><th>{% translate "Status" %}</th>{% if perms.money %}<th class="num">{% translate "Fee" %}</th>{% endif %}<th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
         <tbody data-rows="visits">{% include "web/_visit_rows.html" with items=visits.items %}</tbody>
       </table>
     </div>
@@ -43,6 +43,7 @@
         <div><dt>{% translate "Notes" %}</dt><dd><bdi dir="auto">{{ patient.notes|default:"—" }}</bdi></dd></div>
       </dl>
     </section>
+    {% if perms.money %}
     <section class="card" aria-labelledby="payments-title">
       <h2 id="payments-title">{% translate "Payments" %}</h2>
       <div class="table-scroll">
@@ -57,6 +58,7 @@
         {% if payments.next %}<button type="button" class="btn ghost" data-more="payments" data-next="{{ payments.next }}">{% translate "Load more" %}</button>{% endif %}
       </div>
     </section>
+    {% endif %}
   </div>
 </div>
 {{ patient|json_script:"patient-data" }}

@@ -212,7 +212,8 @@ function procedurePart(section) {
       b.type = "button";
       b.className = "btn ghost wide plan-pick";
       b.dataset.run = "";
-      b.textContent = t("from_plan", { name: item.name, amount: moneyText(item.price) });
+      // No price for someone without money.view: the server sends none (Saged, 2026-11-16).
+      b.textContent = item.price == null ? item.name : t("from_plan", { name: item.name, amount: moneyText(item.price) });
       b.addEventListener("click", () => {
         if (submitter.unknown) return;
         send({ procedure_id: item.procedure_id, tooth: current, plan_item_id: item.id }, item.name);

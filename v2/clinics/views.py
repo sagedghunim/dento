@@ -23,6 +23,7 @@ DAY_SETTINGS = ("timezone", "day_ends_at")
 def clinic_payload(ctx):
     from billing.models import METHODS
 
+    from billing import visibility
     from scheduling.rules import own_doctor, section_scope
 
     clinic = ctx.clinic
@@ -41,8 +42,8 @@ def clinic_payload(ctx):
                    "name_en": clinic.name_en, "kind": clinic.kind, "timezone": clinic.timezone,
                    "day_ends_at": clinic.day_ends_at.strftime("%H:%M"), "business_day": today.isoformat()},
         "sections": selectors.sections(ctx),
-        "settings": clinic_settings.effective(clinic.settings),
-        "services": [selectors.service_payload(s) for s in services if scope is None or s.section_id in scope],
+        "settings": visibility.fields(ctx, clinic_settings.effective(clinic.settings), "booking_deposit_amount"),
+        "services": [selectors.service_payload(ctx, s) for s in services if scope is None or s.section_id in scope],
         "doctors": [{"id": d.id, "name": pick(d.display_name, d.display_name_en), "today": hours.get(d.id, [])}
                     for d in doctors],
         "payment_methods": list(METHODS),  # transfer added for the finish dialog (design E3)

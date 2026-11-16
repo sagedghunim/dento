@@ -90,7 +90,9 @@ def appointment(ctx, appointment_id):
                       [ctx.clinic_id, appointment_id, *own_params])
     if not found:
         raise rules.not_found("appointment")
-    return payload(ctx.clinic, found[0])
+    from billing import visibility
+
+    return visibility.appointment(ctx, payload(ctx.clinic, found[0]))
 
 
 def answer(ctx, appointment_id, version=None):
@@ -216,7 +218,9 @@ def today_data(ctx, day, state, section_id=None):
         rows = [r for r in rows if r["section_id"] in scope]
     # By slot time, then turn; never by status (design 7.4).
     rows.sort(key=lambda r: (r["doctor_id"], r["starts_at"] is None, r["starts_at"] or now, r["queue_no"]))
-    appointments = [payload(clinic, r) for r in rows]
+    from billing import visibility
+
+    appointments = [visibility.appointment(ctx, payload(clinic, r)) for r in rows]
     day_rows = {r["doctor_id"]: r for r in summaries.doctor_days(ctx, day)}
     show_money = ctx.can("finances.view")
 
@@ -290,7 +294,9 @@ def patient_visits(ctx, patient_id, size, after):
         where += " AND (a.day, a.id) < (%s, %s)"
         params += [after[0], after[1]]
     rows = sql.dicts(ctx, ROW_SQL + where + " ORDER BY a.day DESC, a.id DESC LIMIT %s", [*params, size + 1])
-    items = [payload(ctx.clinic, r) for r in rows]
+    from billing import visibility
+
+    items = [visibility.appointment(ctx, payload(ctx.clinic, r)) for r in rows]
     return paging.page(items, size, lambda a: paging.encode_day(dt.date.fromisoformat(a["day"]), a["id"]))
 
 
@@ -402,9 +408,12 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None):
         found_price = visit_price_of(ctx, follow_up_id)
         visit_price = found_price if service.kind == "consultation" else ""
     fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
-    return {"fee": fee, "is_follow_up": is_follow_up, "visit_price": visit_price, "service_price": service.price,
-            "follow_up_price": service.follow_up_price, "section_id": service.section_id,
-            "doctor_works": bool(doctor.sessions_in(service.section_id))}
+    from billing import visibility
+
+    return visibility.fields(ctx, {
+        "fee": fee, "is_follow_up": is_follow_up, "visit_price": visit_price, "service_price": service.price,
+        "follow_up_price": service.follow_up_price, "section_id": service.section_id,
+        "doctor_works": bool(doctor.sessions_in(service.section_id))}, "fee", "service_price", "follow_up_price")
 
 
 def future_bookings(ctx, doctor_id, weekdays, today, page=500):

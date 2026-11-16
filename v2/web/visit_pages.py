@@ -78,14 +78,18 @@ def _last_visit(ctx, patient_id, appointment_id):
 
 def _discount_types(ctx, appointment_id):
     """The clinic's active discount types as the doctor's chips, the one suggested for this visit marked (two reads;
-    one when the clinic has none)."""
+    one when the clinic has none). For discounts.suggest only; the percent or amount only with money.view, otherwise
+    the names alone (Saged, 2026-11-16)."""
     from billing import discounts
 
+    if not ctx.can("discounts.suggest"):
+        return []
     found = discounts.types(ctx)
     if not found:
         return []
     suggested = discounts.suggested(ctx, appointment_id)
-    return [{"id": d["id"], "name": d["name"], "label": fmt.discount_label(d),
+    values = ctx.can("money.view")
+    return [{"id": d["id"], "name": d["name"], "label": fmt.discount_label(d) if values else "",
              "suggested": bool(suggested and suggested["id"] == d["id"])} for d in found]
 
 
@@ -143,15 +147,18 @@ def visit_page(request, ctx, appointment_id):
                    "price": u["price"]}
                   for u in config["upcoming"] if u["appointment_id"] == visit["id"] and u["procedure_id"] in by_id]
     config["plan_offer"] = [{k: o[k] for k in ("plan_item_id", "procedure_id")} for o in plan_offer]
-    done = sum(p["amount"] for p in record["procedures"])
-    # The small bill: the consultation, then each procedure. The invoice's own total once it has one.
-    bill = {"fee": visit["fee"], "total": record["invoice"]["total"] if record["invoice"] else visit["fee"] + done}
+    # The small bill: the consultation, then each procedure. The invoice's own total once it has one. Only for
+    # holders of money.view: anyone else sees what was done without any amount (Saged, 2026-11-16).
+    bill = None
+    if ctx.can("money.view"):
+        done = sum(p["amount"] for p in record["procedures"])
+        bill = {"fee": visit["fee"], "total": record["invoice"]["total"] if record["invoice"] else visit["fee"] + done}
     return render(request, "web/visit.html", {
         "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms,
         "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
         "plan_offer": plan_offer,
         "dental": perms["chart"] and teeth.is_dental(ctx, visit["section_id"]),
-        "discount_types": _discount_types(ctx, visit["id"]) if perms["record"] else [],
+        "discount_types": _discount_types(ctx, visit["id"]),
     })
 
 

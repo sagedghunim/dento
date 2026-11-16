@@ -199,6 +199,7 @@ class RecordProcedureTests(M2TestCase):
         self.visit = self.in_room()
         self.url = f"/api/v1/appointments/{self.visit['id']}/procedures"
         self.filling = self.procedure("Composite filling, two surfaces")
+        self.sees_money()  # these tests read the bill the doctor's procedures make
 
     def test_a_procedure_adds_an_invoice_line_and_sets_the_tooth_with_history(self):
         r = call(self.doc, "POST", self.url, {"procedure_id": self.filling["id"], "tooth": 36, "surfaces": ["O", "M"]})
@@ -213,10 +214,12 @@ class RecordProcedureTests(M2TestCase):
                 "condition", "surfaces", "appointment_id", "procedure_id"))
         self.assertEqual(history, [("filling", ["M", "O"], self.visit["id"], self.filling["id"])])
 
-    def test_a_price_not_from_the_list_needs_billing_discount(self):
+    def test_a_price_not_from_the_list_is_refused_for_everyone(self):
+        """No one edits prices, the owner included (Saged, 2026-11-16)."""
         body = {"procedure_id": self.filling["id"], "tooth": 36, "unit_price": self.filling["price"] - 100_00}
-        self.assertEqual(call(self.doc, "POST", self.url, body).status_code, 403)
-        self.assertEqual(call(self.owner, "POST", self.url, body).status_code, 201)
+        for client in (self.doc, self.owner):
+            r = call(client, "POST", self.url, body)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "price_locked"))
 
     def test_bad_teeth_and_surfaces_are_400(self):
         crown = self.procedure("Zirconia crown")
@@ -253,6 +256,7 @@ class ChartAndPlanTests(M2TestCase):
         self.patient = self.visit["patient"]["id"]
         self.root_canal = self.procedure("Root canal treatment, molar")
         self.crown = self.procedure("Zirconia crown")
+        self.sees_money()  # the plans' estimated totals
 
     def plan(self, **body):
         body.setdefault("items", [{"procedure_id": self.root_canal["id"], "tooth": 46},
@@ -318,6 +322,7 @@ class ChartAndPlanTests(M2TestCase):
 
 class TimelineAndBalanceTests(M2TestCase):
     def test_the_timeline_is_newest_first_across_kinds_and_pages_without_gaps(self):
+        self.sees_money()  # the timeline's payments
         first = self.owed_visit()
         patient = first["patient"]["id"]
         visit = self.in_room(patient)

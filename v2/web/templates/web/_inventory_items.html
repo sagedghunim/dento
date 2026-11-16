@@ -23,7 +23,7 @@
     <div class="inv-actions">
       {% if item.is_active %}
         {% if perms.use %}<button type="button" class="btn ghost" data-inv="use">{% translate "Use" %}</button>{% endif %}
-        {% if perms.manage %}<button type="button" class="btn" data-inv="purchase">{% translate "Add stock" %}</button>{% endif %}
+        {% if perms.manage and perms.money %}<button type="button" class="btn" data-inv="purchase">{% translate "Add stock" %}</button>{% endif %}
         <details class="menu more">
           <summary aria-label="{% translate "More actions" %}" title="{% translate "More actions" %}"><svg class="icon"><use href="#i-more"/></svg></summary>
           <div class="menu-panel">

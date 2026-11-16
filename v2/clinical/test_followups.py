@@ -70,7 +70,7 @@ class PriceLockTests(M2TestCase):
         self.scaling = self.procedure("Scaling and polishing")
 
     def test_a_doctor_records_at_the_list_price_only_whatever_was_granted(self):
-        self.set_codes("doctor", granted=["billing.discount"])
+        self.sees_money(also=["billing.discount"])
         body = {"procedure_id": self.scaling["id"], "unit_price": self.scaling["price"] - 50_00}
         r = call(self.doc, "POST", self.url, body)
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "price_locked"), r.content)
@@ -79,14 +79,15 @@ class PriceLockTests(M2TestCase):
         r = call(self.doc, "POST", self.url, {"procedure_id": self.scaling["id"]})
         self.assertEqual((r.status_code, r.json()["procedure"]["unit_price"]), (201, self.scaling["price"]))
 
-    def test_the_desk_keeps_billing_discount(self):
+    def test_no_one_charges_another_price_the_owner_included(self):
+        """No one edits prices (Saged, 2026-11-16): billing.discount gives discounts, never another price."""
         body = {"procedure_id": self.scaling["id"], "unit_price": self.scaling["price"] - 50_00}
-        self.set_codes("assistant", granted=["procedures.record"])
-        r = call(self.desk, "POST", self.url, body)
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "forbidden"), r.content)  # no billing.discount
         self.set_codes("assistant", granted=["procedures.record", "billing.discount"])
-        r = call(self.desk, "POST", self.url, body)
-        self.assertEqual((r.status_code, r.json()["procedure"]["unit_price"]), (201, self.scaling["price"] - 50_00))
+        for client in (self.desk, self.owner):
+            r = call(client, "POST", self.url, body)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "price_locked"), r.content)
+        r = call(self.owner, "POST", self.url, {"procedure_id": self.scaling["id"]})
+        self.assertEqual((r.status_code, r.json()["procedure"]["unit_price"]), (201, self.scaling["price"]))
 
     def test_a_tooth_procedure_is_recorded_in_one_tap_without_the_tooth(self):
         filling = self.procedure("Composite filling, two surfaces")

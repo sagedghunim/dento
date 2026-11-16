@@ -15,8 +15,11 @@ CODES = {
     "prescriptions.write": _("Write prescriptions"),
     "settings.medicines": _("Edit the medicines list and prescription templates"),
     "procedures.record": _("Record procedures, the dental chart and treatment plans"),
+    # A doctor has nothing to do with money unless the owner opens it (Saged, 2026-11-16).
+    "money.view": _("See prices, bills and what patients paid or owe"),
+    "discounts.suggest": _("Suggest one of the clinic's discounts on the visit"),
     "billing.collect": _("Take payments and add list-price lines"),
-    "billing.discount": _("Give discounts and prices not from the list"),
+    "billing.discount": _("Give discounts"),
     "billing.refund": _("Refund payments and void invoices"),
     "cash.collect": _("Take cash into the register"),
     "cash.shift": _("Open and close the register and record cash in and out"),
@@ -43,16 +46,22 @@ RETIRED = frozenset({"appointments.others"})
 OWNER_ONLY = frozenset({"team.manage", "billing.refund", "finances.view", "finances.pay", "audit.view",
                         "patients.export"})
 
+# Codes that handle money: none of them works without money.view (Saged, 2026-11-16). effective_codes drops them for
+# someone without it, and wanted_codes keeps the two together, so "no money anywhere" is one rule in one place.
+MONEY_VIEW = "money.view"
+NEEDS_MONEY = frozenset({"billing.collect", "billing.discount", "billing.refund", "cash.collect", "cash.shift",
+                         "expenses.manage", "packages.manage", "finances.view", "finances.pay"})
+
 TEMPLATES = {
     "owner": ALL,
     "doctor": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "clinical.view",
-        "clinical.write", "billing.collect", "inventory.use", "consults.manage", "cash.collect", "cash.shift",
+        "clinical.write", "inventory.use", "consults.manage",
         "visits.vitals", "visits.notes", "prescriptions.write", "settings.medicines", "procedures.record",
     }),
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
-        "visits.vitals", "cash.collect", "cash.shift",
+        "visits.vitals", "cash.collect", "cash.shift", "money.view",
     }),
 }
 
@@ -61,7 +70,8 @@ def effective_codes(role, granted=(), revoked=()):
     """(template ∪ granted) − revoked, limited to known codes; the owner always has everything."""
     if role == "owner":
         return ALL
-    return frozenset((TEMPLATES.get(role, frozenset()) | set(granted)) - set(revoked)) & ALL
+    codes = frozenset((TEMPLATES.get(role, frozenset()) | set(granted)) - set(revoked)) & ALL
+    return codes if MONEY_VIEW in codes else codes - NEEDS_MONEY
 
 
 class GrantRefused(Exception):
@@ -111,9 +121,13 @@ GROUPS = (
     ("visit", _("The visit"), _("Clinical notes, vital signs, prescriptions, procedures and online consultations"),
      ("clinical.view", "clinical.write", "visits.vitals", "visits.notes", "prescriptions.write", "procedures.record",
       "consults.manage")),
-    ("money", _("Money and cash"), _("Payments, discounts, refunds, the register, expenses, packages and staff pay"),
-     ("billing.collect", "billing.discount", "billing.refund", "cash.collect", "cash.shift", "expenses.manage",
-      "packages.manage", "finances.view", "finances.pay")),
+    # A doctor's two money switches (Saged, 2026-11-16), both off in the doctor's template.
+    ("prices", _("Sees prices and money"), _("Prices, bills, payments and the cash register"),
+     ("money.view", "billing.collect", "cash.collect", "cash.shift")),
+    ("suggest", _("Suggests discounts"), _("Suggest one of the clinic's discounts on the visit; the desk applies it"),
+     ("discounts.suggest",)),
+    ("money", _("Finances"), _("Discounts, refunds, expenses, packages, the month's money and staff pay"),
+     ("billing.discount", "billing.refund", "expenses.manage", "packages.manage", "finances.view", "finances.pay")),
     ("stock", _("Inventory"), _("Stock use, items, purchases and counts"), ("inventory.use", "inventory.manage")),
     ("reports", _("Reports"), _("Clinic and staff performance and patient insights"), ("reports.view",)),
     ("settings", _("Settings"), _("The clinic profile, services, prices, schedules and medicines"),
@@ -132,17 +146,27 @@ def group_state(codes, group_key):
 def wanted_codes(current, groups=None, codes=None):
     """The codes after switching whole groups, then single codes: {group: bool}, {code: bool}.
 
-    Raises GrantRefused("unknown_group" / "unknown_code") for names it doesn't know.
+    Money codes and money.view go together (Saged, 2026-11-16): switching a money code on (its group or itself)
+    switches money.view on, unless the same request switches the single code money.view off; without money.view
+    every money code goes. Raises GrantRefused("unknown_group" / "unknown_code") for names it doesn't know.
     """
-    wanted = set(current)
+    wanted, opened = set(current), set()
     for key, on in (groups or {}).items():
         if key not in GROUP_CODES:
             raise GrantRefused("unknown_group", key)
         wanted = wanted | GROUP_CODES[key] if on else wanted - GROUP_CODES[key]
+        if on:
+            opened |= GROUP_CODES[key]
     for code, on in (codes or {}).items():
         if code not in ALL:
             raise GrantRefused("unknown_code", code)
         wanted = wanted | {code} if on else wanted - {code}
+        if on:
+            opened.add(code)
+    if opened & NEEDS_MONEY and (codes or {}).get(MONEY_VIEW) is not False:
+        wanted.add(MONEY_VIEW)
+    if MONEY_VIEW not in wanted:
+        wanted -= NEEDS_MONEY
     return frozenset(wanted)
 
 

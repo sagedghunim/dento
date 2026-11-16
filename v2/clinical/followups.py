@@ -120,11 +120,12 @@ def upcoming(ctx, patient_id, today=None):
          WHERE p.clinic_id = %s AND p.patient_id = %s AND i.status = 'planned' AND i.due_on IS NOT NULL
            AND (b.id IS NULL OR b.day >= %s)
          ORDER BY i.due_on, i.id LIMIT 60""", [ctx.clinic_id, patient_id, today])
+    seen = ctx.can("money.view")  # no price without money.view (Saged, 2026-11-16)
     return [{"id": r["id"], "procedure_id": r["procedure_id"], "name": pick(r["name_ar"], r["name_en"]) or r["label"],
              "tooth": r["tooth"], "due_on": r["due_on"].isoformat(), "days": (r["due_on"] - today).days,
              "visit_id": r["visit_id"], "booked": r["booked"],
              "booked_day": r["booked_day"].isoformat() if r["booked_day"] else None,
-             "appointment_id": r["booked_id"], "price": r["price"]} for r in rows]
+             "appointment_id": r["booked_id"], "price": r["price"] if seen else None} for r in rows]
 
 
 def clean_items(items):

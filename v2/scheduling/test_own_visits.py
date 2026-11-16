@@ -15,6 +15,14 @@ class OwnPatientsTests(M1TestCase):
         super().setUp()
         self.doctor = self.a.client("doctor")
         self.doctor_id = self.a.membership("doctor").id
+        # With "Sees prices and money" (Saged, 2026-11-16), so the money routes answer 404, not 403, for another
+        # doctor's visit and patient.
+        from clinics.models import Membership
+        from clinics.permissions import GROUP_CODES
+        from core.routing import clinic_transaction
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            Membership.objects.filter(clinic_id=self.a.id, id=self.doctor_id).update(granted=sorted(GROUP_CODES["prices"]))
         other = self.book().json()["appointment"]  # the owner's visit and patient, "Mohamed Ahmed"
         self.owner_visit, self.owner_patient = other["id"], other["patient"]["id"]
         self.act(self.owner_visit, "arrive", "booked")

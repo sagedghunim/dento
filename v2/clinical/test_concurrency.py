@@ -90,7 +90,7 @@ class ClinicalConcurrencyTests(TransactionTestCase):
 
     def test_two_procedures_on_one_visit_both_reach_the_invoice(self):
         visit = self.visit()
-        procedures = call(self.a.client("doctor"), "GET", "/api/v1/procedures").json()["items"]
+        procedures = call(self.a.client("owner"), "GET", "/api/v1/procedures").json()["items"]  # with list prices
         filling = next(p for p in procedures if p["name_en"] == "Composite filling, one surface")
         url = f"/api/v1/appointments/{visit['id']}/procedures"
         results = self.run_together([

@@ -5,6 +5,7 @@ Views that return clinical data write an access event (design 4.10); these funct
 
 import datetime as dt
 
+from billing import visibility
 from core import paging, sql
 from core.i18n import pick
 from core.days import local_iso, zone
@@ -47,7 +48,7 @@ def procedures(ctx, section_id=None, include_inactive=False):
     where, params = _section_filter(section_id, include_inactive)
     rows = sql.rows(ctx, f'SELECT {services.PROCEDURE_COLUMNS} FROM "clinical_procedure" WHERE clinic_id = %s{where} '
                          "ORDER BY section_id, sort, id LIMIT %s", [ctx.clinic_id, *params, LIST_LIMIT])
-    return {"items": [services.procedure_row(r) for r in rows]}
+    return {"items": visibility.rows(ctx, [services.procedure_row(r) for r in rows], "price", "internal_cost")}
 
 
 def templates(ctx, section_id=None, include_inactive=False, template_id=None):
@@ -184,7 +185,8 @@ def visit_procedures(ctx, appointment_id):
           JOIN "clinical_procedure" c ON c.clinic_id = v.clinic_id AND c.id = v.procedure_id
          WHERE v.clinic_id = %s AND v.appointment_id = %s ORDER BY v.id LIMIT %s""",
                      [ctx.clinic_id, appointment_id, HISTORY_LIMIT])
-    return [{**r, "surfaces": list(r["surfaces"]), "created_at": _iso(ctx, r["created_at"])} for r in rows]
+    return visibility.rows(ctx, [{**r, "surfaces": list(r["surfaces"]), "created_at": _iso(ctx, r["created_at"])}
+                                 for r in rows], "unit_price", "amount")
 
 
 def visit_procedure(ctx, record_id):
@@ -196,7 +198,8 @@ def visit_procedure(ctx, record_id):
           JOIN "clinical_procedure" c ON c.clinic_id = v.clinic_id AND c.id = v.procedure_id
          WHERE v.clinic_id = %s AND v.id = %s""", [ctx.clinic_id, record_id])
     r = found[0]
-    return {**r, "surfaces": list(r["surfaces"]), "created_at": _iso(ctx, r["created_at"])}
+    return visibility.fields(ctx, {**r, "surfaces": list(r["surfaces"]), "created_at": _iso(ctx, r["created_at"])},
+                             "unit_price", "amount")
 
 
 def patient_tooth(ctx, patient_id, number):
@@ -230,8 +233,9 @@ def visit_record(ctx, appointment_id):
         "prescriptions": [{**r, "created_at": _iso(ctx, r["created_at"])} for r in prescriptions],
         "attachments": [attachment_payload(ctx, r) for r in files],
         "open_plan_items": open_plan_items(ctx, patient_id),
-        "invoice": visit_invoice(ctx, appointment_id),
-        "balance": patient_balance(ctx, patient_id),
+        # Without money.view: no invoice and no balance (Saged, 2026-11-16).
+        "invoice": visit_invoice(ctx, appointment_id) if visibility.sees(ctx) else None,
+        "balance": patient_balance(ctx, patient_id) if visibility.sees(ctx) else None,
     }
 
 
@@ -247,7 +251,8 @@ def open_plan_items(ctx, patient_id):
           LEFT JOIN "clinical_procedure" c ON c.clinic_id = i.clinic_id AND c.id = i.procedure_id
          WHERE p.clinic_id = %s AND p.patient_id = %s AND i.status IN ('planned', 'in_progress')
          ORDER BY p.created_at, p.id, i.position LIMIT %s""", [ctx.clinic_id, patient_id, HISTORY_LIMIT])
-    return [{**r, "due_on": r["due_on"].isoformat() if r["due_on"] else None} for r in rows]
+    return visibility.rows(ctx, [{**r, "due_on": r["due_on"].isoformat() if r["due_on"] else None} for r in rows],
+                           "price")
 
 
 def tooth_payload(ctx, row):
@@ -332,6 +337,10 @@ def plans(ctx, patient_id, plan_id=None):
                        "estimated_total": sum(i["price"] for i in live),
                        "done_total": sum(i["price"] for i in mine if i["status"] == "done"),
                        "open_count": len(open_items), "unfinished": bool(open_items)})
+    if not visibility.sees(ctx):
+        for plan in result:
+            visibility.fields(ctx, plan, "estimated_total", "done_total")
+            visibility.rows(ctx, plan["items"], "price")
     return result[0] if plan_id is not None else {"items": result,
                                                   "unfinished": any(p["unfinished"] for p in result)}
 
@@ -386,7 +395,7 @@ def timeline(ctx, patient_id, size, cursor):
     payments = sql.dicts(ctx, f"""
         SELECT id, received_at AS at, kind, method, amount, invoice_id FROM "billing_payment"
          WHERE clinic_id = %s AND patient_id = %s{where} ORDER BY received_at DESC, id DESC LIMIT %s""",
-                         [ctx.clinic_id, patient_id, *params, size + 1])
+                         [ctx.clinic_id, patient_id, *params, size + 1]) if visibility.sees(ctx) else []
     where, params = _before(cursor, RANKS["prescription"], "created_at", "id")
     prescriptions = sql.dicts(ctx, f"""
         SELECT id, created_at AS at, number, appointment_id FROM "clinical_prescription"
@@ -413,6 +422,7 @@ def timeline(ctx, patient_id, size, cursor):
             body["day"] = body["day"].isoformat()
         if "surfaces" in body:
             body["surfaces"] = list(body["surfaces"])
+        visibility.fields(ctx, body, "fee", "amount")
         items.append({"type": kind, "at": _iso(ctx, at), **body})
     next_cursor = None
     if len(events) > size and page:

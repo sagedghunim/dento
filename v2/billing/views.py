@@ -196,7 +196,9 @@ def patient_packages_view(request, ctx, data, patient_id):
     patient_id = validate.path_id(patient_id, _not_found())
     exists(ctx, patient_id)
     record_access(ctx, patient_id, AuditAccess.Action.HISTORY)
-    return {"items": selectors.patient_packages(ctx, patient_id)}
+    from . import visibility
+
+    return {"items": visibility.rows(ctx, selectors.patient_packages(ctx, patient_id), "price")}
 
 
 # --- Discount types (Saged, 2026-11-13) --------------------------------------------------------------------------
@@ -287,7 +289,7 @@ def _replay_suggestion(ctx, stored):
     return {"suggested": discounts.suggested(ctx, stored["target_id"])}
 
 
-@api("PUT", perm="procedures.record", replay=_replay_suggestion)
+@api("PUT", perm="discounts.suggest", replay=_replay_suggestion)
 def suggest_discount_view(request, ctx, data, appointment_id):
     """PUT {type_id: id | null}: the discount the doctor suggests for this visit; null clears it. No money changes."""
     appointment_id = validate.path_id(appointment_id, services.not_found("appointment"))

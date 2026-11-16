@@ -142,7 +142,7 @@ class FinancesPageTests(FinancesCase):
         self.assertNotIn('href="/finances"', desk.get("/patients").content.decode())
 
     def test_view_without_pay_reads_but_cannot_edit_pay(self):
-        doctor = self.codes("doctor", granted=["finances.view"])
+        doctor = self.codes("doctor", granted=["money.view", "finances.view"])  # no money code without money.view
         r = doctor.get("/finances?tab=pay")
         html = r.content.decode()
         self.assertEqual(r.status_code, 200)

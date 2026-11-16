@@ -92,8 +92,11 @@ def items(ctx, section_id=None, include_inactive=False, low_only=False):
         params.append(section_id)
     if low_only:
         where += " AND quantity <= threshold"
-    return [item_row(r) for r in sql.rows(ctx, f'SELECT {ITEM_COLUMNS} FROM "inventory_item" WHERE clinic_id = %s{where} '
-                                               "ORDER BY name, id", [ctx.clinic_id, *params])]
+    from billing import visibility  # the cost is money (Saged, 2026-11-16)
+
+    return visibility.rows(ctx, [item_row(r) for r in sql.rows(
+        ctx, f'SELECT {ITEM_COLUMNS} FROM "inventory_item" WHERE clinic_id = %s{where} ORDER BY name, id',
+        [ctx.clinic_id, *params])], "unit_cost")
 
 
 def low_stock(ctx, limit=LOW_STOCK_LIMIT):
@@ -303,11 +306,13 @@ def movements(ctx, item_id, size, after):
     where, params = "", []
     if after is not None:
         where, params = " AND (at, id) < (%s, %s)", list(after)
-    return sql.dicts(ctx, f"""
+    from billing import visibility
+
+    return visibility.rows(ctx, sql.dicts(ctx, f"""
         SELECT id, kind, qty, balance_after, unit_cost, patient_id, appointment_id, visit_procedure_id, expense_id, reason,
                created_by_id, at FROM "inventory_movement"
          WHERE clinic_id = %s AND item_id = %s{where} ORDER BY at DESC, id DESC LIMIT %s""",
-                     [ctx.clinic_id, item_id, *params, size + 1])
+                     [ctx.clinic_id, item_id, *params, size + 1]), "unit_cost")
 
 
 # --- Materials (F2) --------------------------------------------------------------------------------------------
@@ -317,10 +322,13 @@ def materials(ctx, procedure_id):
     if sql.row(ctx, 'SELECT 1 FROM "clinical_procedure" WHERE clinic_id = %s AND id = %s',
                [ctx.clinic_id, procedure_id]) is None:
         raise not_found("procedure")
-    return sql.dicts(ctx, """
+    from billing import visibility
+
+    return visibility.rows(ctx, sql.dicts(ctx, """
         SELECT m.item_id, i.name, i.unit, m.qty, i.unit_cost, i.is_active FROM "inventory_material" m
           JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id
-         WHERE m.clinic_id = %s AND m.procedure_id = %s ORDER BY i.name, m.item_id""", [ctx.clinic_id, procedure_id])
+         WHERE m.clinic_id = %s AND m.procedure_id = %s ORDER BY i.name, m.item_id""", [ctx.clinic_id, procedure_id]),
+                           "unit_cost")
 
 
 def set_materials(ctx, procedure_id, lines):

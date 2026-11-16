@@ -300,28 +300,30 @@ def _visit_day(ctx, invoice, appointment):
     return appointment["day"] if appointment else business_day(ctx.clinic)
 
 
+def price_locked():
+    """No one charges a price that isn't the clinic's list price, the owner included (Saged, 2026-11-16). A lower
+    bill is a discount (a discount type, or a typed amount under billing.discount)."""
+    return ApiError("price_locked", _("The price comes from the clinic's price list."), 403,
+                    fields={"unit_price": "locked"})
+
+
 def add_line(ctx, invoice_id, kind, service_id, description, qty, unit_price):
-    """A list price needs billing.collect (the endpoint's code); any other price also needs billing.discount."""
+    """A service from the list at its list price (billing.collect, the endpoint's code). A line with no service, or
+    a price other than the list's, is refused for everyone: 403 price_locked (Saged, 2026-11-16)."""
     invoice, appointment = _lock_invoice(ctx, invoice_id)
     _require_open(invoice)
-    from_list = False
-    if service_id is not None:
-        service = sql.row(ctx, 'SELECT id, name, price, is_active FROM "clinics_service" WHERE clinic_id = %s AND id = %s',
-                          [ctx.clinic_id, service_id])
-        if service is None:
-            raise not_found("service")
-        if not service[3]:
-            raise ApiError("invalid", _("This service isn't offered any more."), fields={"service_id": "inactive"})
-        description = description or service[1]
-        if unit_price is None:
-            unit_price = service[2]
-        from_list = unit_price == service[2]
-    if unit_price is None:
-        raise ApiError("invalid", _("Enter a price."), fields={"unit_price": "required"})
-    if not description:
-        raise ApiError("invalid", _("Describe the line."), fields={"description": "required"})
-    if not from_list:
-        ctx.require("billing.discount")
+    if service_id is None:
+        raise price_locked()
+    service = sql.row(ctx, 'SELECT id, name, price, is_active FROM "clinics_service" WHERE clinic_id = %s AND id = %s',
+                      [ctx.clinic_id, service_id])
+    if service is None:
+        raise not_found("service")
+    if not service[3]:
+        raise ApiError("invalid", _("This service isn't offered any more."), fields={"service_id": "inactive"})
+    if unit_price is not None and unit_price != service[2]:
+        raise price_locked()
+    description = description or service[1]
+    unit_price, from_list = service[2], True
     amount = qty * unit_price
     line_id = sql.row(ctx, """
         INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price, amount,

@@ -69,9 +69,6 @@ msgstr "كتابة ملاحظات الزيارات والروشتات"
 msgid "Take payments and add list-price lines"
 msgstr "تحصيل المدفوعات وإضافة بنود بسعر القائمة"
 
-msgid "Give discounts and prices not from the list"
-msgstr "عمل خصومات وأسعار من خارج القائمة"
-
 msgid "Refund payments and void invoices"
 msgstr "رد المدفوعات وإلغاء الفواتير"
 
@@ -285,12 +282,6 @@ msgstr "لا يمكن تسجيل وصول المريض إلا في يوم زيا
 
 msgid "Check the date of birth."
 msgstr "راجع تاريخ الميلاد."
-
-msgid "Describe the line."
-msgstr "اكتب وصف البند."
-
-msgid "Enter a price."
-msgstr "أدخل السعر."
 
 msgid "Enter a valid mobile number."
 msgstr "أدخل رقم موبايل صحيحًا."
@@ -1855,14 +1846,6 @@ msgid ""
 "consultations"
 msgstr ""
 "ملاحظات الكشف والعلامات الحيوية والروشتات والإجراءات والاستشارات أونلاين"
-
-msgid "Money and cash"
-msgstr "الفلوس والخزنة"
-
-msgid ""
-"Payments, discounts, refunds, the register, expenses, packages and staff pay"
-msgstr ""
-"التحصيل والخصومات والمرتجعات والخزنة والمصروفات والباقات ومستحقات الفريق"
 
 msgid "Stock use, items, purchases and counts"
 msgstr "صرف المخزون والأصناف والمشتريات والجرد"
@@ -3783,3 +3766,29 @@ msgstr "سعر الكشف في الجلسة دي"
 
 msgid "This clinic doesn't take a deposit with bookings."
 msgstr "العيادة دي مش بتاخد عربون مع الحجز."
+
+msgid "Sees prices and money"
+msgstr "يشوف الأسعار والفلوس"
+
+msgid "Prices, bills, payments and the cash register"
+msgstr "الأسعار والفواتير والتحصيل والخزنة"
+
+msgid "See prices, bills and what patients paid or owe"
+msgstr "يشوف الأسعار والفواتير واللي المريض دفعه أو عليه"
+
+msgid "Suggests discounts"
+msgstr "يقترح خصم"
+
+msgid "Suggest one of the clinic's discounts on the visit"
+msgstr "يقترح خصم من خصومات العيادة في الكشف"
+
+msgid ""
+"Suggest one of the clinic's discounts on the visit; the desk applies it"
+msgstr "يقترح خصم من خصومات العيادة في الكشف، والاستقبال هو اللي يطبقه"
+
+msgid ""
+"Discounts, refunds, expenses, packages, the month's money and staff pay"
+msgstr "الخصومات والمرتجع والمصاريف والباقات وفلوس الشهر ومرتبات الفريق"
+
+msgid "Give discounts"
+msgstr "عمل خصومات"

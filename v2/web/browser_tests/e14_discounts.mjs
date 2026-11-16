@@ -53,7 +53,7 @@ export async function run() {
     check((await mine()).length === 1, "a double-clicked Save adds the type once");
     check(await page.eval(`${listText}.includes("10%") || ${listText}.includes("١٠٪")`), "the list shows its percent");
 
-    await page.eval(`[...document.querySelectorAll("[data-discount-list] li")].find((li) => li.textContent.includes(${JSON.stringify(percentName)})).querySelector("button").click()`);
+    await page.eval(`[...[...document.querySelectorAll("[data-discount-list] li")].find((li) => li.textContent.includes(${JSON.stringify(percentName)})).querySelectorAll("button")].find((b) => b.textContent === document.querySelector('#strings [data-k="recipe_edit"]').textContent).click()`);
     await page.until(`${dialog}.open && ${dialog}.querySelector('[name="name"]').value === ${JSON.stringify(percentName)}`, 5000, "the edit dialog opens on the type");
     check(await page.eval(`!${dialog}.querySelector("[data-discount-stop]").hidden`), "editing offers Stop using it");
     await page.eval(`(() => { const f = ${dialog}.querySelector("form"); f.elements.namedItem("value").value = "15"; f.querySelector("[data-submit]").click(); })()`);
@@ -86,6 +86,9 @@ export async function run() {
     const chip = `document.querySelector('[data-suggest-discount] [data-type="${percent.id}"]')`;
     await page.until(`${chip}`, 10000, "the visit screen offers the discount types");
     check(await page.eval(`${chip}.getAttribute("aria-pressed") === "false"`), "nothing is suggested at first");
+    // "Suggests discounts" without "Sees prices and money": the names only (Saged, 2026-11-16).
+    check(await page.eval(`!${chip}.querySelector(".count") && !/[%٪]/.test(document.querySelector("[data-suggest-discount]").textContent)`),
+      "the chips name the types without their percent");
     await page.eval(`${chip}.click()`);
     await page.until(`${chip}.getAttribute("aria-pressed") === "true"`, 10000, "one tap suggests the type");
     let offered = (await desk.api("GET", `/api/v1/appointments/${visit.id}/discount-types`)).data;

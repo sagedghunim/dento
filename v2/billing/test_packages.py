@@ -13,6 +13,10 @@ from scheduling.testing import add_schedule, services_of
 
 
 class PackageTests(M2TestCase):
+    def setUp(self):
+        super().setUp()
+        self.sees_money()  # the doctor records and the tests read the free sessions' amounts (Saged, 2026-11-16)
+
     def package(self, name="Scaling x3", sessions=3, price=60000, procedure="Scaling and polishing", client=None):
         proc = self.procedure(procedure, client=client)
         r = call(client or self.owner, "POST", "/api/v1/packages",

@@ -155,6 +155,7 @@ class ManageTests(DiscountTestCase):
         self.assertEqual(self.apply(b_invoice, friends).status_code, 404)  # A's desk on B's invoice
         self.assertEqual(call(self.desk, "GET", f"/api/v1/appointments/{b_visit['id']}/discount-types").status_code, 404)
         b_room = self.in_room(fixture=self.b)
+        self.set_codes("doctor", granted=["discounts.suggest"], fixture=self.b)
         r = call(self.b.client("doctor"), "PUT", f"/api/v1/appointments/{b_room['id']}/suggested-discount",
                  {"type_id": friends["id"]})
         self.assertEqual(r.status_code, 404)
@@ -199,7 +200,7 @@ class ManageTests(DiscountTestCase):
             ("PUT", "api/v1/discount-types/order"): ("settings.manage",),
             ("GET", "api/v1/appointments/<int:appointment_id>/discount-types"): ("billing.collect",),
             ("PUT", "api/v1/invoices/<int:invoice_id>/discount-type"): ("billing.collect",),
-            ("PUT", "api/v1/appointments/<int:appointment_id>/suggested-discount"): ("procedures.record",),
+            ("PUT", "api/v1/appointments/<int:appointment_id>/suggested-discount"): ("discounts.suggest",),
         })
 
 
@@ -207,8 +208,8 @@ class ApplyTests(DiscountTestCase):
     def test_the_desk_applies_a_percent_in_one_request_and_the_invoice_remembers_it(self):
         friends = self.kind(value=15)
         invoice = self.invoice()
-        invoice = self.add_line(invoice, client=self.owner, kind="other", description="Odd", unit_price=333)
-        subtotal = self.fee + 333
+        invoice = self.add_line(invoice, client=self.owner)  # a list line: no one types a price (Saged, 2026-11-16)
+        subtotal = self.fee + self.services_a["procedure"].price
         expected = (subtotal * 15 + 50) // 100
         r = self.apply(invoice, friends)
         self.assertEqual(r.status_code, 200, r.content)
@@ -337,6 +338,7 @@ class ApplyTests(DiscountTestCase):
                               {"type_id": friends["id"], "expected_discount": 0}).status_code, 404)
 
     def test_a_doctor_never_applies_one_on_another_doctors_visit(self):
+        self.sees_money()  # even a doctor who collects (Saged, 2026-11-16)
         friends = self.kind()
         invoice = self.invoice()  # the owner's visit
         self.assertEqual(self.apply(invoice, friends, client=self.doc).status_code, 404)
@@ -379,6 +381,7 @@ class PercentStaysTrueTests(DiscountTestCase):
         invoice = call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/invoice").json()["invoice"]
         invoice = self.apply(invoice, friends).json()["invoice"]
         proc = self.procedure("Composite filling, one surface")
+        self.sees_money()  # the doctor's answer carries the invoice
         r = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures", {"procedure_id": proc["id"], "tooth": 36})
         self.assertEqual(r.status_code, 201, r.content)
         after = r.json()["invoice"]
@@ -416,6 +419,12 @@ class PercentStaysTrueTests(DiscountTestCase):
 
 
 class SuggestTests(DiscountTestCase):
+    def setUp(self):
+        super().setUp()
+        # "Suggests discounts" (Saged, 2026-11-16): off for a doctor until the owner opens it.
+        self.set_codes("doctor", granted=["discounts.suggest"])
+        self.set_codes("doctor", granted=["discounts.suggest"], fixture=self.b)
+
     def suggest(self, visit, kind, client=None):
         return call(client or self.doc, "PUT", f"/api/v1/appointments/{visit['id']}/suggested-discount",
                     {"type_id": kind["id"] if kind else None})
@@ -443,7 +452,7 @@ class SuggestTests(DiscountTestCase):
     def test_only_who_may_record_procedures_on_that_visit(self):
         friends = self.kind()
         visit = self.in_room()
-        self.assertEqual(self.suggest(visit, friends, client=self.desk).status_code, 403)  # no procedures.record
+        self.assertEqual(self.suggest(visit, friends, client=self.desk).status_code, 403)  # no discounts.suggest
         owners = self.book(arrive=True).json()["appointment"]  # the owner's visit: another doctor's patient
         self.assertEqual(self.suggest(owners, friends).status_code, 404)
         self.assertEqual(self.suggest(visit, friends, client=self.b.client("doctor")).status_code, 404)
@@ -474,6 +483,10 @@ class SuggestTests(DiscountTestCase):
 
 
 class ScreenTests(DiscountTestCase):
+    def setUp(self):
+        super().setUp()
+        self.set_codes("doctor", granted=["discounts.suggest"])  # off for a doctor until the owner opens it
+
     def test_the_visit_screen_offers_the_types_and_marks_the_suggested_one(self):
         friends = self.kind()
         visit = self.in_room()

@@ -67,7 +67,8 @@ class M2TestCase(M1TestCase):
         return visit
 
     def catalogue(self, client=None):
-        return call(client or self.doc, "GET", "/api/v1/procedures").json()["items"]
+        """The procedures with their list prices, as the owner reads them (a doctor sees no price by default)."""
+        return call(client or self.owner, "GET", "/api/v1/procedures").json()["items"]
 
     def procedure(self, name_en, client=None):
         return next(p for p in self.catalogue(client) if p["name_en"] == name_en)
@@ -77,6 +78,12 @@ class M2TestCase(M1TestCase):
         with clinic_transaction(fixture.id, fixture.shard):
             Membership.objects.filter(clinic_id=fixture.id, id=fixture.membership(role).id).update(
                 granted=list(granted), revoked=list(revoked))
+
+    def sees_money(self, role="doctor", also=(), fixture=None):
+        """The owner's "Sees prices and money" switch (Saged, 2026-11-16): a doctor has no money without it."""
+        from clinics.permissions import GROUP_CODES
+
+        self.set_codes(role, granted=sorted(GROUP_CODES["prices"] | set(also)), fixture=fixture)
 
     def queries(self, fn):
         """Statements the request ran on the shard (the test's SAVEPOINTs aren't work)."""

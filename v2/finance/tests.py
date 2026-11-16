@@ -101,6 +101,7 @@ class RegisterTests(M2TestCase):
 
     def test_codes_and_another_places_shift(self):
         self.set_codes("assistant", revoked=["cash.collect"])
+        self.sees_money()  # the doctor's register codes come with "Sees prices and money" (Saged, 2026-11-16)
         visit = self.in_room()
         self.assertEqual(self.pay(visit, 100, "cash").status_code, 403)
         self.assertEqual(self.pay(visit, 100, "card").status_code, 201)

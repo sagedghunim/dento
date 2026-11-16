@@ -124,9 +124,11 @@ def _record_answer(ctx, record_id):
     from billing.selectors import visit_invoice
     from scheduling.services import current_version
 
+    from billing import visibility
+
     record = selectors.visit_procedure(ctx, record_id)
     appointment_id = record["appointment_id"]
-    return {"procedure": record, "invoice": visit_invoice(ctx, appointment_id),
+    return {"procedure": record, "invoice": visit_invoice(ctx, appointment_id) if visibility.sees(ctx) else None,
             "tooth": selectors.patient_tooth(ctx, record["patient_id"], record["tooth"]) if record["sets_tooth"] else None,
             "version": current_version(ctx, appointment_id)}
 
@@ -216,9 +218,12 @@ def timeline_view(request, ctx, data, patient_id):
 
 @api("GET", perm="patients.view", access="history")
 def balance_view(request, ctx, data, patient_id):
-    """What the patient owes across visits (design E3): open invoices with something left, oldest first."""
+    """What the patient owes across visits (design E3): open invoices with something left, oldest first.
+    Money only: refused without money.view (Saged, 2026-11-16)."""
+    from billing import visibility
     from billing.selectors import patient_balance
 
+    visibility.require(ctx)
     patient_id = _id(patient_id, "patient")
     _patient_exists(ctx, patient_id)
     record_access(ctx, patient_id, AuditAccess.Action.HISTORY)

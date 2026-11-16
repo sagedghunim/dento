@@ -101,6 +101,9 @@ def book_view(request, ctx, data):
                          if data.get("follow_up_id") is not None else None),
     }
     appointment, version = services.book(ctx, body)
+    from billing import visibility
+
+    visibility.appointment(ctx, appointment)
     return Result({"appointment": appointment, "version": version}, status=201, target_type="appointment",
                   target_id=appointment["id"])
 
@@ -193,9 +196,12 @@ def _finish_answer(ctx, appointment_id, version, next_appointment=None):
     patient's balance across visits, and the next visit if one was booked."""
     from billing import selectors as billing_read
 
+    from billing import visibility
+
     body = selectors.answer(ctx, appointment_id, version)
-    body["invoice"] = billing_read.visit_invoice(ctx, appointment_id)
-    body["balance"] = billing_read.patient_balance(ctx, body["appointment"]["patient"]["id"])
+    seen = visibility.sees(ctx)  # without money.view: no invoice and no balance (Saged, 2026-11-16)
+    body["invoice"] = billing_read.visit_invoice(ctx, appointment_id) if seen else None
+    body["balance"] = billing_read.patient_balance(ctx, body["appointment"]["patient"]["id"]) if seen else None
     body["next_appointment"] = next_appointment
     return body
 
@@ -308,5 +314,8 @@ def walk_in_view(request, ctx, data):
         "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
     }
     appointment, version, ahead = services.walk_in(ctx, body)
+    from billing import visibility
+
+    visibility.appointment(ctx, appointment)
     return Result(_walk_in_answer(appointment, version, ahead), status=201, target_type="appointment",
                   target_id=appointment["id"])

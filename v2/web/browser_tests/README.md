@@ -22,9 +22,11 @@ They cover what Django's test client can't: the M1 decisions R2, R7 and R8.
 
 For `e5`, grant the demo doctor `inventory.manage` once (development data only): in `manage.py shell`, `Membership.objects.filter(clinic_id=<clinic id>, user_id=<ahmed's user id>).update(granted=["inventory.manage"])` inside `clinic_transaction(<clinic id>, <shard>)`. The demo owner can't be used: owners need the two-step code.
 
-For `e14`, grant him `["settings.manage"]` the same way.
+A doctor has nothing to do with money by default (Saged, 2026-11-16): no amount anywhere, no collecting, no register, no discount suggestion. The owner opens "Sees prices and money" (`money.view` with `billing.collect`, `cash.collect`, `cash.shift`) and "Suggests discounts" (`discounts.suggest`) on the Team page. `e10` runs as the plain doctor and checks that the visit screen shows no amount.
 
-For `e7` and `e8`, grant him `["finances.view", "finances.pay", "expenses.manage", "reports.view"]` the same way.
+For `e14`, grant him `["settings.manage", "discounts.suggest"]` the same way: he sees the types' names on the visit screen, without their percent or amount.
+
+For `e7` and `e8`, grant him `["money.view", "billing.collect", "cash.collect", "cash.shift", "finances.view", "finances.pay", "expenses.manage", "reports.view"]` the same way: no money code works without `money.view`.
 
 ## Run
 

@@ -141,7 +141,7 @@ document.addEventListener("click", (event) => {
 }, true);
 
 // --- "Done today": the small bill. The six most used procedures are one tap; the rest are found by typing. ---
-// The price is the clinic's list price: the screen never sends one, and the server refuses a doctor's (price_locked).
+// The price is the clinic's list price: the screen never sends one, and the server refuses any other (price_locked).
 
 const procList = document.querySelector("[data-procedures]");
 const procTotal = document.querySelector("[data-procs-total]");
@@ -158,9 +158,10 @@ function addProcedure(answer) {
   if (p.qty > 1) what.append(` × ${localDigits(p.qty)}`);
   const li = el("li");
   li.dataset.record = p.id;
-  li.append(what, el("span", "num", moneyText(p.amount)));
+  li.append(what);
+  if (p.amount != null) li.append(el("span", "num", moneyText(p.amount)));  // none without money.view
   procList.append(li);
-  if (answer.invoice) procTotal.textContent = moneyText(answer.invoice.total);
+  if (answer.invoice && procTotal) procTotal.textContent = moneyText(answer.invoice.total);
   offerRecipe(catalogue.get(p.procedure_id), p);
 }
 window.addEventListener("hamada:procedure-recorded", (event) => addProcedure(event.detail));
@@ -251,7 +252,8 @@ if (adder) {
       b.dataset.proc = p.id;
       const name = el("bdi", null, p.name);
       name.dir = "auto";
-      b.append(name, " ", el("span", "count num", moneyText(p.price)));
+      b.append(name);
+      if (p.price != null) b.append(" ", el("span", "count num", moneyText(p.price)));
       return b;
     }));
     if (q && !found.length) results.replaceChildren(el("span", "muted", t("proc_none")));

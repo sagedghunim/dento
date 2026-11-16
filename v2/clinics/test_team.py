@@ -22,7 +22,7 @@ class GroupTests(SimpleTestCase):
         listed = [code for *_rest, codes in perms.GROUPS for code in codes]
         self.assertEqual(sorted(listed), sorted(perms.CODES))
         self.assertEqual(len(listed), len(set(listed)))
-        self.assertEqual(len(perms.GROUPS), 8)
+        self.assertEqual(len(perms.GROUPS), 10)  # the eight sections and the two money switches
 
     def test_wanted_codes_switches_groups_then_codes(self):
         wanted = perms.wanted_codes({"reports.view"}, {"stock": True, "reports": False}, {"inventory.manage": False})
@@ -66,7 +66,11 @@ class TableTests(TeamCase):
         assistant = next(m for m in body["members"] if m["id"] == self.ids["assistant"])
         self.assertEqual(assistant["groups"]["today"], "on")  # book and queue
         self.assertEqual(assistant["groups"]["team"], "off")
-        self.assertEqual(assistant["groups"]["money"], "partial")
+        self.assertEqual(assistant["groups"]["prices"], "on")  # sees money, collects, the register
+        self.assertEqual(assistant["groups"]["suggest"], "off")
+        self.assertEqual(assistant["groups"]["money"], "off")
+        doctor = next(m for m in body["members"] if m["id"] == self.ids["doctor"])
+        self.assertEqual((doctor["groups"]["prices"], doctor["groups"]["suggest"]), ("off", "off"))
         owner = next(m for m in body["members"] if m["id"] == self.ids["owner"])
         self.assertTrue(all(state == "on" for state in owner["groups"].values()))
         self.assertFalse(owner["editable"])
@@ -95,12 +99,13 @@ class GrantTests(TeamCase):
     def test_owner_switches_a_group_off_and_one_code_back_on(self):
         target = self.member("assistant")
         r = call(self.owner, "PUT", f"/api/v1/team/members/{target.id}/permissions",
-                 {"version": target.version, "groups": {"money": False}, "codes": {"billing.collect": True}})
+                 {"version": target.version, "groups": {"prices": False}, "codes": {"billing.collect": True}})
         self.assertEqual(r.status_code, 200, r.content)
         member = r.json()["member"]
         self.assertIn("billing.collect", member["codes"])
+        self.assertIn("money.view", member["codes"])  # a money code brings seeing money back
         self.assertNotIn("cash.collect", member["codes"])
-        self.assertEqual(member["groups"]["money"], "partial")
+        self.assertEqual(member["groups"]["prices"], "partial")
         after = self.member("assistant")
         self.assertEqual(after.version, target.version + 1)
         self.assertIn("cash.collect", after.revoked)

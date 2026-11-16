@@ -97,8 +97,11 @@ def visits_view(request, ctx, data, patient_id):
 
 @api("GET", perm="patients.view", access="history")
 def payments_view(request, ctx, data, patient_id):
+    """The patient's payments: money only, refused without money.view (Saged, 2026-11-16)."""
+    from billing import visibility
     from billing.selectors import patient_payments
 
+    visibility.require(ctx)
     patient_id = path_id(patient_id, _not_found())
     selectors.exists(ctx, patient_id)
     record_access(ctx, patient_id, AuditAccess.Action.HISTORY)

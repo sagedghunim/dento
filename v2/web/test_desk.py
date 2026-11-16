@@ -144,7 +144,7 @@ class EarlierBalanceTests(M2TestCase):
     def test_only_who_sees_money_sees_it(self):
         with clinic_transaction(self.a.id, self.a.shard):
             Membership.objects.filter(clinic_id=self.a.id, id=self.a.membership("assistant").id).update(
-                revoked=["billing.collect"])
+                revoked=["money.view"])  # who sees money: money.view (Saged, 2026-11-16)
         self.assertIn('data-earlier="0"', fragment(self.desk).content.decode())
         self.assertNotIn("باقي من قبل", fragment(self.desk).content.decode())
         self.assertIn('data-owed="0"', fragment(self.desk, "/patients/search?pick=1&q=Mohamed").content.decode())

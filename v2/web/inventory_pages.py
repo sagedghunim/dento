@@ -28,7 +28,9 @@ MOVEMENTS_PAGE = 15
 
 def _perms(ctx):
     return {"use": ctx.can("inventory.use"), "manage": ctx.can("inventory.manage"),
-            "view_patients": ctx.can("patients.view")}
+            "view_patients": ctx.can("patients.view"),
+            # Costs and purchases are money (Saged, 2026-11-16).
+            "money": ctx.can("money.view")}
 
 
 def _items_context(ctx, removed=False):

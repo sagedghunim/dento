@@ -36,8 +36,9 @@ export async function run() {
   const config = (await api("GET", "/api/v1/clinic")).data;
   const service = config.services.find((s) => s.kind === "procedure").id;
   await freeRoom(api, membership);  // nobody of this doctor's may be in the room before the test
-  const walkIn = async (name) => (await api("POST", "/api/v1/appointments", {
-    doctor_id: membership, service_id: service, arrive: true, new_patient: { full_name: name, phone: `0101${String(Date.now()).slice(-7)}` },
+  // A walk-in needs no time, so the test runs at any hour, inside the doctor's sessions or not.
+  const walkIn = async (name) => (await api("POST", "/api/v1/appointments/walk-in", {
+    doctor_id: membership, service_id: service, new_patient: { full_name: name, phone: `0101${String(Date.now()).slice(-7)}` },
   })).data.appointment;
   const first = await walkIn(`Bt Visit ${stamp}`);
   const second = await walkIn(`Bt Next ${stamp}`);
@@ -52,6 +53,10 @@ export async function run() {
     await page.until(`location.pathname === "/visits/${first.id}" && Boolean(document.querySelector("[data-notes]"))`, 15000, "the doctor's call-in opens the visit screen");
     check((await page.eval(`document.querySelector("#visit-patient").textContent`)).includes(first.patient.name), "the band names the patient");
     check(await page.eval(`Boolean(document.querySelector('a[href^="tel:"]'))`), "the phone is a tap-to-call link");
+    // A doctor without "Sees prices and money" sees no amount (Saged, 2026-11-16): no price, no bill, no total.
+    check(await page.eval(`!document.querySelector(".money, [data-procs-total], .bill-total") &&
+      ![...document.querySelectorAll("[data-suggest-discount] .count")].length`), "the doctor without the money switch sees no amount");
+    check(await page.eval(`!/EGP|ج\\.م|جنيه/.test(document.querySelector("main").textContent)`), "no amount in the text");
     const t1 = await page.eval(`document.querySelector("[data-timer]").textContent`);
     await sleep(2200);
     check((await page.eval(`document.querySelector("[data-timer]").textContent`)) !== t1, `the timer runs (${t1})`);

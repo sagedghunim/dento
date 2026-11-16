@@ -5,6 +5,8 @@ from core.api import Result, api
 from core.errors import ApiError
 from core.numbers import parse_int, parse_money
 
+from billing import visibility
+
 from . import services
 
 MAX_QTY = 1_000_000
@@ -16,7 +18,13 @@ def _item_id(value):
 
 
 def _replay_item(ctx, stored):
-    return {"item": services.get_item(ctx, stored["target_id"])}
+    return {"item": visibility.fields(ctx, services.get_item(ctx, stored["target_id"]), "unit_cost")}
+
+
+def _cost_needs_money(ctx, data, new=False):
+    """The unit cost is money: only holders of money.view set or change it (Saged, 2026-11-16). A new item may say 0."""
+    if "unit_cost" in data and not (new and data["unit_cost"] in (None, "", 0, "0")):
+        visibility.require(ctx)
 
 
 def _item_values(data, partial):
@@ -69,8 +77,9 @@ def items_view(request, ctx, data):
 def create_item_view(request, ctx, data):
     """POST {name, category?, sku?, unit?, threshold?, unit_cost?, notes?, section_id?, allow_negative?, quantity?}."""
     quantity = parse_int(data.get("quantity", 0), "quantity", 0, MAX_QTY)
+    _cost_needs_money(ctx, data, new=True)
     item = services.create_item(ctx, _item_values(data, partial=False), quantity)
-    return Result({"item": item}, status=201, target_type="item", target_id=item["id"])
+    return Result({"item": visibility.fields(ctx, item, "unit_cost")}, status=201, target_type="item", target_id=item["id"])
 
 
 @api("PATCH", perm="inventory.manage", replay=_replay_item)
@@ -79,8 +88,9 @@ def update_item_view(request, ctx, data, item_id):
     if "quantity" in data:
         raise ApiError("invalid", "the quantity changes through a purchase, a use or a count",
                        fields={"quantity": "not_allowed"})
+    _cost_needs_money(ctx, data)
     item = services.update_item(ctx, item_id, _item_values(data, partial=True))
-    return Result({"item": item}, target_type="item", target_id=item_id)
+    return Result({"item": visibility.fields(ctx, item, "unit_cost")}, target_type="item", target_id=item_id)
 
 
 @api("GET", perm="inventory.use")
@@ -110,7 +120,9 @@ def use_view(request, ctx, data):
 
 @api("POST", perm="inventory.manage", replay=_replay_item)
 def purchase_view(request, ctx, data, item_id):
-    """POST {qty, unit_price, record_expense?, from_shift?, note?}: stock in, the average cost and an expense."""
+    """POST {qty, unit_price, record_expense?, from_shift?, note?}: stock in, the average cost and an expense.
+    A price and an expense are money: money.view too (Saged, 2026-11-16)."""
+    visibility.require(ctx)
     item_id = _item_id(item_id)
     item, expense = services.purchase(ctx, item_id, parse_int(data.get("qty"), "qty", 1, MAX_QTY),
                                       parse_money(data.get("unit_price"), "unit_price"),
@@ -128,7 +140,7 @@ def count_view(request, ctx, data, item_id):
     item = services.adjust(ctx, item_id, parse_int(data.get("counted"), "counted", -MAX_QTY, MAX_QTY),
                            parse_int(data.get("expected"), "expected", -MAX_QTY, MAX_QTY),
                            validate.text(data, "reason", 200, required=False))
-    return Result({"item": item}, target_type="item", target_id=item_id)
+    return Result({"item": visibility.fields(ctx, item, "unit_cost")}, target_type="item", target_id=item_id)
 
 
 @api("POST", perm="inventory.manage", replay=_replay_item)
@@ -136,7 +148,7 @@ def waste_view(request, ctx, data, item_id):
     """POST {qty, reason}: expired or broken stock out."""
     item_id = _item_id(item_id)
     services.waste(ctx, item_id, parse_int(data.get("qty"), "qty", 1, MAX_QTY), validate.text(data, "reason", 200))
-    return Result({"item": services.get_item(ctx, item_id)}, status=201, target_type="item", target_id=item_id)
+    return Result({"item": visibility.fields(ctx, services.get_item(ctx, item_id), "unit_cost")}, status=201, target_type="item", target_id=item_id)
 
 
 def _procedure_id(value):

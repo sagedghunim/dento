@@ -57,10 +57,10 @@
       <form novalidate>
         {% if plan_offer %}<div class="plan-offer" data-plan-offer>
           <p class="muted">{% translate "Planned for this session" %}</p>
-          <div class="chips">{% for o in plan_offer %}<button type="button" class="chip-btn" data-run data-proc="{{ o.procedure_id }}" data-plan-item="{{ o.plan_item_id }}"><bdi dir="auto">{{ o.name }}</bdi> <span class="count num">{{ o.price|money }}</span></button>{% endfor %}</div>
+          <div class="chips">{% for o in plan_offer %}<button type="button" class="chip-btn" data-run data-proc="{{ o.procedure_id }}" data-plan-item="{{ o.plan_item_id }}"><bdi dir="auto">{{ o.name }}</bdi>{% if perms.money %} <span class="count num">{{ o.price|money }}</span>{% endif %}</button>{% endfor %}</div>
         </div>{% endif %}
         <div class="chips" data-top-procedures>
-          {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi> <span class="count num">{{ p.price|money }}</span></button>{% endfor %}
+          {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi>{% if perms.money %} <span class="count num">{{ p.price|money }}</span>{% endif %}</button>{% endfor %}
         </div>
         <label class="field proc-search">{% translate "Another procedure" %}
           <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
@@ -78,17 +78,17 @@
     </div>
     {% endif %}
     <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
-      <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi></span><span class="num">{{ bill.fee|money }}</span></li>
+      <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi></span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
     </ul>
     <ul class="proc-list bill" data-procedures>
-      {% for p in record.procedures %}<li data-record="{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span><span class="num">{{ p.amount|money }}</span></li>{% endfor %}
+      {% for p in record.procedures %}<li data-record="{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ p.amount|money }}</span>{% endif %}</li>{% endfor %}
     </ul>
-    <p class="bill-total"><span>{% translate "Total" %}</span><strong class="num" data-procs-total>{{ bill.total|money }}</strong></p>
+    {% if perms.money %}<p class="bill-total"><span>{% translate "Total" %}</span><strong class="num" data-procs-total>{{ bill.total|money }}</strong></p>{% endif %}
     {% if discount_types %}
     <div class="suggest-discount" data-suggest-discount>
       <p class="muted" id="suggest-discount-title">{% translate "Suggest a discount" %} · {% translate "The desk applies it when the patient pays." %}</p>
       <div class="chips" role="group" aria-labelledby="suggest-discount-title">
-        {% for d in discount_types %}<button type="button" class="chip-btn" data-type="{{ d.id }}" aria-pressed="{% if d.suggested %}true{% else %}false{% endif %}"><bdi dir="auto">{{ d.name }}</bdi> <span class="count num">{{ d.label }}</span></button>{% endfor %}
+        {% for d in discount_types %}<button type="button" class="chip-btn" data-type="{{ d.id }}" aria-pressed="{% if d.suggested %}true{% else %}false{% endif %}"><bdi dir="auto">{{ d.name }}</bdi>{% if d.label %} <span class="count num">{{ d.label }}</span>{% endif %}</button>{% endfor %}
       </div>
       <p class="form-error" data-suggest-error role="alert"></p>
     </div>

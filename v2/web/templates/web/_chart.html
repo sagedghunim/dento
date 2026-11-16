@@ -65,7 +65,7 @@
           <label class="field">{% translate "Procedure" %}
             <select name="procedure_id">
               <option value="">{% translate "Pick the procedure" %}</option>
-              {% for p in procedures %}<option value="{{ p.id }}" data-condition="{{ p.condition }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
+              {% for p in procedures %}<option value="{{ p.id }}" data-condition="{{ p.condition }}">{{ p.name }}{% if p.price is not None %} · {{ p.price|money }}{% endif %}</option>{% endfor %}
             </select>
           </label>
           {% include "web/_surfaces.html" %}
@@ -88,7 +88,7 @@
           <label class="field">{% translate "Procedure" %}
             <select name="procedure_id">
               <option value="">{% translate "Pick the procedure" %}</option>
-              {% for p in procedures %}<option value="{{ p.id }}">{{ p.name }} · {{ p.price|money }}</option>{% endfor %}
+              {% for p in procedures %}<option value="{{ p.id }}">{{ p.name }}{% if p.price is not None %} · {{ p.price|money }}{% endif %}</option>{% endfor %}
             </select>
           </label>
           <p class="form-error" data-error role="alert"></p>

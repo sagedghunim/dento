@@ -37,6 +37,7 @@ class DepositTestCase(M2TestCase):
         super().setUp()
         self.doctor_id = self.a.membership("doctor").id
         self.owner_id = self.a.membership("owner").id
+        self.sees_money()  # the doctor records and the tests read the amounts (Saged, 2026-11-16)
         with clinic_transaction(self.a.id, self.a.shard):
             Service.objects.filter(clinic_id=self.a.id, kind="follow_up").update(price=FOLLOW)
             Membership.objects.filter(clinic_id=self.a.id, id=self.a.membership("assistant").id).update(

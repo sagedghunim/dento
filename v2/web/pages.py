@@ -46,6 +46,8 @@ def _perms(ctx):
         "collect": ctx.can("billing.collect"), "discount": ctx.can("billing.discount"),
         "refund": ctx.can("billing.refund"), "finances": ctx.can("finances.view"),
         "chart": ctx.can("clinical.view"), "record": ctx.can("procedures.record"),
+        # Any amount at all, and the doctor's discount suggestion (Saged, 2026-11-16).
+        "money": ctx.can("money.view"), "suggest": ctx.can("discounts.suggest"),
     }
 
 
@@ -86,7 +88,8 @@ def clinic_config(ctx, today):
     from clinics.models import Membership, Schedule, Service
 
     with_section = _has_field(Service, "section")
-    services = [{"id": s.id, "name": pick(s.name, s.name_en), "kind": s.kind, "price": s.price,
+    seen = ctx.can("money.view")  # no price without money.view (Saged, 2026-11-16)
+    services = [{"id": s.id, "name": pick(s.name, s.name_en), "kind": s.kind, "price": s.price if seen else None,
                  "section_id": getattr(s, "section_id", None) if with_section else None}
                 for s in Service.objects.filter(clinic_id=ctx.clinic_id, is_active=True).order_by("sort", "id")]
     doctor_sections = {}
@@ -159,8 +162,8 @@ ROW_RANK = {"in_room": 0, "ready": 1, "with_assistant": 2, "waiting": 3, "done":
 
 
 def _earlier_balances(ctx, day, data):
-    """What each patient on the day owes from before, for those who see money (collect or finances)."""
-    if not (ctx.can("billing.collect") or ctx.can("finances.view")):
+    """What each patient on the day owes from before, for those who see money (money.view)."""
+    if not ctx.can("money.view"):
         return {}
     from billing.selectors import balances
 
@@ -192,7 +195,8 @@ def queue_context(ctx, day, today, data):
                 waited = (now - dt.datetime.fromisoformat(appointment["arrived_at"])).total_seconds() // 60
                 appointment["wait"] = fmt.wait_text(waited)
             # Booked visits (not arrived) are a list of their own, by time, never among the waiting (Saged, 2026-11-13).
-            (folded if status == "done" and appointment["due"] <= 0
+            # Without money.view every finished visit folds: whether it is paid is the desk's (Saged, 2026-11-16).
+            (folded if status == "done" and (appointment["due"] is None or appointment["due"] <= 0)
              else booked if status == "booked" else rows).append(appointment)
             if status != "cancelled":
                 stats["total"] += 1
@@ -314,7 +318,7 @@ def walk_in_defaults(request, ctx):
 
 def _with_owed(ctx, results):
     """Each result's balance, for those who see money (desk review 3, 9): one grouped statement for the page."""
-    if results and (ctx.can("billing.collect") or ctx.can("finances.view")):
+    if results and ctx.can("money.view"):
         from billing.selectors import balances
 
         owed = balances(ctx, [p["id"] for p in results])
@@ -386,7 +390,7 @@ def patient_page(request, ctx, patient_id):
     record_access(ctx, patient.id, AuditAccess.Action.OPEN)
     visits = patient_visits(ctx, patient.id, VISITS_PAGE, None)
     _with_notes(ctx, visits["items"])
-    payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None)
+    payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None) if ctx.can("money.view") else None
     return render(request, "web/patient.html", {
         "ctx": ctx, "nav_active": "patients", "patient": selectors.file_payload(patient, today),
         "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
@@ -438,6 +442,9 @@ def patient_visits_more(request, ctx, patient_id):
 
 @fragment(perm="patients.view")
 def patient_payments_more(request, ctx, patient_id):
+    from billing import visibility
+
+    visibility.require(ctx)  # payments are money only (Saged, 2026-11-16)
     return _more(request, ctx, patient_id, "payments")
 
 
@@ -451,6 +458,8 @@ def receipt_page(request, ctx, invoice_id):
     """/print/receipts/<invoice>?lang=ar|en&format=a5|80mm. Printing writes an access event."""
     from billing.selectors import receipt
 
+    if not ctx.can("money.view"):  # a receipt is money only (Saged, 2026-11-16)
+        return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
     try:
         data = receipt(ctx, invoice_id)
     except ApiError:

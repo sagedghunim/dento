@@ -715,11 +715,11 @@ def clean_procedure(data, partial=False):
 
 
 def price_locked(ctx):
-    """A doctor records at the clinic's list price (Saged, 2026-11-13): never another price, whatever was granted.
-    The desk and the owner may still change it under billing.discount."""
-    if ctx.membership is not None and ctx.membership.role == "doctor":
-        raise ApiError("price_locked", _("The price comes from the clinic's price list."), 403,
-                       fields={"unit_price": "locked"})
+    """Everyone records at the clinic's list price (Saged, 2026-11-13 for doctors; 2026-11-16 for everyone, the
+    owner included): another price is refused. A lower bill is a discount."""
+    from billing.services import price_locked as locked
+
+    raise locked()
 
 
 def _check_range(row):
@@ -872,7 +872,7 @@ def record_procedure(ctx, appointment_id, request):
     """POST appointments/{id}/procedures: an invoice line, the record, and the tooth's new state with its history.
 
     `request`: procedure_id, tooth, surfaces, area, qty, unit_price (None: the list or plan price), plan_item_id,
-    note. A price other than the list's (or the plan item's) needs billing.discount, as any invoice line does.
+    note. A price other than the list's (or the plan item's) is refused for everyone (Saged, 2026-11-16).
     Returns (record, invoice, tooth state or None, version of the visit's day).
     """
     appointment = billing.lock_appointment(ctx, appointment_id)
@@ -922,7 +922,6 @@ def record_procedure(ctx, appointment_id, request):
         from_list = unit_price == list_price
     if not from_list:
         price_locked(ctx)
-        ctx.require("billing.discount")
     description = procedure["name_ar"] + (f" - {tooth}" if tooth else "") + (f" ({''.join(surfaces)})" if surfaces else "")
     if package is not None:
         description = f"{description} - {package['name']}"
@@ -1013,8 +1012,7 @@ def clean_plan_items(ctx, items, section_id, name="items", low=1):
         if item["price"] is None:
             item["price"] = procedure["price"]
         elif item["price"] != procedure["price"]:
-            price_locked(ctx)
-            ctx.require("billing.discount")  # a price not from the list, as on an invoice line
+            price_locked(ctx)  # a price not from the list, refused for everyone (Saged, 2026-11-16)
     return cleaned
 
 

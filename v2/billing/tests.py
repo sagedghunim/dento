@@ -91,13 +91,16 @@ class LineAndDiscountTests(BillingTestCase):
         self.assertEqual(r.json()["invoice"]["total"], self.fee + 2 * procedure.price)
         line = r.json()["invoice"]["lines"][-1]
         self.assertTrue(line["from_list"])
-        r = call(self.desk, "POST", url, {"kind": "material", "description": "Extra", "unit_price": 5000})
-        self.assertEqual(r.status_code, 403)
-        r = call(self.desk, "POST", url, {"kind": "procedure", "service_id": procedure.id, "unit_price": 1})
-        self.assertEqual(r.status_code, 403)
-        self.grant("billing.discount")
-        r = call(self.desk, "POST", url, {"kind": "material", "description": "Extra", "unit_price": 5000})
-        self.assertEqual((r.status_code, r.json()["invoice"]["total"]), (201, self.fee + 2 * procedure.price + 5000))
+        # No one charges a price that isn't on the list, billing.discount or not (Saged, 2026-11-16).
+        for grant in (False, True):
+            if grant:
+                self.grant("billing.discount")
+            for body in ({"kind": "material", "description": "Extra", "unit_price": 5000},
+                         {"kind": "procedure", "service_id": procedure.id, "unit_price": 1}):
+                r = call(self.desk, "POST", url, body)
+                self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "price_locked"), body)
+        total = call(self.desk, "GET", f"/api/v1/invoices/{invoice['id']}").json()["invoice"]["total"]
+        self.assertEqual(total, self.fee + 2 * procedure.price)
         foreign = self.services_b["procedure"].id
         self.assertEqual(call(self.desk, "POST", url, {"kind": "procedure", "service_id": foreign}).status_code, 404)
 

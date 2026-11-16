@@ -215,7 +215,7 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     if (!item) return;
     for (const name of TEXT) field(name).value = name === "name" ? item.name_ar : (item[name] || "");
     field("threshold").value = String(item.threshold);
-    field("unit_cost").value = item.unit_cost ? amountInput(item.unit_cost) : "";
+    if (field("unit_cost")) field("unit_cost").value = item.unit_cost ? amountInput(item.unit_cost) : "";
     field("allow_negative").checked = item.allow_negative;
     if (field("section_id")) field("section_id").value = item.section_id || "";
     if (item.name_en || item.category || item.sku || item.notes || item.allow_negative || item.section_id) dialog.querySelector("details").open = true;
@@ -226,8 +226,10 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     if (v.name.length < 1) { submitter.say(t("need_item_name")); return null; }
     v.threshold = parseWhole(field("threshold").value || "0");
     if (v.threshold === null) { submitter.say(t("bad_qty")); return null; }
-    v.unit_cost = parsePiastres(field("unit_cost").value || "0");
-    if (v.unit_cost === null) { submitter.say(t("bad_amount")); return null; }
+    if (field("unit_cost")) {  // only for those who see money (Saged, 2026-11-16)
+      v.unit_cost = parsePiastres(field("unit_cost").value || "0");
+      if (v.unit_cost === null) { submitter.say(t("bad_amount")); return null; }
+    }
     v.allow_negative = field("allow_negative").checked;
     if (field("section_id")) v.section_id = field("section_id").value ? Number(field("section_id").value) : null;
     if (!item) {

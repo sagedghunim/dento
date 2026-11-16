@@ -226,15 +226,16 @@ def _remove(ctx, invoice, appointment, expected):
     return _written(ctx, invoice, appointment, services.write_discount(ctx, invoice["id"], 0))
 
 
-# --- The doctor's suggestion (procedures.record on that visit) -------------------------------------------------
+# --- The doctor's suggestion (discounts.suggest, on a visit in the person's scope) ------------------------------
 
 
 def suggest(ctx, appointment_id, type_id):
     """PUT appointments/{id}/suggested-discount: the type the doctor suggests for this visit, or none.
 
     An absolute value on the locked appointment, so a repeat changes nothing. It changes no money and no summary:
-    the desk sees it in the Pay dialog and applies it. For whoever may record procedures on that visit: the
-    endpoint's code, the visit's scope (lock_appointment), and a visit that has arrived.
+    the desk sees it in the Pay dialog and applies it. For holders of discounts.suggest (off for a doctor until the
+    owner opens it, Saged 2026-11-16): the endpoint's code, the visit's scope (lock_appointment), and a visit that
+    has arrived.
     """
     appointment = services.lock_appointment(ctx, appointment_id)
     if appointment["status"] in ("booked", "cancelled", "no_show"):

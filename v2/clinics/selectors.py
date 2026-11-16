@@ -28,10 +28,13 @@ def section_payload(section):
             "specialty_name": specialty_label(section.specialty_code), "sort": section.sort}
 
 
-def service_payload(service):
+def service_payload(ctx, service):
+    """One service; its price only for holders of money.view (Saged, 2026-11-16)."""
+    from billing import visibility
+
     return {"id": service.id, "section_id": service.section_id, "name": pick(service.name, service.name_en),
             "name_ar": service.name, "name_en": service.name_en, "kind": service.kind,
-            "price": service.price, "duration_min": service.duration_min,
+            "price": service.price if visibility.sees(ctx) else None, "duration_min": service.duration_min,
             "follow_up_service_id": service.follow_up_service_id}
 
 
@@ -64,7 +67,7 @@ def section_services(ctx, section_id):
     """The section's active services and prices, for the Book dialog after the section is picked."""
     section = active_section(ctx, section_id)
     services = Service.objects.filter(clinic_id=ctx.clinic_id, section_id=section.id, is_active=True).order_by("sort", "id")
-    return {"section": section_payload(section), "items": [service_payload(s) for s in services]}
+    return {"section": section_payload(section), "items": [service_payload(ctx, s) for s in services]}
 
 
 def section_doctors(ctx, section_id):
