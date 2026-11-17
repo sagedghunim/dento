@@ -80,8 +80,8 @@
     <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
       <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi></span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
     </ul>
-    <ul class="proc-list bill" data-procedures>
-      {% for p in record.procedures %}<li data-record="{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ p.amount|money }}</span>{% endif %}</li>{% endfor %}
+    <ul class="proc-list bill" data-procedures{% if perms.record %} data-removable{% endif %}>
+      {% for p in record.procedures %}<li data-record="{{ p.id }}"><span class="proc-what"><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ p.amount|money }}</span>{% endif %}{% if perms.record %}<button type="button" class="icon-btn danger-icon" data-remove-record aria-label="{% translate "Remove" %}: {{ p.name }}" title="{% translate "Remove" %}"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>{% endif %}</li>{% endfor %}
     </ul>
     {% if perms.money %}<p class="bill-total"><span>{% translate "Total" %}</span><strong class="num" data-procs-total>{{ bill.total|money }}</strong></p>{% endif %}
     {% if discount_types %}
@@ -122,6 +122,16 @@
           <button type="button" class="chip-btn" data-run data-days="7">{% translate "In a week" %}</button>
           <button type="button" class="chip-btn" data-run data-days="14">{% translate "In 2 weeks" %}</button>
           <button type="button" class="chip-btn" data-run data-days="30">{% translate "In a month" %}</button>
+        </div>
+        <div class="next-custom" role="group" aria-label="{% translate "Another time" %}">
+          <span class="muted">{% translate "Or after" %}</span>
+          <input name="n" type="number" inputmode="numeric" min="1" max="730" dir="ltr" aria-label="{% translate "How many" %}" placeholder="3">
+          <select name="unit" aria-label="{% translate "Unit" %}">
+            <option value="1">{% translate "days" %}</option>
+            <option value="7">{% translate "weeks" %}</option>
+            <option value="30">{% translate "months" %}</option>
+          </select>
+          <button type="button" class="chip-btn" data-run data-days-custom>{% translate "Add" %}</button>
         </div>
       </fieldset>
       <p class="form-error" data-error role="alert"></p>

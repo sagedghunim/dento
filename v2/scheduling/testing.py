@@ -7,7 +7,7 @@ from unittest import mock
 from clinics.models import Membership, Schedule, Section
 from core.days import business_day
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 
 
 def sections_of(fixture):
@@ -97,7 +97,7 @@ class M1TestCase(ShardTestCase):
         body.setdefault("doctor_id", fixture.membership("owner").id)
         body.setdefault("service_id", services["consultation"].id)
         if "patient_id" not in body and "new_patient" not in body:
-            body["new_patient"] = {"full_name": "Mohamed Ahmed", "phone": "01012345678", "sex": "m", "age": 30}
+            body["new_patient"] = new_patient()
         r = call(client or (self.desk if fixture is self.a else fixture.client("assistant")), "POST",
                  "/api/v1/appointments", body)
         if expect is not None:

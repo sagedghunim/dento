@@ -10,7 +10,7 @@ from audit.models import AuditAccess, AuditChange
 from billing.models import Invoice, InvoiceLine, Payment
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from patients.models import Patient
 from scheduling.models import Appointment
 from scheduling.testing import M1TestCase, free_rooms, today
@@ -27,7 +27,7 @@ def objects(test, fixture):
 
     def book(**body):
         r = call(client, "POST", "/api/v1/appointments", {"doctor_id": owner, "service_id": services["consultation"].id,
-                                                          "new_patient": {"full_name": "Matrix Patient"}, **body})
+                                                          "new_patient": new_patient(full_name="Matrix Patient"), **body})
         assert r.status_code == 201, r.content
         return r.json()["appointment"]
 
@@ -55,6 +55,8 @@ def objects(test, fixture):
                            assisted=assisted["id"], readied=readied["id"], no_show=no_show["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
                            unpaid_invoice=unpaid_invoice["id"], patient=booked["patient"]["id"], owner=owner,
+                           # a patient with no open visit today: Book and Walk-in may take them (Saged, 2026-11-17)
+                           free_patient=callable_["patient"]["id"],
                            doctor=fixture.membership("doctor").id, procedure=services["procedure"].id,
                            consultation=services["consultation"].id)
 
@@ -66,15 +68,15 @@ def tomorrow(test):
 # name: (method, path, body, alternative body for the reused-key check, codes, pattern in config)
 def mutating(test, o):
     return {
-        "create patient": ("POST", "/api/v1/patients", {"full_name": "New Person"}, {"full_name": "Other Person"},
+        "create patient": ("POST", "/api/v1/patients", new_patient("New Person"), new_patient("Other Person"),
                            ["patients.edit"]),
         "edit patient": ("PATCH", f"/api/v1/patients/{o.patient}", {"changes": {"notes": "n1"}, "expected": {"notes": ""}},
                          {"changes": {"notes": "n2"}, "expected": {"notes": ""}}, ["patients.edit"]),
-        "book": ("POST", "/api/v1/appointments", {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.patient},
-                 {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.patient, "note": "x"},
+        "book": ("POST", "/api/v1/appointments", {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.free_patient},
+                 {"doctor_id": o.owner, "service_id": o.consultation, "patient_id": o.free_patient, "note": "x"},
                  ["appointments.book"]),
-        "walk in": ("POST", "/api/v1/appointments/walk-in", {"patient_id": o.patient},
-                    {"patient_id": o.patient, "note": "x"}, ["appointments.book", "appointments.queue"]),
+        "walk in": ("POST", "/api/v1/appointments/walk-in", {"patient_id": o.free_patient},
+                    {"patient_id": o.free_patient, "note": "x"}, ["appointments.book", "appointments.queue"]),
         "arrive": ("POST", f"/api/v1/appointments/{o.booked}/arrive", {"status": "booked"},
                    {"status": "booked", "note": 1}, ["appointments.queue"]),
         "call": ("POST", f"/api/v1/appointments/{o.callable}/call", {"status": "waiting"},

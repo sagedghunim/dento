@@ -1,5 +1,6 @@
 """Session packages (design F7): sell on a visit, use a session at no charge, void only while unused."""
 
+import datetime as dt
 import threading
 
 from django.db import connections
@@ -8,8 +9,9 @@ from django.test import TransactionTestCase
 from billing.models import PatientPackage
 from clinical.testing import M2TestCase
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import add_schedule, services_of
+from scheduling.testing import today as scheduling_today
 
 
 class PackageTests(M2TestCase):
@@ -41,21 +43,28 @@ class PackageTests(M2TestCase):
         lines = r.json()["invoice"]["lines"]
         self.assertEqual([(line["kind"], line["amount"]) for line in lines][-1], ("package", 60000))
         self.assertEqual(r.json()["patient_package"]["left"], 2)
+        def next_visit(visit):
+            # A procedure goes on a visit once (Saged, 2026-11-17): each session is its own visit.
+            self.assertEqual(self.act(visit["id"], "finish", "in_room").status_code, 200)
+            return self.in_room(patient)
+
         for expected_left in (1, 0):
             r = self.record(visit, proc)
             self.assertEqual(r.status_code, 201, r.content)
             self.assertEqual(r.json()["procedure"]["amount"], 0)
             left = call(self.desk, "GET", f"/api/v1/patients/{patient}/packages").json()["items"][0]["left"]
             self.assertEqual(left, expected_left)
+            visit = next_visit(visit)
         r = self.record(visit, proc)  # none left: the list price again
         with clinic_transaction(self.a.id, self.a.shard):
             from clinical.models import VisitProcedure
 
-            amounts = list(VisitProcedure.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"])
+            amounts = list(VisitProcedure.objects.filter(clinic_id=self.a.id, patient_id=patient)
                            .order_by("id").values_list("amount", "patient_package_id"))
         self.assertEqual([a for a, _ in amounts], [0, 0, proc["price"]])
         self.assertEqual(amounts[2][1], None)
         # The doctor may also charge a session normally.
+        visit = next_visit(visit)
         package2, _ = self.package(name="Scaling x1", sessions=1)
         self.sell(visit, package2)
         self.assertEqual(self.record(visit, proc, use_package=False).status_code, 201)
@@ -146,12 +155,21 @@ class PackageConcurrencyTests(TransactionTestCase):
                                                           "price": 100}).json()["package"]
         visits = []
         patient = None
-        for _ in range(2):
-            body = {"doctor_id": self.a.membership("owner").id, "service_id": self.services["procedure"].id}
-            body.update({"patient_id": patient} if patient else {"new_patient": {"full_name": "Race Patient"}})
+        for i in range(2):
+            # One visit a day for a patient (Saged, 2026-11-17): the second is tomorrow's, put in "waiting" directly.
+            day = (scheduling_today(self.a) + dt.timedelta(days=i)).isoformat()
+            body = {"doctor_id": self.a.membership("owner").id, "service_id": self.services["procedure"].id, "day": day}
+            body.update({"patient_id": patient} if patient else {"new_patient": new_patient(full_name="Race Patient")})
             visit = call(desk, "POST", "/api/v1/appointments", body).json()["appointment"]
             patient = visit["patient"]["id"]
-            call(desk, "POST", f"/api/v1/appointments/{visit['id']}/arrive", {"status": "booked"})
+            if i == 0:
+                call(desk, "POST", f"/api/v1/appointments/{visit['id']}/arrive", {"status": "booked"})
+            else:
+                from scheduling.models import Appointment
+
+                with clinic_transaction(self.a.id, self.a.shard):
+                    Appointment.objects.filter(clinic_id=self.a.id, id=visit["id"]).update(
+                        status="waiting", arrived_at=dt.datetime.now(dt.UTC))
             visits.append(visit)
         self.assertEqual(call(desk, "POST", f"/api/v1/appointments/{visits[0]['id']}/packages",
                               {"package_id": package["id"]}).status_code, 201)

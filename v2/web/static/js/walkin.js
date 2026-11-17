@@ -2,9 +2,10 @@
 // the server would choose (GET /today/walk-in) and can be changed; a payment is optional. POST
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { checkPhone, patientFrom, patientMeta } from "./book.js";
+import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
 import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
-import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
 
@@ -29,12 +30,16 @@ export function initWalkIn({ onBooked } = {}) {
   let quoteSeq = 0;
   let openSeq = 0;
   let lastFee = null;
+  let confirmOther = false;  // "Book anyway" on another doctor's booking today
+  const np = initNewPatient(dialog);
   wireClose(dialog);
 
   // --- the patient: search, or a new name and phone ---
 
   function showPicked(p) {
     patient = p;
+    confirmOther = false;
+    hideConflict(dialog);
     picked.hidden = false;
     finder.hidden = true;
     if (newBox) newBox.hidden = true;
@@ -60,12 +65,7 @@ export function initWalkIn({ onBooked } = {}) {
     picked.hidden = true;
     finder.hidden = true;
     newBox.hidden = false;
-    const q = field("q").value.trim();
-    const digits = /^[\d\s+٠-٩۰-۹-]+$/.test(q);
-    if (q && !digits && !field("full_name").value) field("full_name").value = q;
-    if (q && digits && !field("phone").value) field("phone").value = q;
-    (digits ? field("full_name") : field("phone")).focus();
-    if (digits) checkPhone(dialog, field("phone").value);
+    np.prefill(field("q").value.trim());
     quote();
   }
 
@@ -117,7 +117,6 @@ export function initWalkIn({ onBooked } = {}) {
     if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }
     if (name === "service") quote();
     if (name === "amount") field("amount").dataset.touched = "1";
-    if (name === "phone" && newBox) checkPhone(dialog, field("phone").value);
     if (name === "collect") { collectFields.hidden = !field("collect").checked; if (field("collect").checked) field("amount").focus(); }
   });
 
@@ -168,9 +167,8 @@ export function initWalkIn({ onBooked } = {}) {
   function body() {
     const out = {};
     if (patient) out.patient_id = patient.id;
-    else if (newBox && !newBox.hidden) {
-      out.new_patient = { full_name: field("full_name").value.trim(), phone: asciiDigits(field("phone").value).trim() };
-    }
+    else if (newBox && !newBox.hidden) out.new_patient = np.values();
+    if (confirmOther) out.confirm_other_doctor = true;
     if (field("doctor").value) out.doctor_id = Number(field("doctor").value);
     if (field("service").value) out.service_id = Number(field("service").value);
     if (field("collect") && field("collect").checked && lastFee !== 0) {  // a free follow-up has nothing to collect
@@ -181,7 +179,7 @@ export function initWalkIn({ onBooked } = {}) {
 
   function check(b) {
     if (!b.patient_id && !b.new_patient) return t("need_patient");
-    if (b.new_patient && b.new_patient.full_name.length < 2) return t("need_name");
+    if (b.new_patient) { const missing = np.problem(b.new_patient); if (missing) return missing; }
     if (b.payment && !b.payment.amount) return t("bad_amount");
     return "";
   }
@@ -194,6 +192,10 @@ export function initWalkIn({ onBooked } = {}) {
     if (problem) { submitter.say(problem); return; }
     const who = patient ? patient.name : (b.new_patient && b.new_patient.full_name) || "";
     const result = await submitter.run("POST", "/api/v1/appointments/walk-in", b, [t("walkin"), who].filter(Boolean).join(" · "));
+    if (result && !isOk(result)) {
+      if (np) np.refused(result);
+      showConflict(dialog, result, { onConfirm: () => { confirmOther = true; form.requestSubmit(); } });
+    }
     if (!result || !isOk(result)) return;
     const { appointment, turn, ahead } = result.data;
     dialog.close();
@@ -214,8 +216,9 @@ export function initWalkIn({ onBooked } = {}) {
     if (field("amount")) delete field("amount").dataset.touched;
     if (collectFields) collectFields.hidden = !field("collect").checked;  // a walk-in pays now: ticked (desk review 2)
     lastFee = null;
-    const dupes = dialog.querySelector("[data-dupes]");
-    if (dupes) dupes.hidden = true;
+    if (np) np.reset();
+    confirmOther = false;
+    hideConflict(dialog);
     patient = null;
     picked.hidden = true;
     finder.hidden = false;

@@ -1,10 +1,11 @@
 """A doctor's own patients and visits (Saged, 2026-11-13) and the walk-in (design G5)."""
 
+import datetime as dt
 import uuid
 
-from core.testing import call
+from core.testing import call, new_patient
 
-from .testing import M1TestCase
+from .testing import M1TestCase, today
 
 
 class OwnPatientsTests(M1TestCase):
@@ -23,11 +24,11 @@ class OwnPatientsTests(M1TestCase):
 
         with clinic_transaction(self.a.id, self.a.shard):
             Membership.objects.filter(clinic_id=self.a.id, id=self.doctor_id).update(granted=sorted(GROUP_CODES["prices"]))
-        other = self.book().json()["appointment"]  # the owner's visit and patient, "Mohamed Ahmed"
+        other = self.book(new_patient=new_patient(phone="01012345678")).json()["appointment"]  # the owner's, "Mohamed Ahmed"
         self.owner_visit, self.owner_patient = other["id"], other["patient"]["id"]
         self.act(self.owner_visit, "arrive", "booked")
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
-                 {"doctor_id": self.doctor_id, "new_patient": {"full_name": "Own Patient", "phone": "01099999999"}})
+                 {"doctor_id": self.doctor_id, "new_patient": new_patient(full_name="Own Patient", phone="01099999999")})
         self.assertEqual(r.status_code, 201, r.content)
         self.own_visit, self.own_patient = r.json()["appointment"]["id"], r.json()["appointment"]["patient"]["id"]
 
@@ -86,15 +87,16 @@ class OwnPatientsTests(M1TestCase):
         self.assertEqual(self.doctor.get(f"/patients/{self.own_patient}").status_code, 200)
 
     def test_a_shared_patient_shows_only_their_own_visits(self):
-        day = self.appointment(self.owner_visit).day
-        visit = self.book(patient_id=self.owner_patient, doctor_id=self.doctor_id,
+        # The next day: the patient is here today, so no second visit today (Saged, 2026-11-17).
+        day = self.appointment(self.owner_visit).day + dt.timedelta(days=1)
+        visit = self.book(patient_id=self.owner_patient, doctor_id=self.doctor_id, day=day.isoformat(),
                           starts_at=self.slot_iso(self.a, day, "13:40")).json()["appointment"]
         self.assertEqual(self.get(f"/api/v1/patients/{self.owner_patient}").status_code, 200)
         visits = self.get(f"/api/v1/patients/{self.owner_patient}/visits").json()["items"]
         self.assertEqual([v["id"] for v in visits], [visit["id"]])
 
     def test_a_file_they_created_is_theirs(self):
-        r = call(self.doctor, "POST", "/api/v1/patients", {"full_name": "Created Here", "phone": "01055555555"})
+        r = call(self.doctor, "POST", "/api/v1/patients", new_patient("Created Here", phone="01055555555"))
         self.assertEqual(r.status_code, 201, r.content)
         created = r.json()["patient"]["id"]
         self.assertEqual([i["id"] for i in self.get("/api/v1/patients?q=Created").json()["items"]], [created])
@@ -135,7 +137,7 @@ class OwnPatientsTests(M1TestCase):
 
 class WalkInTests(M1TestCase):
     def walk_in(self, client=None, key=None, **body):
-        body.setdefault("new_patient", {"full_name": "Walk In", "phone": "01012345678", "sex": "f", "age": 40})
+        body.setdefault("new_patient", new_patient("Walk In", sex="f", age=40))
         return call(client or self.desk, "POST", "/api/v1/appointments/walk-in", body, key=key)
 
     def test_defaults_give_the_next_turn_already_waiting(self):
@@ -156,15 +158,16 @@ class WalkInTests(M1TestCase):
         self.assertEqual(third["ahead"], 1)
 
     def test_a_repeat_with_one_key_books_once(self):
-        key = uuid.uuid4()
-        first = self.walk_in(key=key)
-        second = self.walk_in(key=key)
+        key, patient = uuid.uuid4(), new_patient("Walk In", sex="f", age=40)
+        first = self.walk_in(key=key, new_patient=patient)
+        second = self.walk_in(key=key, new_patient=patient)
         self.assertEqual((first.status_code, second.status_code), (201, 201))
         self.assertEqual(first.json()["appointment"]["id"], second.json()["appointment"]["id"])
         self.assertEqual(second.json()["turn"], first.json()["turn"])
 
     def test_with_a_payment_and_an_existing_patient(self):
-        patient_id = self.book().json()["appointment"]["patient"]["id"]
+        tomorrow = (today(self.a) + dt.timedelta(days=1)).isoformat()  # an open visit today would refuse the walk-in
+        patient_id = self.book(day=tomorrow).json()["appointment"]["patient"]["id"]
         r = self.walk_in(new_patient=None, patient_id=patient_id, doctor_id=self.a.membership("owner").id,
                          payment={"amount": "100", "method": "cash"})
         self.assertEqual(r.status_code, 201, r.content)

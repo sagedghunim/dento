@@ -31,6 +31,7 @@ export function initPay({ onChanged } = {}) {
   wireClose(dialog);
 
   const money = (p) => moneyNode(p, t("money_pattern"));
+  const creditLabel = dialog.querySelector("[data-credit-row] dt").textContent;
   // A payment's words: a booking deposit says so, with its day when that isn't today (Saged, 2026-11-16).
   const dayShort = (iso) => localDigits(`${Number(iso.slice(8, 10))}/${Number(iso.slice(5, 7))}`);
   const paymentName = (p) => (p.deposit ? `${t("deposit")} · ${methodName(p.method)}` : methodName(p.method));
@@ -39,7 +40,10 @@ export function initPay({ onChanged } = {}) {
     const s = invoice || { total: visit.fee, discount: 0, paid: 0, due: visit.due, credit: 0 };
     for (const key of ["total", "discount", "paid", "due", "credit"]) dialog.querySelector(`[data-sum="${key}"]`).replaceChildren(money(s[key] || 0));
     // More paid than the bill (a deposit over a smaller bill): the desk refunds it by hand.
-    dialog.querySelector("[data-credit-row]").hidden = !(s.credit > 0);
+    // A no-show's kept deposit is named a deposit, not an overpayment (Saged, 2026-11-17).
+    const creditRow = dialog.querySelector("[data-credit-row]");
+    creditRow.hidden = !(s.credit > 0);
+    creditRow.querySelector("dt").textContent = visit.status === "no_show" ? t("deposit") : creditLabel;
     return s;
   }
 

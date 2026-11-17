@@ -369,6 +369,48 @@ def deduct_materials(ctx, procedure_id, times, *, patient_id, appointment_id, vi
     return sum(qty * cost for qty, cost in taken.values())
 
 
+def return_materials(ctx, visit_procedure_id, *, patient_id, appointment_id, deltas):
+    """Removing a procedure recorded by mistake (Saged, 2026-11-17): what its recording took goes back to stock.
+
+    Each item gets back what was taken for this record, net of anything already returned, in a `return` movement
+    at the cost it left at; the item's average cost takes it in at that cost (unchanged when nothing was bought
+    since). History stays: nothing is deleted. Items are locked in one statement by id (lock order 9); an item
+    deactivated since still takes its stock back. Returns {item_id: qty returned}.
+    """
+    taken = sql.rows(ctx, """
+        SELECT item_id, -sum(qty), sum(-qty * unit_cost) FILTER (WHERE kind = 'use'), -sum(qty) FILTER (WHERE kind = 'use')
+          FROM "inventory_movement"
+         WHERE clinic_id = %s AND visit_procedure_id = %s AND kind IN ('use', 'return')
+         GROUP BY item_id HAVING sum(qty) < 0 ORDER BY item_id""", [ctx.clinic_id, visit_procedure_id])
+    if not taken:
+        return {}
+    sql.rows(ctx, 'SELECT id FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[]) ORDER BY id '
+                  "FOR NO KEY UPDATE", [ctx.clinic_id, [r[0] for r in taken]])
+    crossed, movements, returned = False, [], {}
+    now = timezone.now()
+    for item_id, qty, cost_sum, used in taken:
+        cost = (cost_sum + used // 2) // used  # the cost it left at (one use movement per record: exact)
+        found = sql.row(ctx, """
+            UPDATE "inventory_item"
+               SET quantity = quantity + %(qty)s,
+                   unit_cost = CASE WHEN quantity <= 0 THEN %(cost)s
+                                    ELSE (quantity * unit_cost + %(qty)s * %(cost)s + (quantity + %(qty)s) / 2)
+                                         / (quantity + %(qty)s) END
+             WHERE clinic_id = %(clinic)s AND id = %(item)s RETURNING quantity, threshold""",
+                        {"qty": qty, "cost": cost, "clinic": ctx.clinic_id, "item": item_id})
+        if found is None:
+            continue  # the item row is gone (never deleted today); its history stays as it is
+        balance, threshold = found
+        crossed = crossed or _crossed(balance - qty, balance, threshold)
+        returned[item_id] = qty
+        movements.append(_movement(ctx, item_id, "return", qty, balance, cost, patient_id=patient_id,
+                                   appointment_id=appointment_id, visit_procedure_id=visit_procedure_id, at=now))
+    _insert_movements(ctx, movements)
+    if crossed:
+        deltas.clinic_day(business_day(ctx.clinic))
+    return returned
+
+
 def add_defaults(ctx):
     """POST inventory/defaults: the default items and dental materials the place doesn't have yet (F2).
 

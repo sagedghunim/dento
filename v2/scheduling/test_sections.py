@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from clinics.models import Section, Service
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import add_schedule, summaries, today
 
 CENTER = [{"specialty": "dental"}, {"specialty": "pediatrics"}, {"specialty": "dermatology"}]
@@ -32,7 +32,7 @@ class CenterBookingTests(ShardTestCase):
 
     def book(self, section, doctor, expect=201, **body):
         body = {"doctor_id": doctor, "service_id": self.services[section.id, "consultation"].id,
-                "new_patient": {"full_name": "Center Patient"}, **body}
+                "new_patient": new_patient(full_name="Center Patient"), **body}
         r = call(self.desk, "POST", "/api/v1/appointments", body)
         self.assertEqual(r.status_code, expect, r.content)
         return r.json()

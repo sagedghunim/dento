@@ -10,7 +10,7 @@ from clinics.models import Clinic, Membership
 from clinics.specialties import SPECIALTIES
 from core.i18n import catalogue_path, extract_msgids
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase
+from core.testing import ShardTestCase, new_patient
 from scheduling.testing import M1TestCase
 from web import format as fmt
 from web.http import route_exists
@@ -149,11 +149,11 @@ class TodayTests(M1TestCase):
         self.assertEqual(self.desk.get("/")["Location"], "/patients")  # Today is gone: off to the patients
 
     def test_rows_never_show_another_clinic(self):
-        self.book(fixture=self.b, new_patient={"full_name": "Other Clinic Patient"})
+        self.book(fixture=self.b, new_patient=new_patient(full_name="Other Clinic Patient"))
         self.assertNotIn("Other Clinic Patient", fragment(self.desk).content.decode())
 
     def test_the_clinic_digit_setting_applies(self):
-        self.book(arrive=True)
+        self.book(arrive=True, new_patient=new_patient(phone="01012345678"))
         with clinic_transaction(self.a.id, self.a.shard):
             clinic = Clinic.objects.get(id=self.a.id)
             Clinic.objects.filter(id=self.a.id).update(settings={**clinic.settings, "digits": "arab"})
@@ -161,7 +161,7 @@ class TodayTests(M1TestCase):
         self.assertEqual(fmt.digit_setting(), "latn")  # reset after the request: a worker thread serves many clinics
 
     def test_phones_keep_their_digit_order_in_right_to_left_text(self):
-        self.book()
+        self.book(new_patient=new_patient(phone="01012345678"))
         self.assertIn('<bdi class="ltr num nowrap">010 1234 5678</bdi>', fragment(self.desk).content.decode())
 
     def test_undo_is_offered_once_the_endpoint_exists(self):

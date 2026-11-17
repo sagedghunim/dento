@@ -357,22 +357,55 @@ def may_remove_line(ctx, line, visit_service_id, today=None):
 
 
 def remove_line(ctx, invoice_id, line_id):
-    """Only while paid stays within the new total, and only for who may_remove_line allows. Audited.
-
-    A percent discount type is computed again on what is left. Any other discount must fit what is left first.
-    """
+    """Only for who may_remove_line allows; drop_line holds the rules (paid within the new total, the discount)."""
     invoice, appointment = _lock_invoice(ctx, invoice_id)
     _require_open(invoice)
-    line = sql.row(ctx, 'SELECT id, kind, service_id, description, qty, unit_price, amount, from_list, created_by_id, '
-                        'created_at FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s AND id = %s',
-                   [ctx.clinic_id, invoice["id"], line_id])
+    line = invoice_line(ctx, invoice["id"], line_id)
     if line is None:
         raise not_found("line")
-    if not may_remove_line(ctx, dict(zip(("id", "kind", "service_id", "description", "qty", "unit_price", "amount",
-                                          "from_list", "created_by_id", "created_at"), line)),
-                           appointment["service_id"] if appointment else None):
+    if not may_remove_line(ctx, line, appointment["service_id"] if appointment else None):
         raise ApiError("forbidden", _("You don't have permission to do this."), 403)
-    amount = line[6]
+    drop_line(ctx, invoice, appointment, line)
+    return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
+
+
+LINE_FIELDS = ("id", "kind", "service_id", "description", "qty", "unit_price", "amount", "from_list", "created_by_id",
+               "created_at")
+
+
+def remove_visit_line(ctx, appointment, line_id):
+    """Under the appointment's lock: take a recorded procedure's line off the visit's open invoice (drop_line's
+    rules, no desk permission: the record's own endpoint decides who may). Lock order: appointment -> invoice ->
+    [patient package]. Returns the invoice as it now is, or None when the line is gone already or sits on a
+    voided invoice (nothing is charged for it any more)."""
+    found = sql.row(ctx, 'SELECT invoice_id FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s',
+                    [ctx.clinic_id, line_id])
+    if found is None:
+        return None
+    found = sql.row(ctx, f'SELECT {INVOICE_COLUMNS} FROM "billing_invoice" WHERE clinic_id = %s AND id = %s '
+                         "AND appointment_id = %s FOR NO KEY UPDATE", [ctx.clinic_id, found[0], appointment["id"]])
+    if found is None or found[2] != "open":
+        return None
+    invoice = _invoice(found)
+    return drop_line(ctx, invoice, appointment, invoice_line(ctx, invoice["id"], line_id))
+
+
+def invoice_line(ctx, invoice_id, line_id):
+    found = sql.row(ctx, f'SELECT {", ".join(LINE_FIELDS)} FROM "billing_invoice_line" '
+                         "WHERE clinic_id = %s AND invoice_id = %s AND id = %s", [ctx.clinic_id, invoice_id, line_id])
+    return dict(zip(LINE_FIELDS, found)) if found else None
+
+
+def drop_line(ctx, invoice, appointment, line):
+    """Take a line off an open invoice, under the appointment's and the invoice's locks. The caller decided who may.
+
+    Shared by remove_line (the desk) and a doctor removing a procedure recorded by mistake (clinical
+    remove_procedure). Only while paid stays within the new total and the deposit held (`fits`). A percent
+    discount type is computed again on what is left; any other discount must fit what is left first. A package
+    line goes only while unused; a procedure line that used a prepaid session gives it back. Audited. Returns the
+    invoice as it now is; the caller bumps the day's version.
+    """
+    amount = line["amount"]
     left = invoice["subtotal"] - amount
     percent = invoice["discount_percent"]
     # The discount is named first: with it larger than what is left, "refund first" would send the desk the wrong way.
@@ -381,17 +414,18 @@ def remove_line(ctx, invoice_id, line_id):
     discount = invoice["discount"] if percent is None else percent_of(left, percent)
     if not fits(invoice, left - discount):
         raise _paid_exceeds()
-    if line[1] == "package":
-        void_packages(ctx, invoice["id"], line_id)  # F7: refused once a session was used
-    elif line[1] == "procedure" and appointment:
-        _return_package_session(ctx, appointment["id"], line_id)
-    move_subtotal(ctx, invoice["id"], -amount)
-    sql.run(ctx, 'DELETE FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, line_id])
+    if line["kind"] == "package":
+        void_packages(ctx, invoice["id"], line["id"])  # F7: refused once a session was used
+    elif line["kind"] == "procedure" and appointment:
+        _return_package_session(ctx, appointment["id"], line["id"])
+    updated = move_subtotal(ctx, invoice["id"], -amount)
+    sql.run(ctx, 'DELETE FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, line["id"]])
     record_change(ctx, "invoice.line_remove", "invoice", invoice["id"],
-                  before={"line": line[0], "kind": line[1], "service_id": line[2], "description": line[3],
-                          "qty": line[4], "unit_price": line[5], "amount": amount, "from_list": line[7]},
+                  before={"line": line["id"], "kind": line["kind"], "service_id": line["service_id"],
+                          "description": line["description"], "qty": line["qty"], "unit_price": line["unit_price"],
+                          "amount": amount, "from_list": line["from_list"]},
                   after={"discount": discount} if percent is not None else None)
-    return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
+    return updated
 
 
 def _return_package_session(ctx, appointment_id, line_id):

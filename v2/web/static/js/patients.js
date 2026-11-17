@@ -3,7 +3,8 @@
 import { errorMessage, fetchText, isOk } from "./api.js";
 import { initBook, patientFrom } from "./book.js";
 import { Submitter, openDialog, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { asciiDigits, localDigits, parseWhole } from "./numbers.js";
+import { localDigits } from "./numbers.js";
+import { initNewPatient } from "./newpatient.js";
 import { initPay } from "./pay.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
@@ -50,17 +51,16 @@ if (patientDialog) {
   const form = patientDialog.querySelector("form");
   const field = (name) => form.elements.namedItem(name);
   const submitter = new Submitter(patientDialog, { label: t("patient_saved", { name: "" }) });
-  const TEXT = ["full_name", "address", "allergies", "chronic_conditions", "notes"];
+  const TEXT = ["address", "allergies", "chronic_conditions", "notes"];
+  const IDENTITY = ["full_name", "phone", "phone_owner", "guardian_relation", "sex"];
+  const np = initNewPatient(patientDialog);
   let editing = false;
   wireClose(patientDialog);
 
   function values() {
-    const sex = form.querySelector('[name="sex"]:checked');
-    const out = { phone: asciiDigits(field("phone").value).trim(), sex: sex ? sex.value : "" };
+    const out = np.values();
     for (const name of TEXT) out[name] = field(name).value.trim();
-    const age = field("age").value.trim();
-    if (age) out.age = parseWhole(age);
-    else out.birth_date = field("birth_date").value || null;
+    if (out.age == null) out.birth_date = field("birth_date").value || null;
     return out;
   }
 
@@ -69,18 +69,22 @@ if (patientDialog) {
     editing = edit;
     form.reset();
     submitter.reset();
+    np.reset();
     patientDialog.querySelector("[data-title-new]").hidden = edit;
     patientDialog.querySelector("[data-title-edit]").hidden = !edit;
     if (edit && current) {
       for (const name of TEXT) field(name).value = current[name] || "";
-      field("phone").value = current.phone || "";
-      const sex = form.querySelector(`[name="sex"][value="${current.sex}"]`);
-      if (sex) sex.checked = true;
-      if (current.birth_date_estimated) field("age").value = current.age ?? "";
-      else field("birth_date").value = current.birth_date || "";
+      np.fill(current);
+      if (!current.birth_date_estimated) field("birth_date").value = current.birth_date || "";
     }
     openDialog(patientDialog, opener);
   }
+
+  // A suggested file (a name or a number already on file) opens that file instead of adding a new one.
+  patientDialog.addEventListener("click", (event) => {
+    const pick = event.target.closest("[data-pick-patient]");
+    if (pick) { event.preventDefault(); window.location.href = `/patients/${pick.dataset.id}`; }
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -92,14 +96,18 @@ if (patientDialog) {
       ({ method, url, body } = submitter.unknown);
     } else {
       const v = values();
-      if (v.full_name.length < 2) { submitter.say(t("need_name")); return; }
-      if (field("age").value.trim() && v.age === null) { submitter.say(t("bad_age")); return; }
+      const missing = np.problem(v);
+      if (missing) { submitter.say(missing); return; }
       if (editing) {
         // Absolute values with the values they replace (design 5.0): only what changed is sent.
         const changes = {};
         const expected = {};
-        for (const name of [...TEXT, "phone", "sex"]) {
+        for (const name of [...TEXT, ...IDENTITY]) {
           if ((v[name] || "") !== (current[name] || "")) { changes[name] = v[name]; expected[name] = current[name] || ""; }
+        }
+        if ("phone_owner" in changes || "guardian_relation" in changes) {  // the two go together
+          changes.phone_owner = v.phone_owner; changes.guardian_relation = v.guardian_relation || "";
+          expected.phone_owner = current.phone_owner; expected.guardian_relation = current.guardian_relation || "";
         }
         if ("age" in v && !(current.birth_date_estimated && v.age === current.age)) { changes.age = v.age; expected.birth_date = current.birth_date; }
         if ("birth_date" in v && v.birth_date !== (current.birth_date_estimated ? current.birth_date : current.birth_date || null)) {
@@ -115,6 +123,7 @@ if (patientDialog) {
       }
     }
     const result = await submitter.run(method, url, body, t("patient_saved", { name: body.full_name || (body.changes && body.changes.full_name) || "" }));
+    if (result && !isOk(result)) np.refused(result);
     if (!result || !isOk(result)) return;
     const saved = result.data.patient;
     patientDialog.close();

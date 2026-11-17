@@ -1,9 +1,11 @@
 """Patient tags, insights and lists (design F6), and the performance reports (F8)."""
 
+import datetime as dt
+
 from audit.models import AuditAccess
 from clinical.testing import M2TestCase
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling.testing import today
 
 
@@ -20,7 +22,7 @@ class TagTests(M2TestCase):
         self.assertEqual(call(self.owner, "POST", "/api/v1/patient-tags", {"name": "x", "color": "red"}).status_code, 400)
         self.assertEqual(call(self.desk, "POST", "/api/v1/patient-tags", {"name": "Desk"}).status_code, 403)
         one = self.book().json()["appointment"]["patient"]["id"]
-        self.book(new_patient={"full_name": "Mohamed Ali", "phone": "01099999999"})
+        self.book(new_patient=new_patient(full_name="Mohamed Ali", phone="01099999999"))
         r = call(self.desk, "PUT", f"/api/v1/patients/{one}/tags", {"tag_ids": [vip["id"], insured["id"]]})
         self.assertEqual([t["name"] for t in r.json()["tags"]], ["Insurance", "VIP"])
         r = call(self.desk, "PUT", f"/api/v1/patients/{one}/tags", {"tag_ids": [vip["id"]]})
@@ -88,7 +90,9 @@ class InsightTests(M2TestCase):
         from unittest import mock
 
         self.owed_visit()
-        second = self.book(new_patient={"full_name": "Second Patient", "phone": "01055555555"}).json()["appointment"]
+        tomorrow = (today(self.a) + dt.timedelta(days=1)).isoformat()  # today's visit is the owed one below
+        second = self.book(day=tomorrow, new_patient=new_patient(full_name="Second Patient", phone="01055555555")
+                           ).json()["appointment"]
         self.owed_visit(second["patient"]["id"])
         url = "/api/v1/reports/patients/outstanding_balance/export"
         with mock.patch("reports.selectors.EXPORT_LIMIT", 1):

@@ -12,7 +12,7 @@ from audit.models import AuditChange
 from clinical.testing import M2TestCase
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling.models import STATUSES, Appointment
 from scheduling.testing import frozen, today
 from summaries.models import DoctorDay
@@ -94,7 +94,7 @@ class QueueOrderTests(M2TestCase):
         owner = self.a.membership("owner").id
 
         def visit(**body):
-            return self.book(doctor_id=owner, new_patient={"full_name": f"P {len(self.made)}"}, **body).json()["appointment"]["id"]
+            return self.book(doctor_id=owner, new_patient=new_patient(full_name=f"P {len(self.made)}"), **body).json()["appointment"]["id"]
 
         self.made = []
         paid = visit(arrive=True, payment={"amount": 1, "method": "cash"})
@@ -195,7 +195,7 @@ class NoShowTests(M2TestCase):
             self.assertEqual(self.act(slot["id"], "no-show", "booked").status_code, 200)
         with frozen(cairo(day, "09:05")):  # the freed slot is booked again, so the undo can't take it back
             self.book(doctor_id=doctor, starts_at=self.slot_iso(self.a, day, "13:40"),
-                      new_patient={"full_name": "Second Patient"})
+                      new_patient=new_patient(full_name="Second Patient"))
             r = self.act(slot["id"], "undo-no-show", "no_show")
             self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "slot_taken"))
         tomorrow = self.book(day=(day + dt.timedelta(days=1)).isoformat()).json()["appointment"]

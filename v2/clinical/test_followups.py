@@ -8,7 +8,7 @@ from clinical.models import PlanItem, Procedure
 from clinical.testing import M2TestCase
 from clinics.specialties import SPECIALTIES
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling.testing import today
 
 
@@ -76,7 +76,10 @@ class PriceLockTests(M2TestCase):
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "price_locked"), r.content)
         r = call(self.doc, "POST", self.url, {"procedure_id": self.scaling["id"], "unit_price": self.scaling["price"]})
         self.assertEqual(r.status_code, 201, r.content)  # the list price, named or not
-        r = call(self.doc, "POST", self.url, {"procedure_id": self.scaling["id"]})
+        # Unnamed, on the patient's next visit (a procedure goes on a visit once, Saged 2026-11-17).
+        self.assertEqual(self.act(self.visit["id"], "finish", "in_room").status_code, 200)
+        later = self.in_room(self.visit["patient"]["id"])
+        r = call(self.doc, "POST", f"/api/v1/appointments/{later['id']}/procedures", {"procedure_id": self.scaling["id"]})
         self.assertEqual((r.status_code, r.json()["procedure"]["unit_price"]), (201, self.scaling["price"]))
 
     def test_no_one_charges_another_price_the_owner_included(self):
@@ -147,8 +150,9 @@ class FollowUpTests(M2TestCase):
         html = self.desk.get("/follow-ups").content.decode()
         self.assertIn("Mohamed Ahmed", html)
         self.assertIn("جلسة عصب تانية", html)
-        self.assertIn('href="tel:01012345678"', html)
-        self.assertIn("https://wa.me/201012345678", html)
+        phone = self.visit["patient"]["phone"]
+        self.assertIn(f'href="tel:{phone}"', html)
+        self.assertIn(f"https://wa.me/2{phone}", html)
         self.assertIn("data-fu-book", html)
         self.assertIn(f'data-doctor="{self.a.membership("doctor").id}"', html)
 
@@ -169,7 +173,7 @@ class FollowUpTests(M2TestCase):
         self.assertEqual(rows(), 1)
         self.assertEqual(call(self.desk, "POST", "/api/v1/follow-ups/booked",
                               {"item_ids": [ids[0]], "appointment_id": appointment}).status_code, 200)  # a repeat
-        other = self.book(new_patient={"full_name": "Someone Else", "phone": "01055555555"}).json()["appointment"]["id"]
+        other = self.book(new_patient=new_patient(full_name="Someone Else", phone="01055555555")).json()["appointment"]["id"]
         r = call(self.desk, "POST", "/api/v1/follow-ups/booked", {"item_ids": [ids[1]], "appointment_id": other})
         self.assertEqual(r.status_code, 400, r.content)  # another patient's appointment
         self.assertEqual(self.act(appointment, "cancel", "booked").status_code, 200)
@@ -201,7 +205,7 @@ class FollowUpTests(M2TestCase):
     def test_a_doctor_never_sees_or_touches_another_doctors_follow_ups(self):
         owner = self.a.client("owner")
         # The owner's own patient, with a follow-up from the owner's visit.
-        theirs = self.book(new_patient={"full_name": "Owner Patient", "phone": "01077777777"}).json()["appointment"]
+        theirs = self.book(new_patient=new_patient(full_name="Owner Patient", phone="01077777777")).json()["appointment"]
         self.assertEqual(self.act(theirs["id"], "arrive", "booked").status_code, 200)
         self.assertEqual(self.act(theirs["id"], "call", "waiting").status_code, 200)
         r = call(owner, "POST", f"/api/v1/appointments/{theirs['id']}/follow-ups", {"items": [{"label": "متابعة", "days": 7}]})
@@ -294,7 +298,7 @@ class PhaseBTests(M2TestCase):
     def owner_visit(self):
         """The owner's own patient, with a follow-up from the owner's finished visit: (appointment, item id)."""
         owner = self.a.client("owner")
-        theirs = self.book(new_patient={"full_name": "Owner Patient", "phone": "01077777777"}).json()["appointment"]
+        theirs = self.book(new_patient=new_patient(full_name="Owner Patient", phone="01077777777")).json()["appointment"]
         self.assertEqual(self.act(theirs["id"], "arrive", "booked").status_code, 200)
         self.assertEqual(self.act(theirs["id"], "call", "waiting").status_code, 200)
         r = call(owner, "POST", f"/api/v1/appointments/{theirs['id']}/follow-ups", {"items": [{"label": "متابعة", "days": 7}]})
@@ -373,8 +377,10 @@ class PhaseBTests(M2TestCase):
         with clinic_transaction(self.a.id, self.a.shard):
             self.assertEqual(PlanItem.objects.get(clinic_id=self.a.id, id=self.ids[0]).appointment_id,
                              first.json()["appointment"]["id"])
-        # A second person booking the same session (another key): refused whole, no second appointment.
-        r = self.slot("11:00", follow_up_id=self.ids[0], expect=None)
+        # A second person booking the same session (another key, another day): refused whole, no second appointment.
+        tomorrow = self.day + dt.timedelta(days=1)
+        r = self.book(patient_id=self.patient, doctor_id=self.doctor_id, day=tomorrow.isoformat(),
+                      starts_at=self.slot_iso(self.a, tomorrow, "11:00"), follow_up_id=self.ids[0], expect=None)
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "follow_up_booked"), r.content)
         self.assertEqual(self.count(), had + 1)
         # Once that booking is cancelled, the session can be booked again.
@@ -383,7 +389,9 @@ class PhaseBTests(M2TestCase):
 
     def test_a_follow_up_is_booked_only_for_its_patient_by_someone_who_sees_it(self):
         self.finish()
-        other = self.book(new_patient={"full_name": "Someone Else", "phone": "01055555555"}).json()["appointment"]["patient"]["id"]
+        tomorrow = (self.day + dt.timedelta(days=1)).isoformat()  # today stays free for this patient's booking below
+        other = self.book(day=tomorrow, new_patient=new_patient(full_name="Someone Else", phone="01055555555")
+                          ).json()["appointment"]["patient"]["id"]
         had = self.count()
         r = self.book(patient_id=other, follow_up_id=self.ids[0], expect=None)
         self.assertEqual(r.status_code, 400, r.content)  # another patient's session
@@ -401,6 +409,7 @@ class PhaseBTests(M2TestCase):
 
     def test_a_doctor_cannot_book_another_doctors_follow_up(self):
         _theirs, item = self.owner_visit()
+        self.finish()  # the doctor's own patient is out of the room: no open visit today stands in the way
         r = self.slot("10:00", client=self.doc, follow_up_id=item, expect=None)
         self.assertEqual(r.status_code, 404, r.content)
 
@@ -413,11 +422,11 @@ class PhaseBTests(M2TestCase):
         url = f"/follow-ups/whatsapp/{self.patient}"
         self.assertIn(f'href="{url}"', self.strip())
         self.assertIn(f'href="{url}"', self.desk.get("/follow-ups").content.decode())
-        self.slot("10:00", follow_up_id=self.ids[0])
+        booked = self.slot("10:00", follow_up_id=self.ids[0]).json()["appointment"]
         r = self.desk.get(url)
         self.assertEqual(r.status_code, 302, r.content)
         target = urlsplit(r["Location"])
-        self.assertEqual((target.scheme, target.netloc, target.path), ("https", "wa.me", "/201012345678"))
+        self.assertEqual((target.scheme, target.netloc, target.path), ("https", "wa.me", f"/2{self.visit['patient']['phone']}"))
         text = parse_qs(target.query)["text"][0]
         self.assertIn("a clinic", text)
         lines = text.splitlines()
@@ -427,8 +436,10 @@ class PhaseBTests(M2TestCase):
         self.assertIn("لسه من غير حجز", second)  # not booked: the suggested day only, no time
         self.assertNotRegex(second, r"[0-9٠-٩]:[0-9٠-٩]")
         self.assertEqual(r["Cache-Control"], "no-store")
-        # The doctor's visit screen offers it too.
-        again = self.in_room(self.patient)
+        # The doctor's visit screen offers it too: the booked session, arrived and called in (its one visit today).
+        self.assertEqual(self.act(booked["id"], "arrive", "booked").status_code, 200)
+        self.assertEqual(self.act(booked["id"], "call", "waiting").status_code, 200)
+        again = booked
         self.assertIn(f'href="{url}"', self.doc.get(f"/visits/{again['id']}").content.decode())
 
     def test_whatsapp_needs_a_phone_sessions_and_a_patient_the_member_sees(self):

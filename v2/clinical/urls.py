@@ -14,6 +14,7 @@ urlpatterns = [
     path(v + "appointments/<int:appointment_id>/note", by_method(GET=views.note_view, PUT=views.note_save_view)),
     path(v + "appointments/<int:appointment_id>/vitals", by_method(GET=views.vitals_view, PUT=views.vitals_save_view)),
     path(v + "appointments/<int:appointment_id>/procedures", views.record_procedure_view),
+    path(v + "appointments/<int:appointment_id>/procedures/<int:record_id>", views.remove_procedure_view),
     # The patient's clinical file
     path(v + "patients/<int:patient_id>/timeline", views.timeline_view),
     path(v + "patients/<int:patient_id>/balance", views.balance_view),

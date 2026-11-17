@@ -66,7 +66,7 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "Slash" && !event.ctrlKey && !event.metaKey && !event.altKey) {
     const target = event.target;
     if (target.closest("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]")) return;
-    const search = document.querySelector("[data-quick-book] input, [data-search] input");
+    const search = document.querySelector("[data-search] input");
     if (search) { event.preventDefault(); search.focus(); }
   }
 });

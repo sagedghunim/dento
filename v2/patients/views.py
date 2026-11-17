@@ -45,7 +45,7 @@ def by_phone_view(request, ctx, data):
     phone = request.GET.get("phone", "")
     if len(phone) > 20:
         raise ApiError("invalid", "phone is too long", fields={"phone": "too_long"})
-    return {"items": selectors.by_phone(ctx, phone)}
+    return selectors.by_phone(ctx, phone, business_day(ctx.clinic))
 
 
 def _replay_patient(ctx, stored):

@@ -24,6 +24,39 @@ def normalize_name(value):
     return " ".join(text.split())
 
 
+# The skeleton of a name (fuzzy search, Saged 2026-11-17): after normalize_name's folding, the long vowels and hamza,
+# Latin vowels and spaces are dropped, then a run of one letter is kept once. "ابرهيم" and "إبراهيم", "عبد الله" and
+# "عبدالله", "Mohamed" and "Mohammed" share one. patients.models.Patient.name_skel computes the same thing in the
+# database from these two patterns: change them together (patients.tests checks both agree).
+SKELETON_DROP = "[اويءaeiouy ]"
+SKELETON_RUNS = r"(.)\1+"
+_SKELETON_DROP = re.compile(SKELETON_DROP)
+_SKELETON_RUNS = re.compile(SKELETON_RUNS)
+
+
+def name_skeleton(name_norm):
+    """The skeleton of an already normalised name (see SKELETON_DROP)."""
+    return _SKELETON_RUNS.sub(r"\1", _SKELETON_DROP.sub("", name_norm or ""))
+
+
+def edit_distance(a, b, limit=2):
+    """Insertions, deletions, substitutions and swaps of two neighbours (optimal string alignment), capped at
+    limit + 1: the callers only ask "within `limit`?"."""
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    before, previous = None, list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb))
+            if i > 1 and j > 1 and ca == b[j - 2] and a[i - 2] == cb:
+                current[j] = min(current[j], before[j - 2] + 1)
+        if min(current) > limit:
+            return limit + 1
+        before, previous = previous, current
+    return min(previous[-1], limit + 1)
+
+
 def clean_name(value):
     """The display form: spaces collapsed, nothing else changed."""
     return " ".join(unicodedata.normalize("NFKC", value or "").split())
@@ -51,6 +84,11 @@ def is_valid_phone(phone_norm):
     if phone_norm.startswith("01"):
         return bool(_EGYPT_MOBILE.match(phone_norm))
     return 8 <= len(phone_norm) <= 15
+
+
+def is_egypt_mobile(phone_norm):
+    """An Egyptian mobile number in its national form: 11 digits starting 010, 011, 012 or 015."""
+    return bool(_EGYPT_MOBILE.match(phone_norm or ""))
 
 
 def looks_like_phone(query):

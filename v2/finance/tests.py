@@ -8,7 +8,7 @@ from django.test import TransactionTestCase
 from billing.models import Payment
 from clinical.testing import M2TestCase
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from finance.models import Shift
 from scheduling.testing import add_schedule, services_of, today
 
@@ -305,7 +305,7 @@ class RegisterConcurrencyTests(TransactionTestCase):
         for _ in range(3):
             visit = call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": owner_id, "service_id": self.services["procedure"].id,
-                "new_patient": {"full_name": "Race Patient"}}).json()["appointment"]
+                "new_patient": new_patient(full_name="Race Patient")}).json()["appointment"]
             call(desk, "POST", f"/api/v1/appointments/{visit['id']}/arrive", {"status": "booked"})
             visits.append(visit)
         shift_id = current_shift(self.a)
@@ -334,7 +334,7 @@ class RegisterConcurrencyTests(TransactionTestCase):
         owner_id = self.a.membership("owner").id
         visits = [call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": owner_id, "service_id": self.services["procedure"].id,
-            "new_patient": {"full_name": "First Cash"}}).json()["appointment"] for _ in range(2)]
+            "new_patient": new_patient(full_name="First Cash")}).json()["appointment"] for _ in range(2)]
         jobs = [lambda v=v: call(self.a.client("assistant"), "POST", f"/api/v1/appointments/{v['id']}/payments",
                                  {"amount": 100, "method": "cash"}) for v in visits]
         results = self.run_together(jobs)

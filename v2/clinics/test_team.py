@@ -11,7 +11,7 @@ from audit.models import AuditChange
 from clinics import permissions as perms
 from clinics.models import Membership, Section
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from directory.flows import create_clinic
 from directory.models import Invitation, UserClinic
 from scheduling.testing import M1TestCase, add_schedule, services_of
@@ -327,7 +327,7 @@ class SectionLimitTests(TeamCase):
     def book_c(self, doctor_id, section_id, client=None, expect=201):
         r = call(client or self.c_owner, "POST", "/api/v1/appointments", {
             "doctor_id": doctor_id, "service_id": self.svc[section_id].id,
-            "new_patient": {"full_name": "Kid Patient", "phone": "01012345678", "sex": "m", "age": 5}})
+            "new_patient": new_patient(full_name="Kid Patient", sex="m", age=5)})
         self.assertEqual(r.status_code, expect, r.content)
         return r.json()["appointment"]["id"] if expect == 201 else r
 

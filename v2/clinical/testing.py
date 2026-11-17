@@ -8,7 +8,7 @@ from django.test.utils import CaptureQueriesContext
 
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling.testing import M1TestCase, add_schedule
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -38,7 +38,7 @@ class M2TestCase(M1TestCase):
         if patient_id is not None:
             body["patient_id"] = patient_id
         else:
-            body["new_patient"] = {"full_name": "Mohamed Ahmed", "phone": "01012345678", "sex": "m", "age": 30}
+            body["new_patient"] = new_patient()
         desk = self.desk if fixture is self.a else fixture.client("assistant")
         r = call(desk, "POST", "/api/v1/appointments/walk-in", body)
         self.assertEqual(r.status_code, 201, r.content)

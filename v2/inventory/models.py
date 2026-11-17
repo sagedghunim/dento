@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
 
-MOVEMENT_KINDS = ["purchase", "use", "adjust", "waste"]
+MOVEMENT_KINDS = ["purchase", "use", "adjust", "waste", "return"]  # return: a removed procedure's materials
 
 
 def _clinic():
@@ -86,6 +86,9 @@ class Movement(models.Model):
         indexes = [
             models.Index("clinic", "item", F("at").desc(), F("id").desc(), name="movement_item"),
             models.Index("clinic", F("at").desc(), F("id").desc(), condition=Q(kind="use"), name="movement_use"),
+            # A removed procedure gives its materials back (Saged, 2026-11-17): its movements, found by the record.
+            models.Index(fields=["clinic", "visit_procedure_id"], condition=Q(visit_procedure_id__isnull=False),
+                         name="movement_visit_procedure"),
         ]
 
 

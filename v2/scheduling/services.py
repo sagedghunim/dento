@@ -121,6 +121,7 @@ def book(ctx, request, deltas=None):
         patient = {"id": found[0], "full_name": found[1], "phone": found[2], "file_no": found[3]}
         eligible, has_arrived = found[4], found[5]
         fields = None
+        check_same_day(ctx, patient, doctor.doctor_id, day, request.get("confirm_other_doctor", False))
     else:
         fields = patients.clean_fields(request["new_patient"], today)
         eligible, has_arrived = False, False
@@ -205,6 +206,87 @@ def book(ctx, request, deltas=None):
     return body, version
 
 
+ACTIVE = ("booked", "waiting", "with_assistant", "ready", "in_room")
+HERE = ("waiting", "with_assistant", "ready", "in_room")  # arrived and not finished: in the clinic now
+
+
+def _where(status):
+    return {"waiting": _("waiting"), "with_assistant": _("with the assistant"), "ready": _("ready for the doctor"),
+            "in_room": _("with the doctor")}[status]
+
+
+def same_day_visits(ctx, patient_id, day, exclude_id=None):
+    """The patient's open visits on `day` (booked, or here and not finished), with the doctor's names: one statement
+    on index appointment_patient_hist."""
+    return sql.dicts(ctx, """
+        SELECT a.id, a.doctor_id, a.section_id, a.status, a.queue_no, a.starts_at, m.display_name, m.display_name_en
+          FROM "scheduling_appointment" a
+          JOIN "clinics_membership" m ON m.clinic_id = a.clinic_id AND m.id = a.doctor_id
+         WHERE a.clinic_id = %s AND a.patient_id = %s AND a.day = %s AND a.status = ANY(%s) AND a.id <> %s
+         ORDER BY a.id LIMIT 20""", [ctx.clinic_id, patient_id, day, list(ACTIVE), exclude_id or 0])
+
+
+def _lock_patient_day(ctx, patient_id, day):
+    sql.row(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('visit:' || %s || ':' || %s || ':' || %s, 0))",
+            [ctx.clinic_id, patient_id, day.isoformat()])
+
+
+def visible_visit(ctx, visit):
+    """A limited assistant sees only their sections' visits, a doctor only their own (design G1)."""
+    scope = rules.section_scope(ctx)
+    doctor = rules.own_doctor(ctx)
+    return (scope is None or visit["section_id"] in scope) and (doctor is None or visit["doctor_id"] == doctor)
+
+
+def visit_extra(ctx, visit):
+    from core.days import local_iso
+    from core.i18n import pick
+
+    return {"id": visit["id"], "status": visit["status"], "queue_no": visit["queue_no"],
+            "starts_at": local_iso(ctx.clinic, visit["starts_at"]) if visit["starts_at"] else None,
+            "doctor_id": visit["doctor_id"], "doctor_name": pick(visit["display_name"], visit["display_name_en"])}
+
+
+def check_same_day(ctx, patient, doctor_id, day, confirm=False, exclude_id=None):
+    """No double booking of one patient (Saged, 2026-11-17), under a lock on (clinic, patient, day):
+
+    - a patient who is in the clinic now (arrived, not finished) gets no second visit that day, with any doctor;
+    - a patient with an open visit with this doctor that day gets no second one with them;
+    - an open booking with another doctor that day is a warning the desk confirms (`confirm`): centers.
+    A finished, cancelled or missed visit doesn't count. The transaction-level advisory lock makes two desks (or a
+    double tap under two keys) go one at a time: the second's read, a new statement after the lock, sees the
+    first's visit. Taken after the doctor's FOR SHARE (or the appointment's own lock) and before the counters
+    (design 5.0); only booking, reschedule and undo-no-show take it, and they take no older lock after it.
+    """
+    _lock_patient_day(ctx, patient["id"], day)
+    visits = same_day_visits(ctx, patient["id"], day, exclude_id)
+    name = patient["full_name"]
+    for visit in visits:
+        if visit["status"] in HERE or visit["doctor_id"] == doctor_id:
+            shown = visible_visit(ctx, visit)
+            if not shown:
+                message = _("This patient already has an open visit in the clinic that day.")
+            elif visit["status"] in HERE:
+                message = _("%(name)s is already here now: %(where)s (turn %(n)s).") % {
+                    "name": name, "where": _where(visit["status"]), "n": visit["queue_no"]}
+            elif visit["starts_at"] is not None:
+                from web.format import clock_text
+
+                message = _("%(name)s is already booked with this doctor at %(time)s.") % {
+                    "name": name, "time": clock_text(visit["starts_at"], ctx.clinic)}
+            else:
+                message = _("%(name)s is already booked with this doctor that day (turn %(n)s).") % {
+                    "name": name, "n": visit["queue_no"]}
+            raise ApiError("already_booked", message, 409, fields={"patient_id": "already_booked"},
+                           extra={"appointment": visit_extra(ctx, visit) if shown else None})
+    others = [v for v in visits if visible_visit(ctx, v)]
+    if others and not confirm:
+        doctor_name = visit_extra(ctx, others[0])["doctor_name"]
+        raise ApiError("other_doctor_today", _("%(name)s has a booking that day with %(doctor)s.") % {
+            "name": name, "doctor": doctor_name}, 409, fields={"confirm_other_doctor": "required"},
+            extra={"appointments": [visit_extra(ctx, v) for v in others]})
+
+
 def _not_today():
     return ApiError("not_today", _("A visit can be marked arrived only on its own day."), 409, fields={"day": "not_today"})
 
@@ -250,6 +332,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     day, doctor_id = appointment["day"], appointment["doctor_id"]
     deltas = Deltas().clinic_day(day)
     if action == "arrive":
+        _already_here(ctx, appointment)
         _recheck_follow_up(ctx, appointment)
     elif action == "finish":
         deltas.doctor_day(day, doctor_id, done=1).clinic_day(day, done=1)
@@ -270,7 +353,9 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
             # "Book the next visit" (design E3), in this transaction; its turn goes into the one doctor-day write.
             ctx.require("appointments.book")
             body, _version = book(ctx, {**next_visit, "patient_id": appointment["patient_id"], "new_patient": None,
-                                        "arrive": False, "payment": None, "source": "clinic"}, deltas=deltas)
+                                        "arrive": False, "payment": None, "source": "clinic",
+                                        # the doctor chose it: another doctor's booking that day doesn't stop it
+                                        "confirm_other_doctor": True}, deltas=deltas)
             if outcome is not None:
                 outcome["next_appointment"] = body
     elif action == "cancel":
@@ -279,6 +364,22 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     if not (action == "finish" and next_visit is not None):
         deltas.write_doctors(ctx)  # a next visit's booking already wrote them all, with its turn, in one statement
     return deltas.write_clinics(ctx)[day]
+
+
+def _already_here(ctx, appointment):
+    """A patient is in the clinic once at a time (Saged, 2026-11-17): marking a second visit of theirs arrived (one
+    booked with another doctor) is refused while the first is still here. Under the same lock as booking."""
+    _lock_patient_day(ctx, appointment["patient_id"], appointment["day"])
+    here = [v for v in same_day_visits(ctx, appointment["patient_id"], appointment["day"], appointment["id"])
+            if v["status"] in HERE]
+    if here:
+        visit = here[0]
+        shown = visible_visit(ctx, visit)
+        message = (_("This patient is already here now: %(where)s with %(doctor)s (turn %(n)s).") % {
+            "where": _where(visit["status"]), "doctor": visit_extra(ctx, visit)["doctor_name"], "n": visit["queue_no"]}
+            if shown else _("This patient already has an open visit in the clinic that day."))
+        raise ApiError("already_here", message, 409, fields={"status": "already_here"},
+                       extra={"appointment": visit_extra(ctx, visit) if shown else None})
 
 
 def _one_in_room(ctx, appointment_id):
@@ -403,6 +504,11 @@ def undo_no_show(ctx, appointment_id, seen):
             raise _only_today()
         raise ApiError("status_changed", _("This visit's status changed meanwhile."), 409, fields={"status": status})
     day, doctor_id, service_id, fee = changed
+    # Booked again only if no other open visit took its place meanwhile (Saged, 2026-11-17).
+    patient = sql.dicts(ctx, 'SELECT p.id, p.full_name FROM "patients_patient" p JOIN "scheduling_appointment" a '
+                             "ON a.clinic_id = p.clinic_id AND a.patient_id = p.id WHERE a.clinic_id = %s AND a.id = %s",
+                        [ctx.clinic_id, appointment_id])[0]
+    check_same_day(ctx, patient, doctor_id, day, confirm=True, exclude_id=appointment_id)
     record_change(ctx, "appointment.undo_no_show", "appointment", appointment_id,
                   before={"status": "no_show"}, after={"status": "booked"})
     if fee:
@@ -490,6 +596,12 @@ def reschedule(ctx, appointment_id, seen, doctor_id, day, starts_at, extra):
     is_extra = bool(extra and new_starts is not None)
     if (doctor_id, day, new_starts, is_extra) == (old_doctor, old_day, old_starts, old_extra):
         return None
+    if (doctor_id, day) != (old_doctor, old_day):
+        # Moved to another doctor or day: not onto a second open visit of this patient (Saged, 2026-11-17).
+        patient = sql.dicts(ctx, 'SELECT p.id, p.full_name FROM "patients_patient" p JOIN "scheduling_appointment" a '
+                                 "ON a.clinic_id = p.clinic_id AND a.patient_id = p.id WHERE a.clinic_id = %s AND a.id = %s",
+                            [ctx.clinic_id, appointment_id])[0]
+        check_same_day(ctx, patient, doctor_id, day, confirm=True, exclude_id=appointment_id)
     deltas = Deltas()
     if (doctor_id, day) == (old_doctor, old_day):
         deltas.doctor_day(day, doctor_id)  # lock only: slot moves on one doctor-day go one at a time; the turn stays
@@ -592,7 +704,8 @@ def walk_in(ctx, request):
     appointment, version = book(ctx, {
         "patient_id": request["patient_id"], "new_patient": request["new_patient"], "doctor_id": doctor_id,
         "service_id": service_id, "day": today, "starts_at": None, "extra": False, "arrive": True, "walk_in": True,
-        "source": "clinic", "note": request["note"], "payment": request["payment"]})
+        "source": "clinic", "note": request["note"], "payment": request["payment"],
+        "confirm_other_doctor": request.get("confirm_other_doctor", False)})
     return appointment, version, waiting_ahead(ctx, appointment)
 
 

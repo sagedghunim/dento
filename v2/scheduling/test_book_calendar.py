@@ -9,7 +9,7 @@ from django.utils import translation
 
 from clinics.models import Clinic
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from web import format as fmt
 
 from .testing import M1TestCase, add_schedule, frozen, today
@@ -44,10 +44,10 @@ class QueueTimesTests(M1TestCase):
         at = self.slot_iso(self.a, self.day, "12:00")
         first = self.book(day=self.day.isoformat(), starts_at=at).json()["appointment"]
         self.assertEqual((first["status"], first["starts_at"]), ("booked", at))
-        r = self.book(day=self.day.isoformat(), starts_at=at, new_patient={"full_name": "Second"}, expect=409)
+        r = self.book(day=self.day.isoformat(), starts_at=at, new_patient=new_patient(full_name="Second"), expect=409)
         self.assertEqual(r.json()["error"]["code"], "slot_taken")
-        self.book(day=self.day.isoformat(), starts_at=at, extra=True, new_patient={"full_name": "Extra"})
-        self.book(day=self.day.isoformat(), new_patient={"full_name": "Next turn"})  # no time, a queue turn
+        self.book(day=self.day.isoformat(), starts_at=at, extra=True, new_patient=new_patient(full_name="Extra"))
+        self.book(day=self.day.isoformat(), new_patient=new_patient(full_name="Next turn"))  # no time, a queue turn
         taken = [s for s in self.slots()["slots"] if s["taken"]]
         self.assertEqual([s["starts_at"] for s in taken], [at])
         r = self.book(day=self.day.isoformat(), starts_at=self.slot_iso(self.a, self.day, "12:30"), expect=400)
@@ -99,11 +99,11 @@ class FeedAndRowTests(M1TestCase):
     def test_a_booking_is_booked_in_the_feed_and_never_arrived(self):
         day = today(self.a)
         at = self.slot_iso(self.a, day, "22:00")
-        self.book(day=day.isoformat(), starts_at=at, new_patient={"full_name": "Later"})
-        self.book(arrive=True, new_patient={"full_name": "Here now"})
+        self.book(day=day.isoformat(), starts_at=at, new_patient=new_patient(full_name="Later Visit Patient"))
+        self.book(arrive=True, new_patient=new_patient(full_name="Here Now Patient"))
         recent = call(self.desk, "GET", "/api/v1/today").json()["recent"]
-        later = [(e["action"], e["starts_at"]) for e in recent if e["patient_name"] == "Later"]
-        here = [e["action"] for e in recent if e["patient_name"] == "Here now"]
+        later = [(e["action"], e["starts_at"]) for e in recent if e["patient_name"] == "Later Visit Patient"]
+        here = [e["action"] for e in recent if e["patient_name"] == "Here Now Patient"]
         self.assertEqual(later, [("booked", at)])
         self.assertEqual(here, ["arrived"])
         with translation.override("ar"):

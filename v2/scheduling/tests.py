@@ -6,7 +6,7 @@ from django.test.utils import CaptureQueriesContext
 
 from clinics.models import Clinic, Membership, Schedule
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling import rules
 from scheduling.jobs import recompute_clinic, sweep_clinic
 from scheduling.models import Appointment
@@ -22,16 +22,18 @@ def cairo(text):
 class BookingTests(M1TestCase):
     def test_turns_count_up_per_doctor_day_and_a_new_patient_gets_a_file_number(self):
         first = self.book().json()["appointment"]
-        second = self.book(new_patient={"full_name": "Sara Ali"}).json()["appointment"]
+        second = self.book(new_patient=new_patient(full_name="Sara Ali")).json()["appointment"]
         self.assertEqual((first["queue_no"], second["queue_no"]), (1, 2))
         self.assertEqual((first["patient"]["file_no"], second["patient"]["file_no"]), (1, 2))
         self.assertTrue(first["is_new"])
+        # One open visit per patient and doctor a day (Saged, 2026-11-17): the first is cancelled, then booked again.
+        self.assertEqual(self.act(first["id"], "cancel", "booked").status_code, 200)
         again = self.book(patient_id=first["patient"]["id"]).json()["appointment"]
         self.assertEqual((again["queue_no"], again["patient"]["file_no"]), (3, 1))
         clinic, doctors = summaries(self.a, today(self.a))
         owner = self.a.membership("owner").id
-        self.assertEqual((doctors[owner]["last_queue_no"], doctors[owner]["booked"]), (3, 3))
-        self.assertEqual(clinic["version"], 3)
+        self.assertEqual((doctors[owner]["last_queue_no"], doctors[owner]["booked"]), (3, 2))
+        self.assertEqual(clinic["version"], 4)
 
     def test_booking_answers_the_row_and_the_version(self):
         r = self.book(payment={"amount": 5000, "method": "cash"})
@@ -125,7 +127,7 @@ class BookingTests(M1TestCase):
         patient = self.book().json()["appointment"]["patient"]["id"]
         revoke("patients.edit")
         self.assertEqual(self.book(expect=403).status_code, 403)
-        self.book(patient_id=patient)
+        self.book(patient_id=patient, day=(today(self.a) + dt.timedelta(days=1)).isoformat())
         revoke("billing.collect")
         self.book(expect=403, patient_id=patient, payment={"amount": 100, "method": "cash"})
         revoke("appointments.queue")
@@ -134,8 +136,11 @@ class BookingTests(M1TestCase):
     def test_bad_input_is_a_clear_400(self):
         for body in ({"doctor_id": "x"}, {"doctor_id": 2**70}, {"day": "2026-13-01"}, {"source": "fax"},
                      {"payment": {"amount": "abc", "method": "cash"}}, {"payment": {"amount": 100, "method": "gold"}},
-                     {"starts_at": "10:00"}, {"new_patient": {"full_name": "x"}},
-                     {"new_patient": {"full_name": "Ali", "phone": "123"}}, {"patient_id": 1, "new_patient": {}}):
+                     {"starts_at": "10:00"}, {"new_patient": {"full_name": "x y", "phone": "01099990009", "sex": "m", "age": 30}},
+                     {"new_patient": new_patient(full_name="Ali", phone="123")}, {"new_patient": new_patient(sex="")},
+                     {"new_patient": new_patient(age=None)}, {"new_patient": new_patient(phone="")},
+                     {"new_patient": new_patient(phone="0221234567")},
+                     {"new_patient": new_patient(phone_owner="guardian")}, {"patient_id": 1, "new_patient": {}}):
             r = self.book(expect=400, **body)
             self.assertEqual(r.json()["error"]["code"] in ("invalid", "off_grid"), True, (body, r.content))
 
@@ -168,6 +173,7 @@ class FollowUpTests(M1TestCase):
                           starts_at=self.slot_iso(self.a, today(self.a) + dt.timedelta(days=3), "10:00"),
                           day=(today(self.a) + dt.timedelta(days=3)).isoformat()).json()["appointment"]
         self.assertFalse(other["is_follow_up"])
+        self._done(first)  # one open visit a day with a doctor (Saged, 2026-11-17)
         follow = self.book(patient_id=pid, service_id=self.follow.id, arrive=True).json()["appointment"]
         self.assertTrue(follow["is_follow_up"])
         # The quote agrees with the rule.
@@ -185,19 +191,30 @@ class FollowUpTests(M1TestCase):
     def test_zero_days_turns_the_rule_off(self):
         call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"follow_up_days": 0}, "expected": {}})
         first = self._visit(today(self.a), arrive=True)
+        self._done(first)
         self.assertFalse(self._visit(today(self.a), patient_id=first["patient"]["id"])["is_follow_up"])
 
+    def _done(self, visit):
+        free_rooms(self.a)
+        self.assertEqual(self.act(visit["id"], "call", "waiting").status_code, 200)
+        self.assertEqual(self.act(visit["id"], "finish", "in_room").status_code, 200)
+
     def test_the_rule_is_checked_again_at_arrival_only_while_there_is_no_invoice(self):
-        first = self._visit(today(self.a))
-        pid = first["patient"]["id"]
-        second = self._visit(today(self.a), patient_id=pid)
-        third = self._visit(today(self.a), patient_id=pid)
-        self.assertFalse(second["is_follow_up"])
-        call(self.desk, "POST", f"/api/v1/appointments/{third['id']}/invoice")
-        self.act(first["id"], "arrive", "booked")
-        arrived = self.act(second["id"], "arrive", "booked").json()["appointment"]
+        # Three days, one visit a day (Saged, 2026-11-17: one open visit a day with a doctor), all booked on day 1.
+        with frozen(cairo("2026-11-10T12:00")):
+            desk = self.a.client("assistant")
+            first = self.book(client=desk, day="2026-11-10").json()["appointment"]
+            pid = first["patient"]["id"]
+            second = self.book(client=desk, day="2026-11-11", patient_id=pid).json()["appointment"]
+            third = self.book(client=desk, day="2026-11-12", patient_id=pid).json()["appointment"]
+            self.assertFalse(second["is_follow_up"])
+            call(desk, "POST", f"/api/v1/appointments/{third['id']}/invoice")
+            self.assertEqual(self.act(first["id"], "arrive", "booked", client=desk).status_code, 200)
+        with frozen(cairo("2026-11-11T12:00")):
+            arrived = self.act(second["id"], "arrive", "booked", client=self.a.client("assistant")).json()["appointment"]
         self.assertEqual((arrived["fee"], arrived["is_follow_up"]), (10000, True))
-        kept = self.act(third["id"], "arrive", "booked").json()["appointment"]
+        with frozen(cairo("2026-11-12T12:00")):
+            kept = self.act(third["id"], "arrive", "booked", client=self.a.client("assistant")).json()["appointment"]
         self.assertEqual((kept["fee"], kept["is_follow_up"], kept["invoice"]["total"]), (self.consult.price, False,
                                                                                          self.consult.price))
 
@@ -360,7 +377,7 @@ class TodayTests(M1TestCase):
 
     def test_queues_counts_and_money_only_with_finances_view(self):
         appt = self.book(arrive=True, payment={"amount": 5000, "method": "cash"}).json()["appointment"]
-        self.book(new_patient={"full_name": "Huda"})
+        self.book(new_patient=new_patient(full_name="Huda"))
         body = call(self.desk, "GET", "/api/v1/today").json()
         self.assertNotIn("totals", body)
         queue = next(q for q in body["queues"] if q["doctor"]["id"] == self.a.membership("owner").id)
@@ -375,7 +392,7 @@ class TodayTests(M1TestCase):
         self.assertIn(self.a.membership("doctor").id, [q["doctor"]["id"] for q in body["queues"]])
 
     def test_another_clinics_rows_never_show(self):
-        self.book(fixture=self.b, new_patient={"full_name": "Secret Person"})
+        self.book(fixture=self.b, new_patient=new_patient(full_name="Secret Person"))
         body = call(self.desk, "GET", "/api/v1/today").content.decode()
         self.assertNotIn("Secret Person", body)
 
@@ -534,7 +551,8 @@ class QueryCountTests(M1TestCase):
         return patient
 
     def test_today_booking_and_status_changes_dont_grow_with_the_day(self):
-        patient = self.book().json()["appointment"]["patient"]["id"]
+        tomorrow = (today(self.a) + dt.timedelta(days=1)).isoformat()  # today stays free for the measured booking
+        patient = self.book(day=tomorrow).json()["appointment"]["patient"]["id"]
         procedure = self.services_a["procedure"].id
 
         def measure():
@@ -542,9 +560,10 @@ class QueryCountTests(M1TestCase):
             etag = call(self.desk, "GET", "/api/v1/today")["ETag"]
             today_304 = self.count(lambda: self.desk.get("/api/v1/today", headers={
                 "X-Membership": str(self.desk.membership_id), "If-None-Match": etag}))
-            booking = self.count(lambda: self.book(patient_id=patient, arrive=True, service_id=procedure,
-                                                   payment={"amount": 100, "method": "cash"}))
-            appt = self.book(patient_id=patient, arrive=True).json()["appointment"]
+            booked = []
+            booking = self.count(lambda: booked.append(self.book(patient_id=patient, arrive=True, service_id=procedure,
+                                                                 payment={"amount": 100, "method": "cash"})))
+            appt = booked[0].json()["appointment"]  # the patient's one open visit today (Saged, 2026-11-17)
             status = self.count(lambda: self.act(appt["id"], "call", "waiting"))
             self.act(appt["id"], "finish", "in_room")  # the room is free for the next measure
             return today_full, today_304, booking, status
@@ -560,7 +579,8 @@ class QueryCountTests(M1TestCase):
         # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0), plus the open
         # cash shift taken before the doctor-day (F1, 8a: cash opens a shift when none is, and that INSERT can
         # wait on another, so it must come before any summary row). Fixed: it never grows with the day.
-        self.assertLessEqual(small[2], 15)
+        # Plus the lock on (patient, day) and the read of the patient's open visits that day (Saged, 2026-11-17).
+        self.assertLessEqual(small[2], 17)
 
 
 class FinishTests(M1TestCase):

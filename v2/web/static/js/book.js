@@ -7,7 +7,8 @@
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
+import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
+import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
 
@@ -35,28 +36,40 @@ export function patientMeta(p) {
   return nodes;
 }
 
-// A new name with a phone that already has a file suggests that file; it never blocks (R4.2). The Book and
-// Walk-in dialogs both have [data-dupes] with [data-dupe-list]; a suggestion is picked like a search result.
-export async function checkPhone(dialog, value) {
-  const dupes = dialog.querySelector("[data-dupes]");
-  const digits = asciiDigits(value).replace(/\D/g, "");
-  dupes.hidden = true;
-  if (digits.length < 10) return;
-  const result = await get(`/api/v1/patients/by-phone?phone=${encodeURIComponent(digits)}`);
-  if (!isOk(result) || !result.data.items.length) return;
-  const list = dialog.querySelector("[data-dupe-list]");
-  list.replaceChildren(...result.data.items.map((p) => {
-    const button = el("button", "result");
-    button.type = "button";
-    Object.assign(button.dataset, { pickPatient: "", id: p.id, name: p.name, file: p.file_no, phone: p.phone || "" });
-    const who = el("bdi", "who", p.name);
-    who.dir = "auto";
-    const meta = el("span", "meta");
-    meta.append(...patientMeta({ file: p.file_no, phone: p.phone }));
-    button.append(who, meta);
-    return button;
-  }));
-  dupes.hidden = false;
+// The patient already has a visit (Saged, 2026-11-17): the server's words in the dialog's [data-conflict], with
+// "Go to it" for a visit the member may see and, for another doctor's booking that day, "Book anyway", which
+// sends again with confirm_other_doctor. Returns true when the answer was one of these.
+export function showConflict(dialog, result, { onConfirm } = {}) {
+  const box = dialog.querySelector("[data-conflict]");
+  const error = result && result.data && result.data.error;
+  if (!box) return false;
+  box.hidden = true;
+  if (!error || !["already_booked", "already_here", "other_doctor_today"].includes(error.code)) return false;
+  box.querySelector("[data-conflict-text]").textContent = error.message;
+  const go = box.querySelector("[data-conflict-go]");
+  const visit = error.appointment || (error.appointments && error.appointments[0]) || null;
+  go.hidden = !visit;
+  go.onclick = () => goToVisit(dialog, visit);
+  const confirm = box.querySelector("[data-conflict-confirm]");
+  confirm.hidden = error.code !== "other_doctor_today";
+  confirm.onclick = () => { box.hidden = true; if (onConfirm) onConfirm(); };
+  box.hidden = false;
+  return true;
+}
+
+export function hideConflict(dialog) {
+  const box = dialog.querySelector("[data-conflict]");
+  if (box) box.hidden = true;
+}
+
+// Today's row when it is on this page, else Today.
+function goToVisit(dialog, visit) {
+  closeDialog(dialog);
+  const row = visit && document.querySelector(`.appt[data-id="${visit.id}"]`);
+  if (!row) { window.location.href = "/"; return; }
+  row.scrollIntoView({ block: "center" });
+  const button = row.querySelector("button, a");
+  if (button) button.focus();
 }
 
 export function initBook({ onBooked, defaults } = {}) {
@@ -70,7 +83,8 @@ export function initBook({ onBooked, defaults } = {}) {
   const searchStatus = dialog.querySelector("[data-search-status]");
   const picked = dialog.querySelector("[data-picked]");
   const newBox = dialog.querySelector("[data-new]");
-  const dupes = dialog.querySelector("[data-dupes]");
+  const np = initNewPatient(dialog);
+  let confirmOther = false;  // the desk tapped "Book anyway" on another doctor's booking that day
   const fee = dialog.querySelector("[data-fee]");
   const todayOnly = dialog.querySelector("[data-today-only]");
   const collectFields = dialog.querySelector("[data-collect-fields]");
@@ -121,6 +135,8 @@ export function initBook({ onBooked, defaults } = {}) {
 
   function showPicked(p) {
     patient = p;
+    confirmOther = false;
+    hideConflict(dialog);
     picked.hidden = false;
     finder.hidden = true;
     if (newBox) newBox.hidden = true;
@@ -146,10 +162,7 @@ export function initBook({ onBooked, defaults } = {}) {
     picked.hidden = true;
     finder.hidden = true;
     newBox.hidden = false;
-    const q = field("q").value.trim();
-    if (q && !field("full_name").value && !/^[\d\s+٠-٩۰-۹-]+$/.test(q)) field("full_name").value = q;
-    if (q && !field("phone").value && /^[\d\s+٠-٩۰-۹-]+$/.test(q)) field("phone").value = q;
-    field("full_name").focus();
+    np.prefill(field("q").value.trim());
     quote();
   }
 
@@ -186,7 +199,6 @@ export function initBook({ onBooked, defaults } = {}) {
     if (event.target.closest("[data-back-to-search]")) showFinder();
   });
 
-  if (newBox) field("phone").addEventListener("change", () => checkPhone(dialog, field("phone").value));
 
   // --- section, service, doctor ---
 
@@ -274,12 +286,8 @@ export function initBook({ onBooked, defaults } = {}) {
   function body() {
     const out = { doctor_id: when.doctor(), service_id: serviceId(), day: when.day(), source: form.querySelector('[name="source"]:checked').value };
     if (patient) out.patient_id = patient.id;
-    else if (newBox && !newBox.hidden) {
-      const sex = form.querySelector('[name="sex"]:checked');
-      out.new_patient = { full_name: field("full_name").value.trim(), phone: asciiDigits(field("phone").value).trim(), sex: sex ? sex.value : "" };
-      const age = field("age").value.trim();
-      if (age) out.new_patient.age = parseWhole(age);
-    }
+    else if (newBox && !newBox.hidden) out.new_patient = np.values();
+    if (confirmOther) out.confirm_other_doctor = true;
     const slot = when.slot();
     if (slot) { out.starts_at = slot; if (when.isExtra()) out.extra = true; }
     if (plan && patient) out.follow_up_id = session().id;
@@ -296,8 +304,7 @@ export function initBook({ onBooked, defaults } = {}) {
 
   function check(b) {
     if (!b.patient_id && !b.new_patient) return t("need_patient");
-    if (b.new_patient && b.new_patient.full_name.length < 2) return t("need_name");
-    if (b.new_patient && field("age").value.trim() && b.new_patient.age === null) return t("bad_age");
+    if (b.new_patient) { const missing = np.problem(b.new_patient); if (missing) return missing; }
     if (!b.service_id) return t("need_service");
     if (!b.doctor_id) return t("need_doctor");
     if (!b.day) return t("need_day");
@@ -318,7 +325,11 @@ export function initBook({ onBooked, defaults } = {}) {
     const who = patient ? patient.name : (b.new_patient && b.new_patient.full_name) || "";
     const label = [t("booking"), who, b.payment ? moneyText(b.payment.amount) : ""].filter(Boolean).join(" · ");
     const result = await submitter.run("POST", "/api/v1/appointments", b, label);
-    if (result && !isOk(result)) depositAnswer(result);
+    if (result && !isOk(result)) {
+      depositAnswer(result);
+      if (np) np.refused(result);
+      showConflict(dialog, result, { onConfirm: () => { confirmOther = true; form.requestSubmit(); } });
+    }
     if (!result || !isOk(result)) { if (tab) tab.close(); return; }
     const appointment = result.data.appointment;
     const bookedSession = b.follow_up_id ? session() : null;
@@ -368,7 +379,9 @@ export function initBook({ onBooked, defaults } = {}) {
     submitter.reset();
     results.replaceChildren();
     searchStatus.textContent = "";
-    if (dupes) dupes.hidden = true;
+    if (np) np.reset();
+    confirmOther = false;
+    hideConflict(dialog);
     if (field("amount")) delete field("amount").dataset.touched;
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
     // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.

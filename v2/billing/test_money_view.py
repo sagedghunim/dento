@@ -15,7 +15,7 @@ from clinical.testing import M2TestCase
 from clinics import permissions as perms
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 
 MONEY_MARKS = ('class="money"', "data-due=", "data-fee=", "data-paid=", 'data-act="pay"', "data-procs-total",
                "bill-total", 'id="pay-dialog"', "data-deposit-box")
@@ -89,7 +89,7 @@ class MoneyTestCase(M2TestCase):
     def waiting(self, doctor="doctor"):
         """A visit of A's doctor that has arrived and waits (Today shows it; the doctor is not sent to a visit)."""
         body = {"service_id": self.services_a["procedure"].id, "doctor_id": self.a.membership(doctor).id,
-                "new_patient": {"full_name": "Mona Ali", "phone": "01099999999", "sex": "f", "age": 40}}
+                "new_patient": new_patient(full_name="Mona Ali", phone="01099999999", sex="f", age=40)}
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in", body)
         self.assertEqual(r.status_code, 201, r.content)
         return r.json()["appointment"]
@@ -291,7 +291,7 @@ class OwnerAndAssistantTests(MoneyTestCase):
             Membership.objects.filter(clinic_id=solo.id).exclude(role="owner").update(is_active=False)
         owner = solo.client("owner")
         body = {"service_id": services_of(solo)["procedure"].id, "doctor_id": solo.membership("owner").id,
-                "new_patient": {"full_name": "Solo Patient", "phone": "01011111111", "sex": "m", "age": 20}}
+                "new_patient": new_patient(full_name="Solo Patient", phone="01011111111", sex="m", age=20)}
         r = call(owner, "POST", "/api/v1/appointments/walk-in", body)
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["appointment"]["fee"], services_of(solo)["procedure"].price)
@@ -311,7 +311,7 @@ class IsolationTests(MoneyTestCase):
         self.assertEqual(r.status_code, 403)  # B's doctor has no switch in B
         b_visit = call(self.b.client("assistant"), "POST", "/api/v1/appointments/walk-in",
                        {"service_id": self.services_b["procedure"].id, "doctor_id": self.b.membership("doctor").id,
-                        "new_patient": {"full_name": "Other Place", "phone": "01022222222", "sex": "m", "age": 30}})
+                        "new_patient": new_patient(full_name="Other Place", phone="01022222222", sex="m", age=30)})
         self.assertEqual(b_visit.status_code, 201, b_visit.content)
         b_id = b_visit.json()["appointment"]["id"]
         doc = self.a.client("doctor")  # A's doctor, with the switch in A: B's visit is not found

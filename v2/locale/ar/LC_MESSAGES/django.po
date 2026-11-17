@@ -635,9 +635,6 @@ msgstr "أنثى"
 msgid "Age in years"
 msgstr "السن بالسنوات"
 
-msgid "This mobile number already has a file. Is it one of these?"
-msgstr "رقم الموبايل هذا له ملف بالفعل. هل المريض أحد هؤلاء؟"
-
 msgid "Search instead"
 msgstr "ابحث بدلًا من ذلك"
 
@@ -676,9 +673,6 @@ msgstr "تعديل ملف المريض"
 
 msgid "Date of birth"
 msgstr "تاريخ الميلاد"
-
-msgid "Or the age in years"
-msgstr "أو السن بالسنوات"
 
 msgid "Address"
 msgstr "العنوان"
@@ -1354,22 +1348,6 @@ msgstr "المواعيد"
 msgid ""
 "New bookings appear here by themselves, from every screen in the clinic."
 msgstr "الحجوزات الجديدة تظهر هنا تلقائيًا، من كل شاشات العيادة."
-
-msgid "Add a booking"
-msgstr "إضافة حجز"
-
-msgid ""
-"Find the patient or add a new one, then the service and the time. A walk-in "
-"is booked, marked arrived and paid in one step."
-msgstr ""
-"ابحث عن المريض أو أضف مريضًا جديدًا، ثم اختر الخدمة والموعد. المريض الحاضر "
-"يُحجز له ويُسجَّل وصوله ويدفع في خطوة واحدة."
-
-msgid "Patient name or mobile"
-msgstr "اسم المريض أو الموبايل"
-
-msgid "Latest activity"
-msgstr "آخر الأحداث"
 
 msgid ""
 "A username has 3 to 30 English letters, digits, dots, dashes or underscores,"
@@ -3792,3 +3770,167 @@ msgstr "الخصومات والمرتجع والمصاريف والباقات و
 
 msgid "Give discounts"
 msgstr "عمل خصومات"
+
+msgid "Another time"
+msgstr "مدة أخرى"
+
+msgid "Or after"
+msgstr "أو بعد"
+
+msgid "How many"
+msgstr "العدد"
+
+msgid "days"
+msgstr "أيام"
+
+msgid "weeks"
+msgstr "أسابيع"
+
+msgid "months"
+msgstr "شهور"
+
+msgid "Write a number of days, weeks or months, up to two years."
+msgstr "اكتب عدد الأيام أو الأسابيع أو الشهور، حتى سنتين."
+
+msgid "Procedures can be removed only while the visit is on."
+msgstr "لا تُحذف الإجراءات إلا والزيارة جارية."
+
+msgid "Back from a removed procedure"
+msgstr "رجع من إجراء محذوف"
+
+msgid "%(name)s already has a file with this number."
+msgstr "%(name)s ليه ملف بالفعل على الرقم ده."
+
+msgid "%(name)s has a booking that day with %(doctor)s."
+msgstr "%(name)s عنده حجز في نفس اليوم مع %(doctor)s."
+
+msgid "%(name)s is already booked with this doctor at %(time)s."
+msgstr "%(name)s محجوز بالفعل مع الدكتور ده الساعة %(time)s."
+
+msgid "%(name)s is already booked with this doctor that day (turn %(n)s)."
+msgstr "%(name)s محجوز بالفعل مع الدكتور ده في نفس اليوم (دور %(n)s)."
+
+msgid "%(name)s is already here now: %(where)s (turn %(n)s)."
+msgstr "%(name)s موجود في العيادة دلوقتي: %(where)s (دور %(n)s)."
+
+msgid "A guardian"
+msgstr "ولي الأمر"
+
+msgid "Age"
+msgstr "السن"
+
+msgid "Already added to this visit on this tooth."
+msgstr "متضاف بالفعل في الزيارة دي على السنة دي."
+
+msgid "Already added to this visit."
+msgstr "متضاف بالفعل في الزيارة دي."
+
+msgid "Already has a file? Tap it instead of adding a new one."
+msgstr "ليه ملف قبل كده؟ اضغط عليه بدل ما تعمل ملف جديد."
+
+msgid "Book anyway"
+msgstr "احجز برضه"
+
+msgid "Enter a valid mobile number: 11 digits starting with 01."
+msgstr "اكتب رقم موبايل صحيح: 11 رقم بيبدأ بـ 01."
+
+msgid "Enter the age."
+msgstr "اكتب السن."
+
+msgid "Enter the full three-part name."
+msgstr "اكتب الاسم ثلاثي."
+
+msgid "Enter the mobile number."
+msgstr "اكتب رقم الموبايل."
+
+msgid "Files on this number. Pick one, or add a new child:"
+msgstr "ملفات على الرقم ده. اختار واحد منهم، أو ضيف طفل جديد:"
+
+msgid "Full name (three names)"
+msgstr "الاسم ثلاثي"
+
+msgid "Go to it"
+msgstr "روح له"
+
+msgid "Guardian's number"
+msgstr "رقم ولي الأمر"
+
+msgid "Guardian's number (father)"
+msgstr "رقم ولي الأمر (الأب)"
+
+msgid "Guardian's number (mother)"
+msgstr "رقم ولي الأمر (الأم)"
+
+msgid "New child"
+msgstr "طفل جديد"
+
+msgid "Or the date of birth"
+msgstr "أو تاريخ الميلاد"
+
+msgid "Pick it"
+msgstr "اختاره"
+
+msgid "Pick male or female."
+msgstr "اختار ذكر أو أنثى."
+
+msgid "Someone else"
+msgstr "حد تاني"
+
+msgid "The father"
+msgstr "الأب"
+
+msgid "The guardian is"
+msgstr "ولي الأمر هو"
+
+msgid "The mother"
+msgstr "الأم"
+
+msgid "The patient"
+msgstr "المريض نفسه"
+
+msgid "This number already has a file in this clinic."
+msgstr "الرقم ده عليه ملف بالفعل في العيادة."
+
+msgid "This number already has a file:"
+msgstr "الرقم ده عليه ملف بالفعل:"
+
+msgid "This number already has a file: %(name)s."
+msgstr "الرقم ده عليه ملف بالفعل: %(name)s."
+
+msgid "This number belongs to"
+msgstr "الرقم ده بتاع"
+
+msgid "This patient already has a file in this clinic."
+msgstr "المريض ده ليه ملف بالفعل في العيادة."
+
+msgid "This patient already has an open visit in the clinic that day."
+msgstr "المريض ده عنده زيارة مفتوحة في العيادة في نفس اليوم."
+
+msgid ""
+"This patient is already here now: %(where)s with %(doctor)s (turn %(n)s)."
+msgstr ""
+"المريض ده موجود في العيادة دلوقتي: %(where)s مع %(doctor)s (دور %(n)s)."
+
+msgid "Whose number is it: the father, the mother or someone else?"
+msgstr "الرقم ده بتاع مين: الأب ولا الأم ولا حد تاني؟"
+
+msgid "a guardian's"
+msgstr "رقم ولي الأمر"
+
+msgid "ready for the doctor"
+msgstr "جاهز للدكتور"
+
+msgid "the father's"
+msgstr "رقم الأب"
+
+msgid "the mother's"
+msgstr "رقم الأم"
+
+msgid "waiting"
+msgstr "منتظر"
+
+msgid "with the assistant"
+msgstr "مع المساعد"
+
+msgid "with the doctor"
+msgstr "عند الدكتور"

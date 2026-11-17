@@ -410,7 +410,17 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None):
     fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
     from billing import visibility
 
+    same_day = []
+    if patient_id is not None:
+        # The patient's open visits that day, so the dialog warns before the desk taps Book (Saged, 2026-11-17).
+        from . import services
+
+        for visit in services.same_day_visits(ctx, patient_id, day):
+            if services.visible_visit(ctx, visit):
+                same_day.append({**services.visit_extra(ctx, visit), "here": visit["status"] in services.HERE,
+                                 "same_doctor": visit["doctor_id"] == doctor.doctor_id})
     return visibility.fields(ctx, {
+        "same_day": same_day,
         "fee": fee, "is_follow_up": is_follow_up, "visit_price": visit_price, "service_price": service.price,
         "follow_up_price": service.follow_up_price, "section_id": service.section_id,
         "doctor_works": bool(doctor.sessions_in(service.section_id))}, "fee", "service_price", "follow_up_price")

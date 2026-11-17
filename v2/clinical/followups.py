@@ -448,19 +448,27 @@ def plan_sessions(ctx, patient_id, today=None):
 # --- The doctor's most used procedures --------------------------------------------------------------------------
 
 
+# Examinations and consultations are what the visit fee (كشف) already charges, from the booking: they stay out of the
+# doctor's list and quick chips, so the fee is never charged twice (Saged, 2026-11-17). The library keeps them.
+VISIT_FEE_CATEGORIES = ("diagnosis", "consultation", "assessment")
+
+
 def top_procedures(ctx, doctor_id, section_id, today=None, count=TOP):
     """The ids of the doctor's most recorded procedures in the last 90 days (their visits by day, then each visit's
-    records), most used first; the section's first procedures fill the rest."""
+    records), most used first; the section's first procedures fill the rest. Never what the visit fee charges."""
     today = today or business_day(ctx.clinic)
     used = [r[0] for r in sql.rows(ctx, """
         SELECT v.procedure_id FROM "scheduling_appointment" a
           JOIN "clinical_visit_procedure" v ON v.clinic_id = a.clinic_id AND v.appointment_id = a.id
           JOIN "clinical_procedure" c ON c.clinic_id = v.clinic_id AND c.id = v.procedure_id
          WHERE a.clinic_id = %s AND a.day >= %s AND a.doctor_id = %s AND c.section_id = %s AND c.is_active
+           AND NOT (c.category = ANY(%s))
          GROUP BY v.procedure_id ORDER BY count(*) DESC, v.procedure_id LIMIT %s""",
-                                   [ctx.clinic_id, today - dt.timedelta(days=90), doctor_id, section_id, count])]
+                                   [ctx.clinic_id, today - dt.timedelta(days=90), doctor_id, section_id,
+                                    list(VISIT_FEE_CATEGORIES), count])]
     if len(used) < count:
         used += [r[0] for r in sql.rows(ctx, 'SELECT id FROM "clinical_procedure" WHERE clinic_id = %s AND section_id = %s '
-                                             "AND is_active AND NOT (id = ANY(%s::bigint[])) ORDER BY sort, id LIMIT %s",
-                                        [ctx.clinic_id, section_id, used, count - len(used)])]
+                                             "AND is_active AND NOT (id = ANY(%s::bigint[])) AND NOT (category = ANY(%s)) "
+                                             "ORDER BY sort, id LIMIT %s",
+                                        [ctx.clinic_id, section_id, used, list(VISIT_FEE_CATEGORIES), count - len(used)])]
     return used

@@ -99,6 +99,8 @@ def book_view(request, ctx, data):
         # The follow-up this booking is for (clinical.followups.claim), linked in the same transaction.
         "follow_up_id": (validate.ident(data.get("follow_up_id"), "follow_up_id")
                          if data.get("follow_up_id") is not None else None),
+        # The desk saw "has a booking that day with another doctor" and books anyway (Saged, 2026-11-17).
+        "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"),
     }
     appointment, version = services.book(ctx, body)
     from billing import visibility
@@ -312,6 +314,7 @@ def walk_in_view(request, ctx, data):
         "new_patient": new_patient, "doctor_id": _optional_id(data, "doctor_id"),
         "service_id": _optional_id(data, "service_id"), "section_id": _optional_id(data, "section_id"),
         "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
+        "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"),
     }
     appointment, version, ahead = services.walk_in(ctx, body)
     from billing import visibility

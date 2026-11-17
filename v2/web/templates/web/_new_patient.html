@@ -1,0 +1,41 @@
+{% load i18n %}{# A new patient's must-haves (Saged, 2026-11-17), the same in Book, Walk-in and Patients: newpatient.js. #}
+<div class="grid-form" data-np>
+  <label class="field">{% translate "Full name (three names)" %}<input name="full_name" maxlength="120" dir="auto" autocomplete="off" required></label>
+  <div class="np-suggest" data-np-suggest hidden>
+    <p class="muted">{% translate "Already has a file? Tap it instead of adding a new one." %}</p>
+    <div data-np-suggest-list></div>
+  </div>
+  <label class="field">{% translate "Mobile" %}<input name="phone" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off" required></label>
+  <fieldset class="group"><legend>{% translate "This number belongs to" %}</legend><div class="chips">
+    <label class="chip"><input type="radio" name="phone_owner" value="self" checked><span>{% translate "The patient" %}</span></label>
+    <label class="chip"><input type="radio" name="phone_owner" value="guardian"><span>{% translate "A guardian" %}</span></label>
+  </div></fieldset>
+  <fieldset class="group" data-np-relation hidden><legend>{% translate "The guardian is" %}</legend><div class="chips">
+    <label class="chip"><input type="radio" name="guardian_relation" value="father"><span>{% translate "The father" %}</span></label>
+    <label class="chip"><input type="radio" name="guardian_relation" value="mother"><span>{% translate "The mother" %}</span></label>
+    <label class="chip"><input type="radio" name="guardian_relation" value="other"><span>{% translate "Someone else" %}</span></label>
+  </div></fieldset>
+  <div class="notice" data-np-phone hidden role="status">
+    <p data-np-phone-text></p>
+    <div data-np-phone-list></div>
+    <button type="button" class="btn ghost" data-np-new-child hidden>{% translate "New child" %}</button>
+  </div>
+  <fieldset class="group"><legend>{% translate "Sex" %}</legend><div class="chips">
+    <label class="chip"><input type="radio" name="sex" value="m"><span>{% translate "Male" %}</span></label>
+    <label class="chip"><input type="radio" name="sex" value="f"><span>{% translate "Female" %}</span></label>
+  </div></fieldset>
+  <label class="field">{% translate "Age in years" %}<input name="age" maxlength="3" dir="ltr" inputmode="numeric" autocomplete="off" required></label>
+  <div hidden data-np-strings>
+    <span data-k="taken">{% translate "This number already has a file:" %}</span>
+    <span data-k="taken_hidden">{% translate "This number already has a file in this clinic." %}</span>
+    <span data-k="on_number">{% translate "Files on this number. Pick one, or add a new child:" %}</span>
+    <span data-k="pick">{% translate "Pick it" %}</span>
+    <span data-k="need_three">{% translate "Enter the full three-part name." %}</span>
+    <span data-k="need_phone">{% translate "Enter a valid mobile number: 11 digits starting with 01." %}</span>
+    <span data-k="need_relation">{% translate "Whose number is it: the father, the mother or someone else?" %}</span>
+    <span data-k="need_sex">{% translate "Pick male or female." %}</span>
+    <span data-k="need_age">{% translate "Enter the age." %}</span>
+    <span data-k="age_short">{% translate "Age" %}</span>
+    <span data-k="guardian">{% translate "Guardian's number" %}</span>
+  </div>
+</div>

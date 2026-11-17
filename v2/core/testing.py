@@ -1,5 +1,6 @@
 """Test helpers: clinics on both shards, signed-in clients, and the SQL-shape check (design 10, T13)."""
 
+import itertools
 import json
 import re
 import uuid
@@ -153,3 +154,18 @@ def call(client, method, url, body=None, key=None, membership=None):
         headers["Idempotency-Key"] = str(key or uuid.uuid4())
     payload = json.dumps(body or {}) if method != "GET" else None
     return client.generic(method, url, payload, content_type="application/json", headers=headers)
+
+
+_PHONES = itertools.count(1)
+
+
+def new_patient(full_name="Mohamed Ahmed Ali", **fields):
+    """A valid new-patient body (Saged, 2026-11-17: a three-part name, an Egyptian mobile, the sex and an age).
+
+    A shorter name gets "Test" words added; each call gets its own mobile number unless one is given, so two new
+    files never clash on the one-own-number rule by accident."""
+    words = full_name.split()
+    words += ["Test"] * (3 - len(words))
+    body = {"full_name": " ".join(words), "phone": f"0109{next(_PHONES):07d}", "sex": "m", "age": 30}
+    body.update(fields)
+    return body

@@ -10,7 +10,7 @@ from django.test import TransactionTestCase
 from billing.models import Invoice, Payment
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.models import Appointment
 from scheduling.testing import add_schedule, services_of, summaries, today
 
@@ -51,7 +51,7 @@ class ConcurrencyTests(TransactionTestCase):
     def booking(self, client, **body):
         body.setdefault("doctor_id", self.owner_id)
         body.setdefault("service_id", self.services["consultation"].id)
-        body.setdefault("new_patient", {"full_name": "Concurrent Patient"})
+        body.setdefault("new_patient", new_patient("Concurrent Patient"))
         return lambda: call(client, "POST", "/api/v1/appointments", body)
 
     def clients(self, n):
@@ -81,7 +81,7 @@ class ConcurrencyTests(TransactionTestCase):
         desk = self.a.client("assistant")
         ids = [call(desk, "POST", "/api/v1/appointments", {"doctor_id": self.owner_id,
                                                            "service_id": self.services["consultation"].id,
-                                                           "new_patient": {"full_name": f"P{i}"}}).json()["appointment"]["id"]
+                                                           "new_patient": new_patient(full_name=f"P{i}")}).json()["appointment"]["id"]
                for i in range(8)]
         fee = self.services["consultation"].price
         # Six first payments, one that is refused (over the balance), and a second first payment on visit 0.
@@ -103,7 +103,7 @@ class ConcurrencyTests(TransactionTestCase):
         for round_ in range(6):
             appt = call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": self.owner_id, "service_id": self.services["consultation"].id,
-                "new_patient": {"full_name": f"Race {round_}"}}).json()["appointment"]
+                "new_patient": new_patient(full_name=f"Race {round_}")}).json()["appointment"]
             pay_client, cancel_client = self.clients(2)
             pay, cancel = self.run_together([
                 lambda: call(pay_client, "POST", f"/api/v1/appointments/{appt['id']}/payments",
@@ -125,9 +125,9 @@ class ConcurrencyTests(TransactionTestCase):
         for round_ in range(5):
             # A on (today, owner) moves to (tomorrow, owner); B on (tomorrow, owner) moves to (today, owner).
             a = call(desk, "POST", "/api/v1/appointments", {"doctor_id": self.owner_id, "day": day.isoformat(),
-                     "service_id": self.services["consultation"].id, "new_patient": {"full_name": "Patient A"}}).json()
+                     "service_id": self.services["consultation"].id, "new_patient": new_patient(full_name="Patient A")}).json()
             b = call(desk, "POST", "/api/v1/appointments", {"doctor_id": self.owner_id, "day": tomorrow.isoformat(),
-                     "service_id": self.services["consultation"].id, "new_patient": {"full_name": "Patient B"}}).json()
+                     "service_id": self.services["consultation"].id, "new_patient": new_patient(full_name="Patient B")}).json()
             ca, cb = self.clients(2)
             with self.assertNoLogs("core.api", "WARNING"):
                 results = self.run_together([
@@ -144,9 +144,9 @@ class ConcurrencyTests(TransactionTestCase):
             return dt.datetime.combine(day, dt.time.fromisoformat(hhmm), tzinfo=ZoneInfo("Africa/Cairo")).isoformat()
 
         a = call(desk, "POST", "/api/v1/appointments", {"doctor_id": doctor, "starts_at": slot("12:00"),
-                 "service_id": self.services["consultation"].id, "new_patient": {"full_name": "Patient A"}}).json()["appointment"]
+                 "service_id": self.services["consultation"].id, "new_patient": new_patient(full_name="Patient A")}).json()["appointment"]
         b = call(desk, "POST", "/api/v1/appointments", {"doctor_id": doctor, "starts_at": slot("12:20"),
-                 "service_id": self.services["consultation"].id, "new_patient": {"full_name": "Patient B"}}).json()["appointment"]
+                 "service_id": self.services["consultation"].id, "new_patient": new_patient(full_name="Patient B")}).json()["appointment"]
         ca, cb = self.clients(2)
         with self.assertNoLogs("core.api", "WARNING"):
             results = self.run_together([
@@ -165,7 +165,7 @@ class ConcurrencyTests(TransactionTestCase):
         desk = self.a.client("assistant")
         waiting = [call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "arrive": True,
-            "new_patient": {"full_name": f"Caller {i}"}}).json()["appointment"]["id"] for i in range(2)]
+            "new_patient": new_patient(full_name=f"Caller {i}")}).json()["appointment"]["id"] for i in range(2)]
         ca, cb = self.clients(2)
         with self.assertNoLogs("core.api", "WARNING"):
             results = self.run_together([
@@ -183,7 +183,7 @@ class ConcurrencyTests(TransactionTestCase):
         for i in range(4):
             appt = call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "arrive": True,
-                "new_patient": {"full_name": f"Room {i}"}}).json()["appointment"]
+                "new_patient": new_patient(full_name=f"Room {i}")}).json()["appointment"]
             in_room.append(appt["id"])
         # Four in the room for one doctor at once can't be made through "call" (one at a time, Saged 2026-11-13):
         # the race under test is finish against booking, so they are put there directly.
@@ -211,7 +211,7 @@ class ConcurrencyTests(TransactionTestCase):
         fee = self.services["consultation"].price
         appt = call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": self.owner_id, "service_id": self.services["consultation"].id,
-            "new_patient": {"full_name": "Busy"}, "payment": {"amount": 10000, "method": "cash"}}).json()["appointment"]
+            "new_patient": new_patient(full_name="Busy"), "payment": {"amount": 10000, "method": "cash"}}).json()["appointment"]
         invoice = call(desk, "GET", f"/api/v1/invoices/{appt['invoice']['id']}").json()["invoice"]
         payment_id = invoice["payments"][0]["id"]
         c1, c2, c3 = self.clients(3)
@@ -231,7 +231,7 @@ class ConcurrencyTests(TransactionTestCase):
     def test_two_threads_with_one_key_give_one_booking_and_two_identical_answers(self):
         key = uuid.uuid4()
         body = {"doctor_id": self.owner_id, "service_id": self.services["consultation"].id,
-                "new_patient": {"full_name": "Twice"}, "payment": {"amount": 100, "method": "cash"}}
+                "new_patient": new_patient(full_name="Twice"), "payment": {"amount": 100, "method": "cash"}}
         results = self.run_together([lambda c=c: call(c, "POST", "/api/v1/appointments", body, key=key)
                                      for c in self.clients(2)])
         self.assertEqual([r.status_code for r in results], [201, 201])
@@ -263,7 +263,7 @@ class RecomputeRaceTests(TransactionTestCase):
             desk = a.client("assistant")
             visits = [call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": a.membership("owner").id, "service_id": services["consultation"].id,
-                "new_patient": {"full_name": f"Past {i}"}}).json()["appointment"]["id"] for i in range(6)]
+                "new_patient": new_patient(full_name=f"Past {i}")}).json()["appointment"]["id"] for i in range(6)]
 
         def pay(client, appointment_id):
             # A payment on a past visit touches the past day's clinic_day (its version) while the recompute runs.
@@ -287,3 +287,67 @@ class RecomputeRaceTests(TransactionTestCase):
                 for doctor_id, want in doctors.items():
                     self.assertEqual({k: rows[doctor_id][k] for k in ("booked", "done", "collected", "refunded")},
                                      {k: want[k] for k in ("booked", "done", "collected", "refunded")})
+
+
+class SameDayRaceTests(TransactionTestCase):
+    """Two desks at once (Saged, 2026-11-17): one own number is one file, one open visit per patient and doctor a
+    day, and a procedure once on a visit. Real threads against PostgreSQL, released together by a barrier."""
+
+    databases = "__all__"
+
+    def setUp(self):
+        ConcurrencyTests.setUp(self)
+
+    def together(self, jobs):
+        with self.assertNoLogs("core.api", "WARNING"):
+            return ConcurrencyTests.run_together(self, jobs)
+
+    def test_two_registrations_of_one_own_number_make_one_file(self):
+        for round_ in range(4):
+            phone = f"0115555000{round_}"
+            results = self.together([
+                lambda c=c, n=n: call(c, "POST", "/api/v1/patients", new_patient(n, phone=phone))
+                for c, n in zip([self.a.client("assistant") for _ in range(2)], ("Mona Samir Ali", "Sara Samir Ali"))])
+            self.assertEqual(sorted(r.status_code for r in results), [201, 409], [r.content for r in results])
+            self.assertEqual([r.json()["error"]["code"] for r in results if r.status_code == 409], ["phone_taken"])
+        with clinic_transaction(self.a.id, self.a.shard):
+            from patients.models import Patient
+
+            self.assertEqual(Patient.objects.filter(clinic_id=self.a.id).count(), 4)
+
+    def test_eight_desks_booking_one_patient_with_one_doctor_book_once(self):
+        desk = self.a.client("assistant")
+        tomorrow = (today(self.a) + dt.timedelta(days=1)).isoformat()
+        patient = call(desk, "POST", "/api/v1/appointments", {
+            "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "day": tomorrow,
+            "new_patient": new_patient("Race Same Day")}).json()["appointment"]["patient"]["id"]
+        jobs = [lambda c=c: call(c, "POST", "/api/v1/appointments", {
+                    "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "patient_id": patient})
+                for c in [self.a.client("assistant") for _ in range(4)]]
+        jobs += [lambda c=c: call(c, "POST", "/api/v1/appointments/walk-in", {"patient_id": patient,
+                                                                             "doctor_id": self.owner_id})
+                 for c in [self.a.client("assistant") for _ in range(4)]]
+        results = self.together(jobs)
+        self.assertEqual(sorted(r.status_code for r in results), [201] + [409] * 7, [r.content for r in results])
+        self.assertTrue(all(r.json()["error"]["code"] == "already_booked" for r in results if r.status_code == 409))
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(Appointment.objects.filter(clinic_id=self.a.id, patient_id=patient, day=today(self.a)).count(), 1)
+        _, doctors = summaries(self.a, today(self.a))
+        self.assertEqual(doctors[self.owner_id]["booked"], 1)
+
+    def test_two_taps_of_one_procedure_record_it_once(self):
+        owner = self.a.client("owner")
+        proc = next(p for p in call(owner, "GET", "/api/v1/procedures").json()["items"]
+                    if p["name_en"] == "Scaling and polishing")
+        visit = call(owner, "POST", "/api/v1/appointments/walk-in", {
+            "doctor_id": self.owner_id, "new_patient": new_patient("Procedure Race"),
+            "service_id": self.services["procedure"].id}).json()["appointment"]
+        self.assertEqual(call(owner, "POST", f"/api/v1/appointments/{visit['id']}/call", {"status": "waiting"}).status_code, 200)
+        results = self.together([lambda c=c: call(c, "POST", f"/api/v1/appointments/{visit['id']}/procedures",
+                                                  {"procedure_id": proc["id"]})
+                                 for c in [self.a.client("owner") for _ in range(2)]])
+        self.assertEqual(sorted(r.status_code for r in results), [201, 409], [r.content for r in results])
+        from billing.models import InvoiceLine
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(InvoiceLine.objects.filter(clinic_id=self.a.id, kind="procedure").count(), 1)

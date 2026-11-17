@@ -9,7 +9,7 @@ from django.test import TransactionTestCase
 
 from billing.models import Invoice, Payment
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.models import Appointment
 from scheduling.testing import M1TestCase, add_schedule, services_of, today
 
@@ -84,7 +84,7 @@ class FinishRaceTests(TransactionTestCase):
         for round_ in range(5):
             appt = call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": a.membership("owner").id, "service_id": services["consultation"].id, "arrive": True,
-                "new_patient": {"full_name": f"Race {round_}"}}).json()["appointment"]
+                "new_patient": new_patient(full_name=f"Race {round_}")}).json()["appointment"]
             call(desk, "POST", f"/api/v1/appointments/{appt['id']}/call", {"status": "waiting"})
             c1, c2 = a.client("assistant"), a.client("owner")
             plain, paying = run_together([
@@ -202,7 +202,7 @@ class StrandRaceTests(TransactionTestCase):
         booking, change = self.paused(
             lambda: call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": self.a.membership("owner").id, "service_id": self.services["consultation"].id,
-                "day": self.day.isoformat(), "new_patient": {"full_name": "In Flight"}}),
+                "day": self.day.isoformat(), "new_patient": new_patient(full_name="In Flight")}),
             lambda: call(self.owner, "DELETE", f"/api/v1/schedules/{session['id']}"))
         self.assertEqual(booking.status_code, 201, booking.content)
         self.assert_refused(change, booking.json()["appointment"]["id"])
@@ -213,7 +213,7 @@ class StrandRaceTests(TransactionTestCase):
         booking, change = self.paused(
             lambda: call(desk, "POST", "/api/v1/appointments", {
                 "doctor_id": self.a.membership("doctor").id, "service_id": self.services["consultation"].id,
-                "day": self.day.isoformat(), "starts_at": self.slot("11:00"), "new_patient": {"full_name": "In Flight"}}),
+                "day": self.day.isoformat(), "starts_at": self.slot("11:00"), "new_patient": new_patient(full_name="In Flight")}),
             lambda: call(self.owner, "PUT", f"/api/v1/schedules/{session['id']}",
                          {**session, "starts": "15:00", "ends": "19:00", "expected": session}))
         self.assertEqual(booking.status_code, 201, booking.content)
@@ -223,7 +223,7 @@ class StrandRaceTests(TransactionTestCase):
         desk = self.a.client("assistant")
         appt = call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": self.a.membership("owner").id, "service_id": self.services["consultation"].id,
-            "day": self.day.isoformat(), "new_patient": {"full_name": "Moving"}}).json()["appointment"]
+            "day": self.day.isoformat(), "new_patient": new_patient(full_name="Moving")}).json()["appointment"]
         session = self.session_of("doctor")
         moved, change = self.paused(
             lambda: call(desk, "POST", f"/api/v1/appointments/{appt['id']}/reschedule", {

@@ -314,7 +314,7 @@ function apply(html) {
   const root = parseFragment(html).querySelector("[data-queue]");
   if (!root) return;
   const before = snapshot();
-  for (const name of ["doctors", "activity", "money", "truncated"]) {
+  for (const name of ["doctors", "money", "truncated"]) {
     const fresh = root.querySelector(`[data-slot="${name}"]`);
     const live = document.querySelector(`[data-slot="${name}"]`);
     if (!fresh || !live || live.dataset.html === fresh.innerHTML) continue;
@@ -611,27 +611,13 @@ if (strip) {
   });
 }
 
-// --- quick booking from the card, and "/" for search (design 7.6) ---
-
-const quickForm = document.querySelector("[data-quick-book]");
-if (quickForm && book) {
-  quickForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    book.open({ query: quickForm.elements.namedItem("q").value.trim() });
-    quickForm.reset();
-  });
-}
+// --- the Book and Walk-in buttons at the top ---
 
 document.addEventListener("click", (event) => {
   const opener = event.target.closest("[data-open-book]");
   if (opener && book) book.open({ opener });
   const walkOpener = event.target.closest("[data-open-walkin]");
-  if (walkOpener && walkIn) {
-    // The name or mobile already typed in the quick field goes with it, so nobody types it twice.
-    const typed = walkOpener.closest("[data-quick-book]") ? quickForm.elements.namedItem("q").value.trim() : "";
-    walkIn.open({ opener: walkOpener, query: typed });
-    if (typed) quickForm.reset();
-  }
+  if (walkOpener && walkIn) walkIn.open({ opener: walkOpener });
 });
 
 const walkIn = initWalkIn({ onBooked: changed });

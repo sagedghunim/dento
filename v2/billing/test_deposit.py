@@ -22,7 +22,7 @@ from clinical.models import PlanItem
 from clinical.testing import M2TestCase
 from clinics.models import Clinic, Membership, Service
 from core.routing import clinic_transaction
-from core.testing import call
+from core.testing import call, new_patient
 from scheduling.jobs import sweep_clinic, system_ctx
 from scheduling.models import Appointment
 from scheduling.testing import frozen, summaries
@@ -341,7 +341,7 @@ class CreditTests(DepositTestCase):
             self.assertEqual(self.figures(visit["id"]), {"total": 0, "paid": DEPOSIT, "due": 0, "credit": DEPOSIT,
                                                          "deposit": DEPOSIT})
             other = self.book(payment=self.deposit(), doctor_id=self.owner_id,
-                              new_patient={"full_name": "Someone Else", "phone": "01055555555"}).json()["appointment"]
+                              new_patient=new_patient(full_name="Someone Else", phone="01055555555")).json()["appointment"]
             self.assertEqual(self.pay(other["id"], 200_00).status_code, 201)
             bill = self.bill(other["id"])
             r = call(self.desk, "DELETE", f"/api/v1/invoices/{bill['id']}/lines/{bill['lines'][0]['id']}")
@@ -399,7 +399,7 @@ class NoShowTests(DepositTestCase):
         with self.on(0):
             self.deposit_on()
             visit = self.book(payment=self.deposit(), doctor_id=self.owner_id).json()["appointment"]
-            unpaid = self.book(doctor_id=self.owner_id, new_patient={"full_name": "No Deposit", "phone": "01055555555"}).json()["appointment"]
+            unpaid = self.book(doctor_id=self.owner_id, new_patient=new_patient(full_name="No Deposit", phone="01055555555")).json()["appointment"]
         counts = sweep_clinic(self.a.id, self.a.shard, dt.datetime(2026, 11, 11, 4, 30, tzinfo=CAIRO))
         self.assertEqual(counts["no_show"], 2)
         with self.on(1):
@@ -548,7 +548,7 @@ class FigureTests(DepositTestCase):
             self.deposit_on()
             visit = self.book(payment=self.deposit(method="card"), **self.slot(3)).json()["appointment"]
             cash = self.book(payment=self.deposit(), doctor_id=self.owner_id, day=(DAY + dt.timedelta(days=3)).isoformat(),
-                             new_patient={"full_name": "Cash Payer", "phone": "01055555555"}).json()["appointment"]
+                             new_patient=new_patient(full_name="Cash Payer", phone="01055555555")).json()["appointment"]
             self.assertEqual(self.drawer(), (DEPOSIT, 0))  # the card deposit isn't cash
         with self.on(3, hour=10) as day:
             self.to_the_room(visit["id"])
@@ -594,7 +594,7 @@ class OnceTests(DepositTestCase):
             self.deposit_on()
             key = "7d0c6f0e-3c58-4c4b-9d5e-2f6f1c1d7a55"
             body = {"service_id": self.services_a["consultation"].id, "payment": self.deposit(), **self.slot(3),
-                    "new_patient": {"full_name": "Mohamed Ahmed", "phone": "01012345678", "sex": "m", "age": 30}}
+                    "new_patient": new_patient()}
             first = call(self.desk, "POST", "/api/v1/appointments", body, key=key)
             second = call(self.desk, "POST", "/api/v1/appointments", body, key=key)
             self.assertEqual((first.status_code, second.status_code), (201, 201))
@@ -603,9 +603,10 @@ class OnceTests(DepositTestCase):
             self.assertEqual(len(self.rows(Appointment)), 1)
             self.assertEqual([(p["amount"], p["is_deposit"]) for p in self.rows(Payment)], [(DEPOSIT, True)])
             self.assertEqual((self.day_money(DAY), self.drawer()), ((DEPOSIT, 0), (DEPOSIT, 0)))
-            # A new key for the same slot is a second booking: the slot refuses it, and no money moves.
+            # A new key for the same body is a second booking: the same new patient on the same number is refused as
+            # a duplicate file (Saged, 2026-11-17) before the slot is even tried, and no money moves.
             third = call(self.desk, "POST", "/api/v1/appointments", body)
-            self.assertEqual((third.status_code, third.json()["error"]["code"]), (409, "slot_taken"))
+            self.assertEqual((third.status_code, third.json()["error"]["code"]), (409, "duplicate_patient"))
             self.assertEqual(len(self.rows(Payment)), 1)
             self.assertEqual(self.day_money(DAY), (DEPOSIT, 0))
 
@@ -616,7 +617,7 @@ class OnceTests(DepositTestCase):
             body = {"patient_id": patient, "follow_up_id": session["id"], "payment": self.deposit()}
             self.assertEqual(self.book(**body, **self.slot(3)).status_code, 201)
             before = len(self.rows(Payment))
-            r = self.book(expect=None, **body, **self.slot(3, "10:20"))
+            r = self.book(expect=None, **body, **self.slot(4, "10:20"))  # another day: the session itself refuses
             self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "follow_up_booked"))
             self.assertEqual(len(self.rows(Payment)), before)  # refused whole: no second deposit
             self.assertEqual(len(self.rows(Payment, is_deposit=True)), 1)
@@ -656,7 +657,7 @@ class RefusalTests(DepositTestCase):
     def test_a_walk_in_and_a_finish_take_no_deposit(self):
         with self.on(0):
             self.deposit_on()
-            body = {"new_patient": {"full_name": "Walk In", "phone": "01055555555"}, "doctor_id": self.owner_id,
+            body = {"new_patient": new_patient(full_name="Walk In", phone="01055555555"), "doctor_id": self.owner_id,
                     "payment": self.deposit()}
             r = call(self.desk, "POST", "/api/v1/appointments/walk-in", body)
             self.assertEqual(r.status_code, 400, r.content)
@@ -745,7 +746,7 @@ class RandomDepositTests(DepositTestCase):
                 r = None
                 if choice == "book" or target is None:
                     body = {"doctor_id": self.owner_id, "day": (DAY + dt.timedelta(days=offset + rng.randint(0, 1))).isoformat(),
-                            "new_patient": {"full_name": f"Patient {step}", "phone": f"010{step:08d}"}}
+                            "new_patient": new_patient(full_name=f"Patient {step}", phone=f"010{step:08d}")}
                     if rng.random() < 0.8:
                         body["payment"] = self.deposit(method=rng.choice(["cash", "card"]))
                     r = self.book(expect=None, **body)

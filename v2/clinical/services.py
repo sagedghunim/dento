@@ -12,6 +12,8 @@ Lock order (design 5.0, rows added for M2):
 Nothing clinical is deleted: library rows and templates are deactivated, plan items dropped, notes keep revisions.
 """
 
+import datetime as dt
+import json
 from decimal import Decimal, InvalidOperation
 
 from django.db import IntegrityError, transaction
@@ -868,6 +870,21 @@ def set_tooth(ctx, patient_id, tooth, condition, surfaces, note, appointment_id=
 # --- Recording a procedure in a visit (design E3) ---------------------------------------------------------------
 
 
+def _not_added_yet(ctx, appointment_id, procedure_id, tooth):
+    """A procedure goes on a visit once (Saged, 2026-11-17); a tooth procedure once per tooth, so it may come again on
+    another tooth. A record whose invoice line was removed doesn't count. Race-free: every recording on this visit
+    holds the appointment's row lock (billing.lock_appointment) first. Index visit_procedure_visit."""
+    found = sql.row(ctx, """
+        SELECT 1 FROM "clinical_visit_procedure" v
+         WHERE v.clinic_id = %s AND v.appointment_id = %s AND v.procedure_id = %s AND v.tooth IS NOT DISTINCT FROM %s
+           AND EXISTS (SELECT 1 FROM "billing_invoice_line" l WHERE l.clinic_id = v.clinic_id AND l.id = v.invoice_line_id)
+         LIMIT 1""", [ctx.clinic_id, appointment_id, procedure_id, tooth])
+    if found is not None:
+        raise ApiError("already_added", _("Already added to this visit.") if tooth is None
+                       else _("Already added to this visit on this tooth."), 409,
+                       fields={"procedure_id": "already_added"})
+
+
 def record_procedure(ctx, appointment_id, request):
     """POST appointments/{id}/procedures: an invoice line, the record, and the tooth's new state with its history.
 
@@ -910,6 +927,7 @@ def record_procedure(ctx, appointment_id, request):
         raise ApiError("invalid", _("Pick the tooth."), fields={"tooth": "required"})
     if surfaces and procedure["condition"] and procedure["condition"] not in SURFACE_CONDITIONS:
         raise ApiError("invalid", _("Only caries and fillings take surfaces."), fields={"surfaces": "not_allowed"})
+    _not_added_yet(ctx, appointment_id, procedure["id"], tooth)
     qty = request["qty"]
     package = None
     if qty == 1 and request.get("use_package", True) and request["unit_price"] is None:
@@ -930,11 +948,11 @@ def record_procedure(ctx, appointment_id, request):
     record_id = sql.row(ctx, """
         INSERT INTO "clinical_visit_procedure" (clinic_id, appointment_id, patient_id, procedure_id, plan_item_id, tooth,
                                                 surfaces, area, qty, unit_price, amount, invoice_line_id, note, created_at,
-                                                created_by_id, patient_package_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+                                                created_by_id, patient_package_id, plan_item_was)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
         ctx.clinic_id, appointment_id, appointment["patient_id"], procedure["id"], plan_item["id"] if plan_item else None,
         tooth, surfaces, request["area"], qty, unit_price, qty * unit_price, line_id, request["note"], now,
-        ctx.membership_id, package["id"] if package else None])[0]
+        ctx.membership_id, package["id"] if package else None, plan_item["status"] if plan_item else ""])[0]
     # Its materials come out of stock, and their average cost becomes the line's internal cost (F2).
     from inventory.services import deduct_materials
 
@@ -951,9 +969,15 @@ def record_procedure(ctx, appointment_id, request):
                      "WHERE clinic_id = %s AND id = %s", [appointment_id, now, ctx.clinic_id, plan_item["id"]])
     state = None
     if tooth is not None and procedure["condition"]:
+        # The row as it was, kept on the record so removing it by mistake puts it back exactly (Saged, 2026-11-17).
+        was = sql.row(ctx, 'SELECT condition, surfaces, note, updated_at, updated_by_id FROM "clinical_tooth" '
+                           "WHERE clinic_id = %s AND patient_id = %s AND tooth = %s FOR NO KEY UPDATE",
+                      [ctx.clinic_id, appointment["patient_id"], tooth])
         state = _set_tooth(ctx, appointment["patient_id"], tooth, procedure["condition"],
                            surfaces if procedure["condition"] in SURFACE_CONDITIONS else [], request["note"],
                            appointment_id, procedure["id"], record_id)
+        sql.run(ctx, 'UPDATE "clinical_visit_procedure" SET tooth_was = %s::jsonb WHERE clinic_id = %s AND id = %s',
+                [json.dumps(_tooth_was(was)), ctx.clinic_id, record_id])
     elif tooth is not None:
         # A procedure that sets no state still belongs in the tooth's history; its state stays as it was.
         current = sql.row(ctx, 'SELECT condition, surfaces FROM "clinical_tooth" WHERE clinic_id = %s AND patient_id = %s '
@@ -974,6 +998,115 @@ def record_procedure(ctx, appointment_id, request):
               "area": request["area"], "qty": qty, "unit_price": unit_price, "amount": qty * unit_price,
               "invoice_line_id": line_id, "plan_item_id": plan_item["id"] if plan_item else None, "note": request["note"]}
     return record, invoice, state, version
+
+
+# --- Removing a procedure recorded by mistake (Saged, 2026-11-17) ----------------------------------------------
+
+VISIT_ON = ("waiting", "with_assistant", "ready", "in_room")  # arrived, not yet finished
+RECORD_FIELDS = ("id", "patient_id", "procedure_id", "plan_item_id", "plan_item_was", "tooth", "surfaces", "area", "qty",
+                 "unit_price", "amount", "invoice_line_id", "internal_cost", "patient_package_id", "tooth_was", "note",
+                 "created_at", "created_by_id")
+
+
+def _tooth_was(found):
+    """The tooth's row before a record set its state, as the record keeps it ({}: the tooth had no row)."""
+    if found is None:
+        return {}
+    return {"condition": found[0], "surfaces": list(found[1]), "note": found[2], "updated_at": found[3].isoformat(),
+            "updated_by_id": found[4]}
+
+
+def _undo_tooth(ctx, record):
+    """Put the tooth back as it was before the record (lock order: the tooth row), while the record's history row is
+    still the tooth's latest. A tooth changed on the chart since keeps its latest state, and a record that set no
+    state (a procedure without a condition) only leaves the history. Returns True when the tooth's state was restored."""
+    patient_id, tooth = record["patient_id"], record["tooth"]
+    current = sql.row(ctx, 'SELECT condition, updated_at FROM "clinical_tooth" WHERE clinic_id = %s AND patient_id = %s '
+                           "AND tooth = %s FOR NO KEY UPDATE", [ctx.clinic_id, patient_id, tooth])
+    # The tooth's history newest first (index tooth_history_tooth): this record's row, and the one before it.
+    rows = sql.rows(ctx, """
+        SELECT id, condition, surfaces, note, at, by_id, visit_procedure_id FROM "clinical_tooth_history"
+         WHERE clinic_id = %s AND patient_id = %s AND tooth = %s ORDER BY at DESC, id DESC LIMIT 2""",
+                    [ctx.clinic_id, patient_id, tooth])
+    mine = sql.rows(ctx, 'SELECT id, condition, at FROM "clinical_tooth_history" WHERE clinic_id = %s AND patient_id = %s '
+                         "AND tooth = %s AND visit_procedure_id = %s", [ctx.clinic_id, patient_id, tooth, record["id"]])
+    if not mine:
+        return False
+    was = json.loads(record["tooth_was"]) if isinstance(record["tooth_was"], str) else record["tooth_was"]
+    if was is None:  # recorded before the record kept it: it set the state if the tooth still shows that write
+        sets = current is not None and any(current[0] == h[1] and current[1] == h[2] for h in mine)
+    else:
+        sets = True
+    if sets and rows[0][6] != record["id"]:
+        sets = False  # changed on the chart since: its latest state is the truth and stays (Saged, 2026-11-17)
+    sql.run(ctx, 'DELETE FROM "clinical_tooth_history" WHERE clinic_id = %s AND patient_id = %s AND tooth = %s '
+                 "AND visit_procedure_id = %s", [ctx.clinic_id, patient_id, tooth, record["id"]])
+    if not sets:
+        return False
+    if was is None:  # the row before this record's in the history (its note and time as written then)
+        before = rows[1] if len(rows) > 1 else None
+        was = {} if before is None else {"condition": before[1], "surfaces": list(before[2]), "note": before[3][:200],
+                                         "updated_at": before[4].isoformat(), "updated_by_id": before[5]}
+    if not was:
+        sql.run(ctx, 'DELETE FROM "clinical_tooth" WHERE clinic_id = %s AND patient_id = %s AND tooth = %s',
+                [ctx.clinic_id, patient_id, tooth])
+    else:
+        sql.run(ctx, 'UPDATE "clinical_tooth" SET condition = %s, surfaces = %s, note = %s, updated_at = %s, '
+                     "updated_by_id = %s WHERE clinic_id = %s AND patient_id = %s AND tooth = %s",
+                [was["condition"], was["surfaces"], was["note"], dt.datetime.fromisoformat(was["updated_at"]),
+                 was["updated_by_id"], ctx.clinic_id, patient_id, tooth])
+    return True
+
+
+def remove_procedure(ctx, appointment_id, record_id):
+    """DELETE appointments/{id}/procedures/{record_id}: undo a procedure recorded by mistake, whole and exact.
+
+    Only while the visit is on (arrived, not finished). The invoice line goes under the bill's rules
+    (billing.drop_line: refused when more was paid than the new total and the deposit held, or a typed discount
+    exceeds what is left; a used package session comes back), its materials return to stock, a plan item returns
+    to the status it had, the tooth to its state before, and the doctor-day counts one procedure fewer. Audited.
+
+    Lock order (as recording): key -> appointment -> plan item -> invoice -> patient package -> inventory items ->
+    tooth row -> doctor_day -> clinic_day. The appointment's lock serialises every write on this visit, so two clicks
+    take effect once: the second finds no record (404).
+    Returns (invoice as it now is or None, (patient id, tooth) when the tooth's state was put back or None, the day's
+    version).
+    """
+    appointment = billing.lock_appointment(ctx, appointment_id)  # another place's or section's visit is 404
+    if appointment["status"] not in VISIT_ON:
+        raise ApiError("visit_closed", _("Procedures can be removed only while the visit is on."), 409,
+                       fields={"status": appointment["status"]})
+    found = sql.row(ctx, f'SELECT {", ".join(RECORD_FIELDS)} FROM "clinical_visit_procedure" '
+                         "WHERE clinic_id = %s AND appointment_id = %s AND id = %s FOR UPDATE",
+                    [ctx.clinic_id, appointment_id, record_id])
+    if found is None:
+        raise not_found("procedure")
+    record = dict(zip(RECORD_FIELDS, found))
+    if record["plan_item_id"] is not None:
+        sql.run(ctx, 'UPDATE "clinical_plan_item" SET status = %s, done_appointment_id = NULL, updated_at = %s '
+                     "WHERE clinic_id = %s AND id = %s AND status = 'done' AND done_appointment_id = %s",
+                [record["plan_item_was"] if record["plan_item_was"] in PLAN_MOVES else "planned", timezone.now(),
+                 ctx.clinic_id, record["plan_item_id"], appointment_id])
+    invoice = None
+    if record["invoice_line_id"] is not None:
+        invoice = billing.remove_visit_line(ctx, appointment, record["invoice_line_id"])
+    from inventory.services import return_materials
+
+    deltas = Deltas()
+    return_materials(ctx, record["id"], patient_id=record["patient_id"], appointment_id=appointment_id, deltas=deltas)
+    restored = None
+    if record["tooth"] is not None and _undo_tooth(ctx, record):
+        restored = (record["patient_id"], record["tooth"])
+    sql.run(ctx, 'DELETE FROM "clinical_visit_procedure" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, record["id"]])
+    before = {name: record[name] for name in RECORD_FIELDS if name not in ("id", "created_at")}
+    before["created_at"] = record["created_at"].isoformat()
+    # The answer's replay reads `appointment` and `restored` back from this row (clinical.views._replay_removed).
+    record_change(ctx, "visit_procedure.remove", "visit_procedure", record["id"], before=before,
+                  appointment=appointment_id, restored=list(restored) if restored else None)
+    deltas.doctor_day(appointment["day"], appointment["doctor_id"], procedures=-1).clinic_day(appointment["day"])
+    deltas.write_doctors(ctx)
+    version = deltas.write_clinics(ctx)[appointment["day"]]
+    return invoice, restored, version
 
 
 # --- Treatment plans (design E3) -------------------------------------------------------------------------------

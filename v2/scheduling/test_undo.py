@@ -9,7 +9,7 @@ from django.test import TransactionTestCase
 
 from audit.models import AuditChange
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.models import Appointment
 from scheduling.testing import M1TestCase, add_schedule, free_rooms, services_of, summaries, today
 
@@ -158,7 +158,7 @@ class UndoRaceTests(TransactionTestCase):
     def visit(self, desk, status):
         appt = call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": self.owner_id, "service_id": self.services["consultation"].id, "arrive": True,
-            "new_patient": {"full_name": "Race Patient"}}).json()["appointment"]
+            "new_patient": new_patient(full_name="Race Patient")}).json()["appointment"]
         if status == "in_room":
             call(desk, "POST", f"/api/v1/appointments/{appt['id']}/call", {"status": "waiting"})
         return appt["id"]

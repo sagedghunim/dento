@@ -109,6 +109,7 @@ CATEGORY_WORDS = {
 
 
 def _procedures(ctx, section_id):
+    from clinical.followups import VISIT_FEE_CATEGORIES
     from clinical.selectors import procedures
 
     return [{"id": p["id"], "name": pick(p["name_ar"], p["name_en"]), "price": p["price"], "unit": p["unit"],
@@ -117,7 +118,7 @@ def _procedures(ctx, section_id):
              # Its follow-up recipe, offered once it is recorded: the days and each session's name.
              "follow_up": [{"days": step["days"], "label": pick(step["label"], step.get("label_en", ""))}
                            for step in p["follow_up"] or []]}
-            for p in procedures(ctx, section_id)["items"]]
+            for p in procedures(ctx, section_id)["items"] if p["category"] not in VISIT_FEE_CATEGORIES]
 
 
 @require_GET

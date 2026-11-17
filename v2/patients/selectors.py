@@ -4,7 +4,7 @@ from django.utils.translation import gettext as _
 
 from core import sql
 from core.errors import ApiError
-from core.text import ascii_digits, looks_like_phone, normalize_name, normalize_phone
+from core.text import ascii_digits, edit_distance, looks_like_phone, name_skeleton, normalize_name, normalize_phone
 
 from .models import Patient
 
@@ -99,7 +99,48 @@ def _search(ctx, query, today):
                               f"{mine} ORDER BY name_norm LIMIT %s",
                          [ctx.clinic_id, "% " + _escape_like(name) + "%", [hit[0] for hit in hits], *mine_params,
                           SEARCH_LIMIT - len(hits)])
+    if len(hits) < SEARCH_LIMIT:
+        hits += _with_a_slip(ctx, name_skeleton(name), [hit[0] for hit in hits], mine, mine_params,
+                             SEARCH_LIMIT - len(hits))
     return _with_details(ctx, hits, today)
+
+
+FUZZY_CANDIDATES = 200
+
+
+def _with_a_slip(ctx, skeleton, seen, mine, mine_params, room):
+    """Names typed with a slip (Saged, 2026-11-17), after the exact matches: two ranges on the skeleton index
+    (patient_skel_search), which keep their index ranges under row-level security as pg_trgm's operators wouldn't.
+
+    3. The name's skeleton starts with the query's: a missing or extra vowel or hamza, a doubled letter, a space
+       ("عبد الله", "عبدالله").
+    4. One more slip in any other letter (two in a long query): at most 200 names whose skeleton shares the
+       query's first two letters, compared in Python. A slip in those first two letters isn't found.
+    """
+    if len(skeleton) < 2:
+        return []
+    found = sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" '
+                          "WHERE clinic_id = %s AND name_skel >= %s AND name_skel < %s AND NOT (id = ANY(%s::bigint[]))"
+                          f"{mine} ORDER BY name_skel LIMIT %s",
+                     [ctx.clinic_id, skeleton, _next_prefix(skeleton), seen, *mine_params, room])
+    if len(found) >= room or len(skeleton) < 3:
+        return found
+    seen = [*seen, *(row[0] for row in found)]
+    head = skeleton[:2]
+    candidates = sql.rows(ctx, f'SELECT {_SUMMARY}, name_skel FROM "patients_patient" '
+                               "WHERE clinic_id = %s AND name_skel >= %s AND name_skel < %s "
+                               f"AND NOT (id = ANY(%s::bigint[])){mine} ORDER BY name_skel LIMIT %s",
+                          [ctx.clinic_id, head, _next_prefix(head), seen, *mine_params, FUZZY_CANDIDATES])
+    limit = 2 if len(skeleton) >= 7 else 1
+    scored = []
+    for *summary, skel in candidates:
+        # The typed part against the same length of the name, give or take the letters a slip adds or drops.
+        distance = min(edit_distance(skeleton, skel[:size], limit)
+                       for size in range(max(len(skeleton) - limit, 1), len(skeleton) + limit + 1))
+        if distance <= limit:
+            scored.append((distance, skel, tuple(summary)))
+    scored.sort(key=lambda item: (item[0], item[1]))
+    return found + [summary for _d, _s, summary in scored[:room - len(found)]]
 
 
 def _with_details(ctx, hits, today):
@@ -141,15 +182,23 @@ def by_ids(ctx, patient_ids, today):
     return _with_details(ctx, [found[i] for i in patient_ids if i in found], today)
 
 
-def by_phone(ctx, phone):
-    """This clinic's files with this phone, for the Book dialog's duplicate step (R4.2). Never blocks."""
+def by_phone(ctx, phone, today):
+    """This clinic's files with this phone, for the new-patient step (R4.2; Saged, 2026-11-17): whose number it is
+    on each, so the screen offers the file that owns it, or the guardian's children to pick from.
+
+    `taken` says the number is some file's own even when a doctor can't see that file: a new file can't have it as
+    its own (patients.services.check_phone). One statement on index patient_phone_search."""
     phone_norm = normalize_phone(phone)
     if not phone_norm:
         raise ApiError("invalid", _("Enter a valid mobile number."), fields={"phone": "phone"})
     mine, mine_params = _mine(ctx)
-    rows = sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s AND phone_norm = %s{mine} '
-                         "ORDER BY id LIMIT 20", [ctx.clinic_id, phone_norm, *mine_params])
-    return [{"id": r[0], "name": r[1], "phone": r[2], "file_no": r[3]} for r in rows]
+    visible = f"true{mine}" if mine else "true"
+    rows = sql.rows(ctx, f'SELECT id, full_name, phone, file_no, phone_owner, guardian_relation, sex, birth_date, '
+                         f'({visible}) FROM "patients_patient" WHERE clinic_id = %s AND phone_norm = %s '
+                         "ORDER BY id LIMIT 20", [*mine_params, ctx.clinic_id, phone_norm])
+    items = [{"id": r[0], "name": r[1], "phone": r[2], "file_no": r[3], "phone_owner": r[4], "guardian_relation": r[5],
+              "sex": r[6], "age": age(r[7], today)} for r in rows if r[8]]
+    return {"items": items, "taken": any(r[4] == "self" for r in rows)}
 
 
 def _visible(ctx, patient_id):
@@ -182,7 +231,7 @@ def exists(ctx, patient_id):
 def file_payload(patient, today):
     return {
         "id": patient.id, "file_no": patient.file_no, "full_name": patient.full_name, "phone": patient.phone,
-        "sex": patient.sex, "birth_date": patient.birth_date.isoformat() if patient.birth_date else None,
+        "phone_owner": patient.phone_owner, "guardian_relation": patient.guardian_relation, "sex": patient.sex, "birth_date": patient.birth_date.isoformat() if patient.birth_date else None,
         "birth_date_estimated": patient.birth_date_estimated, "age": age(patient.birth_date, today),
         "address": patient.address, "notes": patient.notes, "allergies": patient.allergies,
         "chronic_conditions": patient.chronic_conditions,

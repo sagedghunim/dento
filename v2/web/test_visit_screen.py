@@ -3,7 +3,7 @@ doctor sees it, the notes save with a version, one patient in the room per docto
 
 from audit.models import AuditAccess
 from clinical.testing import M2TestCase, put
-from core.testing import call
+from core.testing import call, new_patient
 from web.tests import access_count
 
 
@@ -31,7 +31,7 @@ class VisitScreenTests(M2TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('lang="ar" dir="rtl"', html)
         self.assertIn("Mohamed Ahmed", html)
-        self.assertIn('href="tel:01012345678"', html)
+        self.assertIn(f'href="tel:{visit["patient"]["phone"]}"', html)
         self.assertIn("Penicillin", html)
         self.assertIn("Diabetes", html)
         self.assertIn("خلص الكشف", html)
@@ -95,7 +95,7 @@ class VisitScreenTests(M2TestCase):
         first = self.in_room()
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
                  {"service_id": self.services_a["procedure"].id, "doctor_id": self.a.membership("doctor").id,
-                  "new_patient": {"full_name": "Second Patient", "phone": "01011111111"}})
+                  "new_patient": new_patient(full_name="Second Patient", phone="01011111111")})
         second = r.json()["appointment"]
         r = self.act(second["id"], "call", "waiting", client=self.desk)
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "doctor_busy"))

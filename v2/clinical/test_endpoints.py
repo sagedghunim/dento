@@ -39,12 +39,14 @@ def objects(test, fixture):
     section = call(owner, "GET", "/api/v1/clinic").json().get("sections", [{}])[0].get("id")
     follow = call(doc, "POST", f"/api/v1/appointments/{visit['id']}/follow-ups",
                   {"items": [{"label": "متابعة", "days": 7}, {"label": "متابعة", "days": 14}]}).json()["upcoming"]
+    recorded = call(doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures",
+                    {"procedure_id": crown["id"], "tooth": 22}).json()["procedure"]  # one to remove
     return SimpleNamespace(visit=visit["id"], patient=patient, filling=filling["id"], crown=crown["id"],
                            medicine=medicine["id"], template=template["id"], template_version=template["version"],
                            plan=plan["plan"]["id"], item=plan["plan"]["items"][0]["id"],
                            item2=plan["plan"]["items"][1]["id"], rx=rx["id"], attachment=attachment["id"],
                            own_procedure=own["procedure"]["id"], section=section,
-                           follow=follow[0]["id"], follow2=follow[1]["id"])
+                           follow=follow[0]["id"], follow2=follow[1]["id"], recorded=recorded["id"])
 
 
 def mutating(o):
@@ -55,6 +57,8 @@ def mutating(o):
         "vitals": ("PUT", f"/api/v1/appointments/{v}/vitals", {"pulse": 80}, {"pulse": 81}, ["visits.vitals"], 0),
         "record": ("POST", f"/api/v1/appointments/{v}/procedures", {"procedure_id": o.filling, "tooth": 36},
                    {"procedure_id": o.filling, "tooth": 37}, ["procedures.record"], None),
+        "remove procedure": ("DELETE", f"/api/v1/appointments/{v}/procedures/{o.recorded}", {}, {"x": 1},
+                             ["procedures.record"], None),
         "tooth": ("PUT", f"/api/v1/patients/{p}/teeth/16", {"condition": "caries", "surfaces": ["O"]},
                   {"condition": "caries", "surfaces": ["D"]}, ["procedures.record"], None),
         "plan": ("POST", f"/api/v1/patients/{p}/plans", {"items": [{"procedure_id": o.crown, "tooth": 12}]},

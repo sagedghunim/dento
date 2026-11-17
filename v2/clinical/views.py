@@ -158,6 +158,42 @@ def record_procedure_view(request, ctx, data, appointment_id):
     return Result(_record_answer(ctx, record["id"]), status=201, target_type="visit_procedure", target_id=record["id"])
 
 
+def _removed_answer(ctx, appointment_id, restored=None):
+    """After a removal: the visit's invoice (none without money.view), the tooth put back when the record had set its
+    state (`tooth_number`, and `tooth`: its state now, None when it has no row), and the day's version."""
+    from billing import visibility
+    from billing.selectors import visit_invoice
+    from scheduling.services import current_version
+
+    patient_id, number = restored or (None, None)
+    return {"invoice": visit_invoice(ctx, appointment_id) if visibility.sees(ctx) else None,
+            "tooth_number": number,
+            "tooth": selectors.patient_tooth(ctx, patient_id, number) if number is not None else None,
+            "version": current_version(ctx, appointment_id)}
+
+
+def _replay_removed(ctx, stored):
+    """The removal's audit row (index audit_change_target) names its visit and the tooth it put back."""
+    from audit.models import AuditChange
+
+    details = (AuditChange.objects.filter(clinic_id=ctx.clinic_id, target_type="visit_procedure",
+                                          target_id=stored["target_id"], action="visit_procedure.remove")
+               .order_by("-at", "-id").values_list("details", flat=True).first())
+    if details is None:
+        raise services.not_found("procedure")
+    return _removed_answer(ctx, details["appointment"], tuple(details["restored"]) if details.get("restored") else None)
+
+
+@api("DELETE", perm="procedures.record", replay=_replay_removed)
+def remove_procedure_view(request, ctx, data, appointment_id, record_id):
+    """DELETE: undo a procedure recorded by mistake while the visit is on (Saged, 2026-11-17). Answers the visit's
+    invoice and the tooth as they now are; the record's own id is the URL's."""
+    appointment_id = _id(appointment_id, "appointment")
+    record_id = _id(record_id, "procedure")
+    _invoice, restored, _version = services.remove_procedure(ctx, appointment_id, record_id)
+    return Result(_removed_answer(ctx, appointment_id, restored), target_type="visit_procedure", target_id=record_id)
+
+
 # --- Attachments -----------------------------------------------------------------------------------------------
 
 

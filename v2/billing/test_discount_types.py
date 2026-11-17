@@ -17,7 +17,7 @@ from audit.models import AuditChange
 from billing.models import DiscountType, Invoice
 from clinical.testing import M2TestCase
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import add_schedule, services_of
 
 
@@ -550,7 +550,7 @@ class DiscountConcurrencyTests(TransactionTestCase):
         desk = self.a.client("assistant")
         visit = call(desk, "POST", "/api/v1/appointments", {
             "doctor_id": self.a.membership("owner").id, "service_id": self.services["consultation"].id,
-            "new_patient": {"full_name": "Race Patient"}}).json()["appointment"]
+            "new_patient": new_patient(full_name="Race Patient")}).json()["appointment"]
         return call(desk, "POST", f"/api/v1/appointments/{visit['id']}/invoice").json()["invoice"]
 
     def new_type(self, name, value):

@@ -148,10 +148,20 @@ const procTotal = document.querySelector("[data-procs-total]");
 const offers = document.querySelector("[data-offers]");
 const catalogue = new Map((data.procedures || []).map((p) => [p.id, p]));
 
+function removeButton(name) {
+  const b = el("button", "icon-btn danger-icon");
+  b.type = "button";
+  b.dataset.removeRecord = "";
+  b.title = t("remove");
+  b.setAttribute("aria-label", `${t("remove")}: ${name}`);
+  b.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>';
+  return b;
+}
+
 function addProcedure(answer) {
   const p = answer.procedure;
   if (!p || procList.querySelector(`[data-record="${p.id}"]`)) return;
-  const what = el("span");
+  const what = el("span", "proc-what");
   what.append(el("bdi", null, nameOf(p)));
   what.firstChild.dir = "auto";
   if (p.tooth) what.append(` · ${t("tooth_short", { n: localDigits(p.tooth) })}`);
@@ -160,11 +170,41 @@ function addProcedure(answer) {
   li.dataset.record = p.id;
   li.append(what);
   if (p.amount != null) li.append(el("span", "num", moneyText(p.amount)));  // none without money.view
+  if (procList.hasAttribute("data-removable")) li.append(removeButton(nameOf(p)));
   procList.append(li);
   if (answer.invoice && procTotal) procTotal.textContent = moneyText(answer.invoice.total);
   offerRecipe(catalogue.get(p.procedure_id), p);
 }
 window.addEventListener("hamada:procedure-recorded", (event) => addProcedure(event.detail));
+
+// The X on a row (Saged, 2026-11-17): a procedure tapped by mistake goes, with its line, materials, plan step and
+// tooth state, while the visit is on. Its key stays on the row until a definite answer, so a second tap or a resend
+// never acts twice; the row's button is disabled while it is pending.
+procList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-remove-record]");
+  const li = button && button.closest("[data-record]");
+  if (!li || li.dataset.busy) return;
+  const name = li.querySelector("bdi").textContent;
+  const errorBox = document.querySelector("[data-add-procedure] [data-error]");
+  const say = (text) => { if (errorBox) errorBox.textContent = text; else if (text) alertMessage(text); };
+  li.dataset.busy = "1";
+  button.disabled = true;
+  say("");
+  li.removeKey = li.removeKey || newKey();
+  const result = await save("DELETE", `/api/v1/appointments/${id}/procedures/${li.dataset.record}`, {},
+    { key: li.removeKey, label: `${t("remove")} · ${name}` });
+  delete li.dataset.busy;
+  button.disabled = false;
+  if (!result.settled) { renderPending(); say(result.signedOut ? t("signed_out") : t("unknown")); return; }
+  li.removeKey = null;
+  if (!isOk(result) && result.status !== 404) { say(errorMessage(result, t("failed"))); return; }
+  li.remove();  // a 404 is a record already gone (another tab, or an answer lost before)
+  if (isOk(result)) {
+    if (result.data.invoice && procTotal) procTotal.textContent = moneyText(result.data.invoice.total);
+    window.dispatchEvent(new CustomEvent("hamada:procedure-removed", { detail: result.data }));  // the chart
+  }
+  toast(t("removed", { name }));
+});
 
 const adder = document.querySelector("[data-add-procedure]");
 if (adder) {
@@ -441,9 +481,21 @@ if (nextAdd) {
     toast(t("fu_added"));
   }
   nextAdd.addEventListener("click", (event) => {
-    const chip = event.target.closest("[data-next-when] [data-days]");
+    const chip = event.target.closest("[data-next-when] [data-days], [data-days-custom]");
     if (!chip || chip.disabled || adding.unknown) return;
-    const item = { days: Number(chip.dataset.days) };
+    let days = Number(chip.dataset.days);
+    const error = form.querySelector("[data-error]");
+    error.textContent = "";
+    if (chip.hasAttribute("data-days-custom")) {  // "or after 3 days / 3 weeks / 2 months"
+      const n = Number(form.elements.namedItem("n").value);
+      days = n * Number(form.elements.namedItem("unit").value);
+      if (!Number.isInteger(n) || n < 1 || days > 730) {
+        error.textContent = t("fu_bad_days");
+        form.elements.namedItem("n").focus();
+        return;
+      }
+    }
+    const item = { days };
     const other = form.elements.namedItem("other").value.trim();
     const what = form.querySelector('[name="what"]:checked').value;
     if (other) item.label = other;

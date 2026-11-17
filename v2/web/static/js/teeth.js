@@ -108,6 +108,14 @@ function changed(n, tooth) {
   if (n === current) { showState(); loadHistory(false); }
 }
 
+// A procedure removed on the visit screen put its tooth back (Saged, 2026-11-17): no row now is a healthy tooth.
+window.addEventListener("hamada:procedure-removed", (event) => {
+  const n = event.detail.tooth_number;
+  if (!n) return;
+  if (!event.detail.tooth) delete teeth[n];
+  changed(n, event.detail.tooth);
+});
+
 // Surfaces show for caries and fillings only (design E3).
 function surfacesFor(form, condition) {
   const box = form.querySelector("[data-surfaces]");

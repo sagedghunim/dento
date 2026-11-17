@@ -244,6 +244,35 @@ class RecordProcedureTests(M2TestCase):
                  {"procedure_id": extraction["id"], "tooth": 85})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "visit_closed"))
 
+    def test_a_procedure_goes_on_a_visit_once_and_a_tooth_procedure_once_per_tooth(self):
+        """Saged, 2026-11-17: a second tap says "already added"; another tooth is another procedure."""
+        scaling = self.procedure("Scaling and polishing")
+        self.assertEqual(call(self.doc, "POST", self.url, {"procedure_id": scaling["id"]}).status_code, 201)
+        r = call(self.doc, "POST", self.url, {"procedure_id": scaling["id"]})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "already_added"))
+        r = call(self.doc, "POST", self.url, {"procedure_id": scaling["id"], "qty": 2})
+        self.assertEqual(r.status_code, 409)  # more of it is a quantity on the first, not a second line
+        self.assertEqual(call(self.doc, "POST", self.url, {"procedure_id": self.filling["id"], "tooth": 36}).status_code, 201)
+        self.assertEqual(call(self.doc, "POST", self.url, {"procedure_id": self.filling["id"], "tooth": 46}).status_code, 201)
+        r = call(self.doc, "POST", self.url, {"procedure_id": self.filling["id"], "tooth": 36, "surfaces": ["O"]})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "already_added"))
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(InvoiceLine.objects.filter(clinic_id=self.a.id, kind="procedure").count(), 3)
+        # Another visit of the same patient takes it again.
+        self.assertEqual(self.act(self.visit["id"], "finish", "in_room").status_code, 200)
+        later = self.in_room(self.visit["patient"]["id"])
+        r = call(self.doc, "POST", f"/api/v1/appointments/{later['id']}/procedures", {"procedure_id": scaling["id"]})
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_the_doctors_list_leaves_out_what_the_visit_fee_charges(self):
+        """The examination and consultation items would charge the كشف twice (Saged, 2026-11-17)."""
+        r = self.doc.get(f"/visits/{self.visit['id']}")
+        listed = {p["id"] for p in r.context["config"]["procedures"]}
+        self.assertNotIn(self.procedure("Full examination")["id"], listed)
+        self.assertNotIn(self.procedure("Orthodontic consultation")["id"], listed)
+        self.assertIn(self.procedure("Scaling and polishing")["id"], listed)
+        self.assertTrue(set(r.context["config"]["top"]) <= listed)
+
     def test_recording_needs_procedures_record(self):
         r = call(self.desk, "POST", self.url, {"procedure_id": self.filling["id"], "tooth": 36})
         self.assertEqual(r.status_code, 403)
@@ -367,8 +396,18 @@ class TimelineAndBalanceTests(M2TestCase):
         filling = self.procedure("Composite filling, one surface")
         call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures", {"procedure_id": filling["id"], "tooth": 21})
         small = counts()  # the visit has its invoice from here on
-        for _ in range(3):
-            self.owed_visit(patient)
+        # Three more visits of the patient's (on later days: one open visit a day, Saged 2026-11-17), closed directly.
+        import datetime as dt
+
+        from scheduling.models import Appointment
+        from scheduling.testing import today
+
+        now = dt.datetime.now(dt.UTC)
+        for days in (1, 2, 3):
+            more = self.book(patient_id=patient, day=(today(self.a) + dt.timedelta(days=days)).isoformat()).json()
+            with clinic_transaction(self.a.id, self.a.shard):
+                Appointment.objects.filter(clinic_id=self.a.id, id=more["appointment"]["id"]).update(
+                    status="done", arrived_at=now, called_at=now, finished_at=now)
         for tooth in (11, 12, 13):
             call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures",
                  {"procedure_id": filling["id"], "tooth": tooth})

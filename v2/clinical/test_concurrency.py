@@ -10,7 +10,7 @@ from django.test import TransactionTestCase
 from billing.models import Invoice, Payment
 from clinical.models import PlanItem, VisitNote
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import add_schedule, services_of
 
 
@@ -46,7 +46,7 @@ class ClinicalConcurrencyTests(TransactionTestCase):
 
     def visit(self, patient_id=None, finish=False):
         body = {"doctor_id": self.a.membership("doctor").id, "service_id": self.services["procedure"].id}
-        body.update({"patient_id": patient_id} if patient_id else {"new_patient": {"full_name": "Race Patient"}})
+        body.update({"patient_id": patient_id} if patient_id else {"new_patient": new_patient(full_name="Race Patient")})
         visit = call(self.desk, "POST", "/api/v1/appointments", body).json()["appointment"]
         call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/arrive", {"status": "booked"})
         call(self.desk, "POST", f"/api/v1/appointments/{visit['id']}/call", {"status": "waiting"})
@@ -59,7 +59,21 @@ class ClinicalConcurrencyTests(TransactionTestCase):
         first = self.visit(finish=True)
         patient = first["patient"]["id"]
         self.visit(patient, finish=True)
-        one, two = self.visit(patient), self.visit(patient)
+        # One open visit a day per patient (Saged, 2026-11-17): the second open one is tomorrow's, put in the room
+        # directly, as a visit left open past its day would be.
+        import datetime as dt
+
+        from scheduling.models import Appointment
+        from scheduling.testing import today
+
+        one = self.visit(patient)
+        two = call(self.desk, "POST", "/api/v1/appointments", {
+            "doctor_id": self.a.membership("doctor").id, "service_id": self.services["procedure"].id,
+            "patient_id": patient, "day": (today(self.a) + dt.timedelta(days=1)).isoformat()}).json()["appointment"]
+        now = dt.datetime.now(dt.UTC)
+        with clinic_transaction(self.a.id, self.a.shard):
+            Appointment.objects.filter(clinic_id=self.a.id, id=two["id"]).update(status="in_room", arrived_at=now,
+                                                                                  called_at=now)
         body = {"status": "in_room", "earlier": {"amount": 2 * fee, "method": "cash"}}
         results = self.run_together([
             lambda: call(self.a.client("assistant"), "POST", f"/api/v1/appointments/{one['id']}/finish", body),

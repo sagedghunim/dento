@@ -13,7 +13,7 @@
     {% if not is_today %}<a class="btn ghost" href="/">{% translate "Back to today" %}</a>{% endif %}
     <a class="icon-btn" href="?day={{ next_day.isoformat }}" aria-label="{% translate "Next day" %}" title="{% translate "Next day" %}"><svg class="icon chev-end"><use href="#i-chev"/></svg></a>
   </nav>
-  {% if perms.book %}<span class="tool-buttons narrow-only">{% if is_today and perms.queue %}<button type="button" class="btn" data-open-walkin>{% translate "Walk-in now" %}</button>{% endif %}<button type="button" class="btn ghost" data-open-book><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button></span>{% endif %}
+  {% if perms.book %}<span class="tool-buttons">{% if is_today and perms.queue %}<button type="button" class="btn" data-open-walkin>{% translate "Walk-in now" %}</button>{% endif %}<button type="button" class="btn ghost" data-open-book><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button></span>{% endif %}
   <p class="freshness" data-freshness>
     <span class="dot" aria-hidden="true"></span>
     <span data-fresh-text>{% translate "Updated" %} {{ server_time|clock }}</span>
@@ -40,36 +40,15 @@
 {# Just out of the visit: who to book before they leave (Saged, 2026-11-13). Filled by the queue's polling. #}
 <div data-slot="followups" aria-live="polite">{% include "web/_just_out.html" %}</div>
 
-<div class="grid-2">
-  <section class="card queue" data-queue-card aria-labelledby="queue-title" data-day="{{ day.isoformat }}" data-version="{{ version }}" data-etag="{{ etag }}" data-server-time="{{ server_time }}" data-poll-after="{{ poll_after }}" data-undo-arrive="{% if features.undo_arrive %}1{% endif %}" data-undo-call="{% if features.undo_call %}1{% endif %}">
-    <h2 id="queue-title">{% if is_today %}{% translate "Today's appointments" %}{% else %}{% translate "Appointments" %}{% endif %}</h2>
-    <p class="card-sub">{% translate "New bookings appear here by themselves, from every screen in the clinic." %}</p>
-    <div data-slot="doctors">{% include "web/_doctor_chips.html" %}</div>
-    <div data-slot="groups" data-list>{% include "web/_queue_groups.html" %}</div>
-    <div data-slot="truncated">{% if truncated %}<p class="notice">{% translate "This day has more bookings than one screen shows. Use the doctor filters." %}</p>{% endif %}</div>
-  </section>
+<section class="card queue" data-queue-card aria-labelledby="queue-title" data-day="{{ day.isoformat }}" data-version="{{ version }}" data-etag="{{ etag }}" data-server-time="{{ server_time }}" data-poll-after="{{ poll_after }}" data-undo-arrive="{% if features.undo_arrive %}1{% endif %}" data-undo-call="{% if features.undo_call %}1{% endif %}">
+  <h2 id="queue-title">{% if is_today %}{% translate "Today's appointments" %}{% else %}{% translate "Appointments" %}{% endif %}</h2>
+  <p class="card-sub">{% translate "New bookings appear here by themselves, from every screen in the clinic." %}</p>
+  <div data-slot="doctors">{% include "web/_doctor_chips.html" %}</div>
+  <div data-slot="groups" data-list>{% include "web/_queue_groups.html" %}</div>
+  <div data-slot="truncated">{% if truncated %}<p class="notice">{% translate "This day has more bookings than one screen shows. Use the doctor filters." %}</p>{% endif %}</div>
+</section>
 
-  <div class="stack book-first">
-    {% if perms.book %}
-    <section class="card book-card" aria-labelledby="book-card-title">
-      <h2 id="book-card-title">{% translate "Add a booking" %}</h2>
-      <p class="card-sub">{% translate "Find the patient or add a new one, then the service and the time. A walk-in is booked, marked arrived and paid in one step." %}</p>
-      <form class="form-row" data-quick-book role="search">
-        <label class="field">{% translate "Patient name or mobile" %}
-          <input name="q" type="search" autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search">
-        </label>
-        <button class="btn" type="submit"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button>
-        {% if is_today and perms.queue %}<button class="btn walkin-btn" type="button" data-open-walkin>{% translate "Walk-in now" %}</button>{% endif %}
-      </form>
-    </section>
-    {% endif %}
-    <section class="card" aria-labelledby="activity-title">
-      <h2 id="activity-title">{% translate "Latest activity" %}</h2>
-      <div data-slot="activity">{% include "web/_activity.html" %}</div>
-    </section>
-    <div data-slot="money">{% include "web/_money.html" %}</div>
-  </div>
-</div>
+<div data-slot="money">{% include "web/_money.html" %}</div>
 
 {% include "web/_dialogs.html" %}
 {% if is_today and perms.book and perms.queue %}{% include "web/_dialog_walkin.html" %}{% endif %}

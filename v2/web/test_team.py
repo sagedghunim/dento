@@ -5,7 +5,7 @@ import re
 
 from clinics.models import Membership
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, call
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import M1TestCase
 
 
@@ -104,7 +104,7 @@ class TodayOwnVisitsTests(M1TestCase):
         self.owner_visit = self.book().json()["appointment"]["id"]
         self.act(self.owner_visit, "arrive", "booked")
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
-                 {"doctor_id": self.a.membership("doctor").id, "new_patient": {"full_name": "Own Patient", "phone": "01099999999"}})
+                 {"doctor_id": self.a.membership("doctor").id, "new_patient": new_patient(full_name="Own Patient", phone="01099999999")})
         self.assertEqual(r.status_code, 201, r.content)
         self.own_visit = r.json()["appointment"]["id"]
 
@@ -162,7 +162,7 @@ class TodayOwnVisitsTests(M1TestCase):
 
     def test_a_walk_in_from_the_dialogs_body(self):
         r = call(self.desk, "POST", "/api/v1/appointments/walk-in",
-                 {"new_patient": {"full_name": "Walk In Now", "phone": "01011111111"}})
+                 {"new_patient": new_patient(full_name="Walk In Now", phone="01011111111")})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["appointment"]["status"], "waiting")
         self.assertIn("ahead", r.json())
