@@ -8,7 +8,7 @@
 // With HAMADA_BT_SHOTS=<folder> it takes the dialog at 1280 px and Today's strip at 390 px. Not in run.mjs.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BASE, browser, check, freeRoom, signIn, sleep } from "./lib.mjs";
+import { BASE, browser, check, freeRoom, inArabic, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 const SHOTS = process.env.HAMADA_BT_SHOTS || "";
@@ -26,7 +26,17 @@ async function shot(page, name) {
 
 const html = async (who, path) => (await fetch(BASE + path, { headers: { Cookie: `hamada_session=${who.session}` }, redirect: "manual" }));
 
+// The screens are read in Arabic: the doctor and the desk run in Arabic, and get their own language back after.
 export async function run() {
+  const backs = [await inArabic((await signIn()).api), await inArabic((await signIn(DESK)).api)];
+  try {
+    await runInArabic();
+  } finally {
+    for (const back of backs) await back();
+  }
+}
+
+async function runInArabic() {
   const doctor = await signIn();
   const desk = await signIn(DESK);
   const name = `Bt Out ${stamp}`;
@@ -34,8 +44,8 @@ export async function run() {
   const config = (await doctor.api("GET", "/api/v1/clinic")).data;
   const service = config.services.find((s) => s.kind === "procedure").id;
   await freeRoom(doctor.api, doctor.membership);
-  const made = await doctor.api("POST", "/api/v1/appointments", { doctor_id: doctor.membership, service_id: service, arrive: true,
-                                                                  new_patient: { full_name: name, phone: phoneNo } });
+  const made = await doctor.api("POST", "/api/v1/appointments/walk-in", { doctor_id: doctor.membership, service_id: service,
+                                                                  new_patient: { full_name: name, phone: phoneNo, sex: "m", age: 30 } });
   check(made.status === 201, `a walk-in for the doctor (${made.status} ${JSON.stringify(made.data).slice(0, 200)})`);
   const visit = made.data.appointment;
   check((await doctor.api("POST", `/api/v1/appointments/${visit.id}/call`, { status: "waiting" })).status === 200, "called in");

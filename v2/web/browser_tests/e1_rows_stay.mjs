@@ -22,7 +22,7 @@ export async function run() {
   const [first, second] = working;
   const service = config.services.find((s) => s.kind === "consultation").id;
   async function book(doctor, name, extra = {}) {
-    const body = { doctor_id: doctor.id, service_id: service, new_patient: { full_name: name }, ...extra };
+    const body = { doctor_id: doctor.id, service_id: service, new_patient: { full_name: name, phone: `015${String(Date.now() * 1000 + Math.floor(Math.random() * 1000)).slice(-8)}`, sex: "m", age: 30 }, ...extra };
     if (doctor.today.every((s) => s.mode === "slots")) body.starts_at = (await freeSlot(api, doctor.id, day)).starts_at;
     const r = await api("POST", "/api/v1/appointments", body);
     if (r.status !== 201) throw new Error(`booking failed: ${r.status} ${JSON.stringify(r.data)}`);

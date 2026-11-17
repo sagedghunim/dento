@@ -33,7 +33,8 @@ export async function run() {
   const service = config.services.find((s) => s.kind === "consultation").id;
   const phone = `0101${String(Date.now()).slice(-7)}`;
   const book = async (name, body = {}) => (await api("POST", "/api/v1/appointments", {
-    doctor_id: doctor.id, service_id: service, new_patient: { full_name: name, phone }, ...body })).data.appointment;
+    doctor_id: doctor.id, service_id: service, ...body,
+    new_patient: { full_name: name, phone, phone_owner: "guardian", guardian_relation: "other", sex: "m", age: 30 } })).data.appointment;
   const ready = await book(`Bt Ready ${stamp}`, { arrive: true });
   await api("POST", `/api/v1/appointments/${ready.id}/ready`, { status: "waiting" });
   const late = await book(`Bt Late ${stamp}`);
@@ -120,16 +121,18 @@ export async function run() {
     check(next.doctor === String(doctor.id), "with the same doctor");
     await page.eval(`document.querySelector("#book-dialog [data-close]").click()`);
 
-    // 2. Book starts unticked; Walk-in takes the typed name and collects.
+    // 2. Book starts unticked; Walk-in collects.
     await page.eval(`document.querySelector("[data-open-book]").click()`);
     await page.until(`document.getElementById("book-dialog").open`, 3000, "Book opens empty");
     const ticks = await page.eval(`({ arrive: document.querySelector('#book-dialog [name="arrive"]')?.checked, collect: document.querySelector('#book-dialog [name="collect"]')?.checked })`);
     check(ticks.arrive === false && ticks.collect === false, "a booking starts with 'here now' and 'collect' unticked");
     await page.eval(`document.querySelector("#book-dialog [data-close]").click()`);
-    await page.eval(`(() => { const f = document.querySelector("[data-quick-book]"); f.elements.q.value = "Bt Ready ${stamp}"; f.querySelector("[data-open-walkin]").click(); })()`);
+    await page.eval(`document.querySelector(".tool-buttons [data-open-walkin]").click()`);
     await page.until(`document.getElementById("walkin-dialog").open`, 3000, "Walk-in opens");
-    const walk = await page.eval(`({ q: document.querySelector('#walkin-dialog [name="q"]').value, collect: document.querySelector('#walkin-dialog [name="collect"]').checked })`);
-    check(walk.q === `Bt Ready ${stamp}` && walk.collect, "Walk-in has the typed name, and 'collect' is ticked");
+    const walk = await page.eval(`(() => { const q = document.querySelector('#walkin-dialog [name="q"]');
+      q.value = "Bt Ready ${stamp}"; q.dispatchEvent(new Event("input", { bubbles: true }));
+      return { collect: document.querySelector('#walkin-dialog [name="collect"]').checked }; })()`);
+    check(walk.collect, "Walk-in has 'collect' ticked");
     await page.until(`document.querySelectorAll("#walkin-dialog [data-pick-patient]").length > 0`, 8000, "and searches it");
     await page.eval(`document.querySelector("#walkin-dialog [data-close]").click()`);
 

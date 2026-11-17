@@ -11,6 +11,10 @@ const stamp = Date.now().toString(36).slice(-5);
 
 export async function run() {
   const { session, api } = await signIn();
+  // A queue doctor working today: a slot doctor's booking would need a time, which this test isn't about.
+  const config = (await api("GET", "/api/v1/clinic")).data;
+  const queueDoctor = config.doctors.find((d) => d.today.some((s) => s.mode === "queue"));
+  if (!queueDoctor) throw new Error("This test needs a queue doctor working today.");
   const page = await browser({ width: 1280, height: 900 });
   try {
     await page.cookie(session);
@@ -29,15 +33,20 @@ export async function run() {
     async function bookLost(name) {
       dropAnswers = true;
       await page.eval(`(async () => {
-        document.querySelector("[data-quick-book] input").value = "";
-        document.querySelector("[data-quick-book]").requestSubmit();
+        document.querySelector("[data-open-book]").click();
         await new Promise((r) => setTimeout(r, 600));
         const d = document.getElementById("book-dialog");
         d.querySelector("[data-new-patient]").click();
         d.querySelector('[name="full_name"]').value = ${JSON.stringify(name)};
-        const doctor = d.querySelector('[data-doctors] .chip:not([hidden]) input');
+        // A new patient's must-haves (Saged, 2026-11-17): a mobile of their own, the sex and an age.
+        d.querySelector('[name="phone"]').value = "015" + String(Date.now()).slice(-8);
+        d.querySelector('[name="sex"][value="m"]').checked = true;
+        d.querySelector('[name="age"]').value = "30";
+        const doctor = d.querySelector('[data-doctors] input[value="${queueDoctor.id}"]');
         doctor.checked = true; doctor.dispatchEvent(new Event("change", { bubbles: true }));
         await new Promise((r) => setTimeout(r, 1500));
+        const turn = d.querySelector('[name="slot"][value=""]');  // a queue day: "the next turn"
+        if (turn) { turn.checked = true; turn.dispatchEvent(new Event("change", { bubbles: true })); }
         d.querySelector("form").requestSubmit();
       })()`);
       await page.until(`document.getElementById("book-dialog").dataset.unknown === "1"`, 40000, "the booking's outcome becomes unknown");

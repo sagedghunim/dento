@@ -50,6 +50,14 @@ export async function signIn(user = USER) {
 }
 
 // Today's appointments for a patient name, read from the JSON API.
+// Tests that read Arabic screen text run the signed-in person in Arabic and give them their own language back after:
+// `const back = await inArabic(api); try { ... } finally { await back(); }`. It changes no permission.
+export async function inArabic(api) {
+  const before = (await api("GET", "/api/v1/me")).data.user.language;
+  if (before !== "ar") await api("POST", "/api/v1/me/language", { language: "ar" });
+  return async () => { if (before !== "ar") await api("POST", "/api/v1/me/language", { language: before }); };
+}
+
 export async function bookingsOf(api, name) {
   const today = (await api("GET", "/api/v1/today")).data;
   return today.queues.flatMap((q) => q.appointments).filter((a) => a.patient.name === name && a.status !== "cancelled");

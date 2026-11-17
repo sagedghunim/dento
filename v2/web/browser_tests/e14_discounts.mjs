@@ -77,7 +77,7 @@ export async function run() {
     // --- the visit screen: the doctor suggests ---
     await freeRoom(desk.api, doctor.membership);
     const walk = await desk.api("POST", "/api/v1/appointments/walk-in", {
-      doctor_id: doctor.membership, service_id: service, new_patient: { full_name: `Bt Discount ${stamp}`, phone: `0101${String(Date.now()).slice(-7)}` } });
+      doctor_id: doctor.membership, service_id: service, new_patient: { full_name: `Bt Discount ${stamp}`, phone: `0101${String(Date.now()).slice(-7)}`, sex: "m", age: 30 } });
     if (walk.status !== 201) throw new Error(`walk-in failed: ${walk.status} ${JSON.stringify(walk.data)}`);
     visit = walk.data.appointment;
     const called = await desk.api("POST", `/api/v1/appointments/${visit.id}/call`, { status: visit.status });

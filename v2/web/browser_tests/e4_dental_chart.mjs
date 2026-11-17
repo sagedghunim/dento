@@ -21,10 +21,11 @@ async function shot(page, name) {
 async function inRoom(api, me) {
   const config = (await api("GET", "/api/v1/clinic")).data;
   // The signed-in doctor's own visit: a doctor books only for themselves (Saged, 2026-11-13).
-  const doctor = config.doctors.find((d) => d.id === me) || config.doctors.find((d) => d.today.some((s) => s.mode === "queue")) || config.doctors[0];
+  const doctor = config.doctors.find((d) => String(d.id) === String(me)) || config.doctors.find((d) => d.today.some((s) => s.mode === "queue")) || config.doctors[0];
   const service = config.services.find((s) => s.kind === "procedure").id;
-  const booked = (await api("POST", "/api/v1/appointments", { doctor_id: doctor.id, service_id: service, arrive: true,
-                                                              new_patient: { full_name: `Bt Teeth ${stamp}` } })).data.appointment;
+  // A walk-in needs no time, so the test runs for a slot doctor too, at any hour (as e10 does).
+  const booked = (await api("POST", "/api/v1/appointments/walk-in", { doctor_id: doctor.id, service_id: service,
+                                                              new_patient: { full_name: `Bt Teeth ${stamp}`, phone: `015${String(Date.now() * 1000 + Math.floor(Math.random() * 1000)).slice(-8)}`, sex: "m", age: 30 } })).data.appointment;
   await freeRoom(api, doctor.id);
   await api("POST", `/api/v1/appointments/${booked.id}/call`, { status: "waiting" });
   return booked;

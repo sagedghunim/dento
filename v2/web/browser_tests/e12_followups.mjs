@@ -10,7 +10,7 @@
 // 1280 and 390 px.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { browser, check, freeRoom, signIn, sleep } from "./lib.mjs";
+import { browser, check, freeRoom, inArabic, signIn, sleep } from "./lib.mjs";
 
 const stamp = Date.now().toString(36).slice(-5);
 const SHOTS = process.env.HAMADA_BT_SHOTS || "";
@@ -28,7 +28,17 @@ async function shot(page, name) {
 const offline = (page, on) => page.cdp("Network.emulateNetworkConditions", { offline: on, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
 const nextCount = `document.querySelectorAll("[data-upcoming] li").length`;
 
+// The screens are read in Arabic: the doctor and the desk run in Arabic, and get their own language back after.
 export async function run() {
+  const backs = [await inArabic((await signIn()).api), await inArabic((await signIn(DESK)).api)];
+  try {
+    await runInArabic();
+  } finally {
+    for (const back of backs) await back();
+  }
+}
+
+async function runInArabic() {
   const { session, membership, api } = await signIn();
   const desk = await signIn(DESK);
   const config = (await api("GET", "/api/v1/clinic")).data;
@@ -36,8 +46,8 @@ export async function run() {
   await freeRoom(api, membership);
   const name = `Bt Plan ${stamp}`;
   const phoneNo = `0101${String(Date.now()).slice(-7)}`;
-  const made = await api("POST", "/api/v1/appointments", { doctor_id: membership, service_id: service, arrive: true,
-                                                          new_patient: { full_name: name, phone: phoneNo } });
+  const made = await api("POST", "/api/v1/appointments/walk-in", { doctor_id: membership, service_id: service,
+                                                          new_patient: { full_name: name, phone: phoneNo, sex: "m", age: 30 } });
   check(made.status === 201, `a walk-in for the doctor (${made.status} ${JSON.stringify(made.data).slice(0, 200)})`);
   const visit = made.data.appointment;
   check((await api("POST", `/api/v1/appointments/${visit.id}/call`, { status: "waiting" })).status === 200, "called in");
@@ -64,9 +74,16 @@ export async function run() {
     let rec = await record();
     check(rec.procedures.length === before + 1, "a double click recorded one procedure");
     check(rec.procedures.at(-1).unit_price === quick.price, "at the clinic's list price");
-    const totalShown = await page.eval(`document.querySelector("[data-procs-total]").textContent`);
-    check(totalShown.replace(/[^0-9٠-٩]/g, "").length > 0 && rec.invoice.total === visit.fee + quick.price, `the bill adds the consultation and the procedure (${totalShown})`);
-    const refused = await api("POST", `/api/v1/appointments/${visit.id}/procedures`, { procedure_id: quick.id, unit_price: quick.price + 100 });
+    // The bill's total only for someone with money.view (Saged, 2026-11-16): a plain doctor sees no amount.
+    const totalShown = await page.eval(`document.querySelector("[data-procs-total]")?.textContent ?? null`);
+    if (totalShown === null) check(!rec.invoice, "a doctor without money.view sees no total and no invoice");
+    else check(totalShown.replace(/[^0-9٠-٩]/g, "").length > 0 && rec.invoice.total === visit.fee + quick.price, `the bill adds the consultation and the procedure (${totalShown})`);
+    // Another procedure (this one is on the visit already: a second one is "already added", Saged 2026-11-17), at a
+    // price of the doctor's own. A doctor without money.view isn't told the list price, so any amount will do.
+    const other = data.procedures.find((p) => p.id !== quick.id && p.unit !== "tooth");
+    const refused = await api("POST", `/api/v1/appointments/${visit.id}/procedures`, { procedure_id: other.id, unit_price: 123 });
+    const again = await api("POST", `/api/v1/appointments/${visit.id}/procedures`, { procedure_id: quick.id });
+    check(again.status === 409 && again.data.error.code === "already_added", "the same procedure again is already added");
     check(refused.status === 403 && refused.data.error.code === "price_locked", "the server refuses a doctor's own price");
 
     // A procedure found by typing, with a recipe: its sessions are offered and added once.
@@ -159,7 +176,7 @@ export async function run() {
 
     // A booking linked to the first session: it leaves the list.
     const firstItem = Number(await deskPage.eval(`${row}.querySelector("[data-item]").dataset.item`));
-    const again = await desk.api("POST", "/api/v1/appointments", { doctor_id: membership, service_id: service, arrive: true, patient_id: visit.patient.id });
+    const again = await desk.api("POST", "/api/v1/appointments/walk-in", { doctor_id: membership, service_id: service, patient_id: visit.patient.id });
     check(again.status === 201, "the desk books the patient again");
     check((await desk.api("POST", "/api/v1/follow-ups/booked", { item_ids: [firstItem], appointment_id: again.data.appointment.id })).status === 200, "the booking is linked");
     await deskPage.open("/follow-ups");

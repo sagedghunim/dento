@@ -38,7 +38,7 @@ export async function run() {
   await freeRoom(api, membership);  // nobody of this doctor's may be in the room before the test
   // A walk-in needs no time, so the test runs at any hour, inside the doctor's sessions or not.
   const walkIn = async (name) => (await api("POST", "/api/v1/appointments/walk-in", {
-    doctor_id: membership, service_id: service, new_patient: { full_name: name, phone: `0101${String(Date.now()).slice(-7)}` },
+    doctor_id: membership, service_id: service, new_patient: { full_name: name, phone: `0101${String(Date.now()).slice(-7)}`, sex: "m", age: 30 },
   })).data.appointment;
   const first = await walkIn(`Bt Visit ${stamp}`);
   const second = await walkIn(`Bt Next ${stamp}`);

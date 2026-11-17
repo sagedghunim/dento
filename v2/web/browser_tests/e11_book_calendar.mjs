@@ -1,7 +1,7 @@
 // Booking with a calendar and times (Saged, 2026-11-13), as the desk (sara): the Book dialog opens on today's
 // month and moves across months and into next year; with a doctor picked, their days off are greyed and working
 // days hint at free times; a day shows the doctor's times, taken ones marked; a double-clicked Book books once;
-// the booking lands in the day's "booked" list with its time, never among the waiting, and the feed says "booked";
+// the booking lands in the day's "booked" list with its time, never among the waiting, and its row says "booked";
 // a dropped connection keeps the booking for "Try again", which books once; an expired session says signed out;
 // at 390 px the calendar fits and the times wrap; every button of Today, Book and Walk-in answers.
 // HAMADA_BT_SHOTS=<folder> takes the open dialog at 1280 and 390 px.
@@ -35,8 +35,14 @@ async function openBook(page, doctorId) {
   }
 }
 
+// A new patient's must-haves (Saged, 2026-11-17): a three-part name, a mobile of their own, the sex and an age.
+let phones = 0;
 async function fill(page, name) {
-  await page.eval(`(() => { const f = ${D}.querySelector('[name="full_name"]'); f.value = ${JSON.stringify(name)}; f.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  const phone = `015${String(Date.now()).slice(-6)}${String(++phones % 100).padStart(2, "0")}`;
+  await page.eval(`(() => { const f = ${D}.querySelector('[name="full_name"]'); f.value = ${JSON.stringify(name)}; f.dispatchEvent(new Event("input", { bubbles: true }));
+    ${D}.querySelector('[name="phone"]').value = "${phone}";
+    ${D}.querySelector('[name="sex"][value="f"]').checked = true;
+    ${D}.querySelector('[name="age"]').value = "30"; })()`);
 }
 
 // The first working day after today in the month shown (or the next month), then its first free time.
@@ -131,10 +137,10 @@ export async function run() {
     if (todayFree) {
       const feedName = `Bt Feed ${stamp}`;
       await api("POST", "/api/v1/appointments", { doctor_id: doctor.id, service_id: config.services.find((s) => s.kind === "consultation").id,
-        new_patient: { full_name: feedName }, starts_at: todayFree.starts_at });
+        new_patient: { full_name: feedName, phone: `015${String(Date.now() * 1000 + Math.floor(Math.random() * 1000)).slice(-8)}`, sex: "m", age: 30 }, starts_at: todayFree.starts_at });
       await page.open("/");
-      const feed = await page.eval(`[...document.querySelectorAll('[data-slot="activity"] .feed-item')].map((f) => f.textContent).find((t) => t.includes(${JSON.stringify(feedName)})) || ""`);
-      check(feed && !/وصل|Arrived/.test(feed), `the feed says: "${feed.trim()}"`);
+      const status = await page.eval(`[...document.querySelectorAll(".appt")].find((r) => (r.dataset.name || "").includes(${JSON.stringify(feedName)}))?.dataset.status || ""`);
+      check(status === "booked", `the new booking's row says booked: "${status}"`);
     } else {
       console.log("  info: no free time left today; the feed check is skipped");
     }

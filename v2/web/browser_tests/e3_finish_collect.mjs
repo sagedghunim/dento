@@ -12,7 +12,7 @@ export async function run() {
   if (!doctor) throw new Error("This test needs a queue doctor working today.");
   const service = config.services.find((s) => s.kind === "consultation").id;
   const booked = (await api("POST", "/api/v1/appointments", { doctor_id: doctor.id, service_id: service, arrive: true,
-                                                              new_patient: { full_name: `Bt Finish ${stamp}` } })).data.appointment;
+                                                              new_patient: { full_name: `Bt Finish ${stamp}`, phone: `015${String(Date.now() * 1000 + Math.floor(Math.random() * 1000)).slice(-8)}`, sex: "m", age: 30 } })).data.appointment;
   await freeRoom(api, doctor.id);
   await api("POST", `/api/v1/appointments/${booked.id}/call`, { status: "waiting" });
   const fee = booked.fee;
