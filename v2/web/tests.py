@@ -223,6 +223,18 @@ class ReceiptTests(M1TestCase):
         self.assertIn("print-a5.css", html)
         self.assertIn("EGP", html)
 
+    def test_a_free_line_stays_off_the_receipt(self):
+        a = self.paid()
+        from billing.models import InvoiceLine
+        with clinic_transaction(self.a.id, self.a.shard):
+            line = InvoiceLine.objects.filter(clinic_id=self.a.id, invoice_id=a["invoice"]["id"]).first()
+            InvoiceLine.objects.create(clinic_id=self.a.id, invoice_id=line.invoice_id, kind=line.kind, description="Free visit zz",
+                                       qty=1, unit_price=0, amount=0, from_list=True, created_by_id=line.created_by_id,
+                                       created_at=line.created_at)
+        html = self.desk.get(f"/print/receipts/{a['invoice']['id']}?lang=en").content.decode()
+        self.assertNotIn("Free visit zz", html)
+        self.assertIn("<td class=\"n\">", html)  # the paid line is still there
+
     def test_another_clinics_invoice_is_not_found_and_not_logged(self):
         other = self.paid(fixture=self.b)
         before = access_count(self.b, AuditAccess.Action.PRINT)

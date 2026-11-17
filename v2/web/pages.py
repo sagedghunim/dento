@@ -471,6 +471,10 @@ def receipt_page(request, ctx, invoice_id):
                                                                           if line["service_id"]]).values_list("id", "name"))
     for line in data["lines"]:
         line["label"] = line["description"] or names.get(line["service_id"]) or "—"
+    # A free line (a plan session's visit at 0) only confuses the patient: the receipt hides it (Saged, 2026-11-17).
+    paid_lines = [line for line in data["lines"] if line["amount"]]
+    if paid_lines:
+        data["lines"] = paid_lines
     language = request.GET.get("lang")
     if language not in ("ar", "en"):
         language = data["print"]["print_language"]
