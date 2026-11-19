@@ -1120,12 +1120,6 @@ msgstr "تعديل"
 msgid "Visits"
 msgstr "الزيارات"
 
-msgid "Fee"
-msgstr "المبلغ"
-
-msgid "Actions"
-msgstr "الإجراءات"
-
 msgid "No visits yet."
 msgstr "لا توجد زيارات بعد."
 
@@ -3998,22 +3992,6 @@ msgstr "الأشعة والملفات"
 msgid "No x-rays or files yet."
 msgstr "مفيش أشعة أو ملفات لسه."
 
-msgid "Every bill and payment, oldest first, with what is owed after each."
-msgstr ""
-"كل فاتورة وكل دفعة بالترتيب من الأقدم، وجنب كل واحدة الباقي عليه بعدها."
-
-msgid "Charged"
-msgstr "المطلوب"
-
-msgid "Owed after"
-msgstr "الباقي بعدها"
-
-msgid "Credit"
-msgstr "رصيد له"
-
-msgid "No bills yet."
-msgstr "مفيش فواتير لسه."
-
 msgid "The file didn't open. Try again."
 msgstr "الملف ما اتفتحش. جرّب تاني."
 
@@ -4028,3 +4006,23 @@ msgstr "اعرض اللي اتشالوا ({n})"
 
 msgid "Hide removed ones"
 msgstr "اخفي اللي اتشالوا"
+
+msgid "Visits by date"
+msgstr "الزيارات بالتاريخ"
+
+msgid ""
+"Tap a date to see what was done that day; its teeth light up on the chart."
+msgstr ""
+"دوس على أي تاريخ تشوف اتعمل إيه في اليوم ده، وسنانه هتنوّر على المخطط."
+
+msgid "A percent of the fee"
+msgstr "نسبة من سعر الزيارة"
+
+msgid "Enter the deposit percent, from 1 to 100."
+msgstr "اكتب نسبة العربون من 1 لـ 100."
+
+msgid "This visit has no fee, so it takes no deposit."
+msgstr "الزيارة دي ببلاش، فمفيش عربون."
+
+msgid "Remaining"
+msgstr "الباقي"

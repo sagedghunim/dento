@@ -298,3 +298,22 @@ async function loadHistory(more) {
   historyStatus.textContent = historyList.children.length ? "" : t("no_history");
 }
 historyMore.addEventListener("click", () => loadHistory(true));
+
+// --- the visits by date above the chart (Saged, 2026-11-19): one open at a time; its teeth light up ---
+const dated = document.querySelector("[data-dated]");
+if (dated) {
+  dated.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-date-visit]");
+    if (!chip) return;
+    const opening = chip.getAttribute("aria-pressed") !== "true";
+    dated.querySelectorAll("[data-date-visit]").forEach((c) => c.setAttribute("aria-pressed", "false"));
+    dated.querySelectorAll("[data-date-detail]").forEach((d) => { d.hidden = true; });
+    document.querySelectorAll(".tooth.lit").forEach((t) => t.classList.remove("lit"));
+    if (!opening) return;
+    chip.setAttribute("aria-pressed", "true");
+    dated.querySelector(`[data-date-detail="${chip.dataset.dateVisit}"]`).hidden = false;
+    for (const n of (chip.dataset.teeth || "").split(",").filter(Boolean)) {
+      document.querySelectorAll(`.tooth[data-tooth="${n}"]`).forEach((t) => t.classList.add("lit"));
+    }
+  });
+}

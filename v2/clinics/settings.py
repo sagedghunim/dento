@@ -18,11 +18,13 @@ DEFAULTS = {
     # An optional deposit taken with a booking (Saged, 2026-11-16): off by default; the amount in piastres.
     "booking_deposit": False,
     "booking_deposit_amount": 0,
+    # Or a percent of the visit's fee (Saged, 2026-11-19): 0 means the fixed amount above.
+    "booking_deposit_percent": 0,
     # The consultation costs nothing when a procedure is done in the same visit (Saged, 2026-11-19): off by default.
     "consultation_free_with_procedure": False,
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
-OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "consultation_free_with_procedure"}
+OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
 
 _RULES = {
@@ -38,6 +40,7 @@ _RULES = {
     "booking_deposit": lambda v: isinstance(v, bool),
     "booking_deposit_amount": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_DEPOSIT,
     "consultation_free_with_procedure": lambda v: isinstance(v, bool),
+    "booking_deposit_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100,
 }
 
 
@@ -62,11 +65,23 @@ def validated(changes, kind="clinic"):
 
 def check_together(values):
     """Rules across settings, on the values as they would be stored: a deposit that is asked for has an amount."""
-    if values["booking_deposit"] and values["booking_deposit_amount"] <= 0:
+    if values["booking_deposit"] and values["booking_deposit_amount"] <= 0 and not values["booking_deposit_percent"]:
         raise ApiError("invalid", _("Enter the deposit amount."), fields={"booking_deposit_amount": "required"})
 
 
-def deposit(clinic):
-    """The booking deposit this place asks for, in piastres; 0 when it asks for none."""
+def deposit(clinic, fee=None):
+    """The booking deposit this place asks for, in piastres; 0 when it asks for none. A percent deposit is that
+    percent of the visit's `fee`, to the nearest pound (0 without a fee)."""
     values = effective(clinic.settings)
-    return values["booking_deposit_amount"] if values["booking_deposit"] else 0
+    if not values["booking_deposit"]:
+        return 0
+    percent = values["booking_deposit_percent"]
+    if percent:
+        return (fee * percent + 5000) // 10000 * 100 if fee else 0
+    return values["booking_deposit_amount"]
+
+
+def deposit_percent(clinic):
+    """The percent when the deposit is a percent of the fee, else 0."""
+    values = effective(clinic.settings)
+    return values["booking_deposit_percent"] if values["booking_deposit"] else 0

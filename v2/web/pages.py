@@ -111,6 +111,8 @@ def clinic_config(ctx, today):
         "perms": _perms(ctx),
         # The booking deposit to offer in Book, ticked by default (Saged, 2026-11-16); 0 when off or not allowed.
         "deposit": clinic_settings.deposit(ctx.clinic) if ctx.can("billing.collect") else 0,
+        # A percent of the visit's fee instead (Saged, 2026-11-19): Book works the amount out from the quote.
+        "deposit_percent": clinic_settings.deposit_percent(ctx.clinic) if ctx.can("billing.collect") else 0,
     }
 
 
@@ -410,7 +412,6 @@ def patient_page(request, ctx, patient_id):
 
 
 FILES_PAGE = 24
-STATEMENT_ROWS = 60
 
 
 def _visit_summary(ctx, patient_id):
@@ -426,35 +427,16 @@ def _visit_summary(ctx, patient_id):
 
 
 def _statement(ctx, patient_id):
-    """The patient's account (Saged, 2026-11-17): each visit's bill and each payment or refund, oldest first, with
-    what is owed after each one. Two statements; the last STATEMENT_ROWS rows are shown, the balance counts all."""
+    """The patient's account in three numbers (Saged, 2026-11-19): everything charged, what was paid (refunds
+    taken off), and what is left. One statement."""
     from core import sql
 
-    bills = sql.dicts(ctx, """
-        SELECT i.id, i.number, i.total, i.created_at AS at, a.day, s.name AS service, i.discount
-          FROM "billing_invoice" i
-          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
-          LEFT JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
-         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status <> 'void' AND i.total > 0""", [ctx.clinic_id, patient_id])
-    payments = sql.dicts(ctx, """
-        SELECT id, kind, method, amount, received_at AS at, is_deposit, invoice_id FROM "billing_payment"
-         WHERE clinic_id = %s AND patient_id = %s""", [ctx.clinic_id, patient_id])
-    rows = [(b["at"], 0, b["id"], "bill", b) for b in bills] + [(p["at"], 1, p["id"], p["kind"], p) for p in payments]
-    rows.sort(key=lambda r: (r[0], r[1], r[2]))
-    balance, out = 0, []
-    for at, _rank, _id, kind, r in rows:
-        if kind == "bill":
-            balance += r["total"]
-            out.append({"kind": "bill", "at": local_iso(ctx.clinic, at), "day": r["day"], "number": r["number"],
-                        "service": r["service"] or "", "charge": r["total"], "discount": r["discount"],
-                        "balance": balance})
-        else:
-            sign = -1 if kind == "payment" else 1
-            balance += sign * r["amount"]
-            out.append({"kind": kind, "at": local_iso(ctx.clinic, at), "method": r["method"], "deposit": r["is_deposit"],
-                        "paid": r["amount"] if kind == "payment" else None,
-                        "refund": r["amount"] if kind == "refund" else None, "balance": balance})
-    return {"rows": out[-STATEMENT_ROWS:], "hidden": max(0, len(out) - STATEMENT_ROWS), "balance": balance}
+    total, paid = sql.row(ctx, """
+        SELECT (SELECT coalesce(sum(total), 0) FROM "billing_invoice"
+                 WHERE clinic_id = %s AND patient_id = %s AND status <> 'void'),
+               (SELECT coalesce(sum(CASE WHEN kind = 'refund' THEN -amount ELSE amount END), 0) FROM "billing_payment"
+                 WHERE clinic_id = %s AND patient_id = %s)""", [ctx.clinic_id, patient_id, ctx.clinic_id, patient_id])
+    return {"total": total, "paid": paid, "left": total - paid}
 
 
 def _with_notes(ctx, items):

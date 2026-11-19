@@ -282,8 +282,8 @@ export function initBook({ onBooked, defaults } = {}) {
     const arrive = today && field("arrive") && field("arrive").checked;
     const deposit = takesDeposit(today, collect, arrive);
     if (depositBox) {
-      depositBox.hidden = !config.deposit || collect || arrive;
-      depositBox.querySelector("[data-deposit-label]").textContent = t("deposit_amount", { amount: moneyText(config.deposit) });
+      depositBox.hidden = !depositAmount() || collect || arrive;
+      depositBox.querySelector("[data-deposit-label]").textContent = t("deposit_amount", { amount: moneyText(depositAmount()) });
       depositBox.querySelector("[data-deposit-methods]").hidden = !deposit;
     }
     submitButton.textContent = collect || deposit ? t("book_collect") : arrive ? t("book_arrive") : t("book");
@@ -292,7 +292,13 @@ export function initBook({ onBooked, defaults } = {}) {
   // The booking deposit (Saged, 2026-11-16): the clinic's amount, ticked by default. Not with "collect now" (that is
   // the payment) nor for a patient who is here now (they pay at the visit).
   function takesDeposit(today, collect, arrive) {
-    return Boolean(depositBox && config.deposit && !collect && !arrive && field("deposit").checked);
+    return Boolean(depositBox && depositAmount() && !collect && !arrive && field("deposit").checked);
+  }
+
+  // A fixed amount, or a percent of the fee shown (to the nearest pound, as the server works it out).
+  function depositAmount() {
+    if (!config.deposit_percent) return config.deposit;
+    return lastFee ? Math.round((lastFee * config.deposit_percent) / 10000) * 100 : 0;
   }
 
   // --- saving: one request, one key per dialog until a definite answer ---
@@ -312,7 +318,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (collect) {
       out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
     } else if (takesDeposit(today, false, out.arrive)) {
-      out.payment = { amount: config.deposit, method: form.querySelector('[name="deposit_method"]:checked').value, deposit: true };
+      out.payment = { amount: depositAmount(), method: form.querySelector('[name="deposit_method"]:checked').value, deposit: true };
     }
     return out;
   }
@@ -373,7 +379,7 @@ export function initBook({ onBooked, defaults } = {}) {
   function depositAnswer(result) {
     const error = result.data && result.data.error;
     if (!error || !depositBox) return;
-    if (error.code === "deposit_off") config.deposit = 0;
+    if (error.code === "deposit_off" && !config.deposit_percent) config.deposit = 0;
     else if (error.code === "deposit_changed" && Number.isInteger(error.amount)) config.deposit = error.amount;
     else return;
     labels();

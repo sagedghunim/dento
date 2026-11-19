@@ -10,7 +10,7 @@
       <span class="pill">{% translate "Visits:" %} {{ summary.count|digits }}</span>
       <span class="pill">{% translate "First visit:" %} {{ summary.first|shortday }}</span>
       <span class="pill">{% translate "Last visit:" %} {{ summary.last|shortday }}</span>
-      {% if statement and statement.balance > 0 %}<span class="pill amber">{% translate "Owes" %} {{ statement.balance|money }}</span>{% endif %}
+      {% if statement and statement.left > 0 %}<span class="pill amber">{% translate "Owes" %} {{ statement.left|money }}</span>{% endif %}
     </p>{% endif %}
   </div>
   <div class="appt-actions">
@@ -20,23 +20,17 @@
   </div>
 </div>
 
-<div class="grid-2">
-  <section class="card" aria-labelledby="visits-title" data-patient-visits data-name="{{ patient.full_name }}">
-    <h2 id="visits-title">{% translate "Visits" %}</h2>
-    <p class="card-sub">{% translate "Newest first, with the doctor's notes." %}</p>
-    <div class="table-scroll">
-      <table class="table">
-        <thead><tr><th>{% translate "Day" %}</th><th>{% translate "Service" %}</th><th>{% translate "Status" %}</th>{% if perms.money %}<th class="num">{% translate "Fee" %}</th>{% endif %}<th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
-        <tbody data-rows="visits">{% include "web/_visit_rows.html" with items=visits.items %}</tbody>
-      </table>
-    </div>
-    {% if not visits.items %}<p class="empty-note">{% translate "No visits yet." %}</p>{% endif %}
-    <div class="list-foot">
-      <span class="muted" data-count="visits" data-n="{{ visits.items|length }}">{% translate "Showing" %} {{ visits.items|length|digits }}</span>
-      {% if visits.next %}<button type="button" class="btn ghost" data-more="visits" data-next="{{ visits.next }}">{% translate "Load more" %}</button>{% endif %}
-    </div>
-  </section>
-
+<section class="card visits-card" aria-labelledby="visits-title" data-patient-visits data-name="{{ patient.full_name }}">
+  <h2 id="visits-title">{% translate "Visits" %}</h2>
+  <p class="card-sub">{% translate "Newest first, with the doctor's notes." %}</p>
+  <ol class="visit-list" data-rows="visits">{% include "web/_visit_rows.html" with items=visits.items %}</ol>
+  {% if not visits.items %}<p class="empty-note">{% translate "No visits yet." %}</p>{% endif %}
+  <div class="list-foot">
+    <span class="muted" data-count="visits" data-n="{{ visits.items|length }}">{% translate "Showing" %} {{ visits.items|length|digits }}</span>
+    {% if visits.next %}<button type="button" class="btn ghost" data-more="visits" data-next="{{ visits.next }}">{% translate "Load more" %}</button>{% endif %}
+  </div>
+</section>
+<div class="grid-2 file-grid">
   <div class="stack">
     <section class="card" aria-labelledby="details-title">
       <h2 id="details-title">{% translate "Details" %}</h2>
@@ -89,21 +83,11 @@
 {% if statement %}
 <section class="card statement-card" aria-labelledby="statement-title">
   <h2 id="statement-title">{% translate "Account" %}</h2>
-  <p class="card-sub">{% translate "Every bill and payment, oldest first, with what is owed after each." %}</p>
-  {% if statement.rows %}<div class="table-scroll">
-    <table class="table statement">
-      <thead><tr><th>{% translate "When" %}</th><th>{% translate "What" %}</th><th class="num">{% translate "Charged" %}</th><th class="num">{% translate "Paid" %}</th><th class="num">{% translate "Owed after" %}</th></tr></thead>
-      <tbody>
-        {% for r in statement.rows %}<tr>
-          <td class="nowrap">{{ r.at|shortday }}</td>
-          <td>{% if r.kind == "bill" %}{% translate "Bill" %} {{ r.number|num }}{% if r.service %} · <bdi dir="auto">{{ r.service }}</bdi>{% endif %}{% if r.discount %} <span class="muted">({% translate "Discount" %} {{ r.discount|money }})</span>{% endif %}{% elif r.kind == "refund" %}{% translate "Refund" %} · {{ method_names|get_item:r.method }}{% else %}{% if r.deposit %}{% translate "Deposit" %} · {% endif %}{{ method_names|get_item:r.method }}{% endif %}</td>
-          <td class="num">{% if r.charge %}{{ r.charge|money }}{% elif r.refund %}{{ r.refund|money }}{% endif %}</td>
-          <td class="num">{% if r.paid %}{{ r.paid|money }}{% endif %}</td>
-          <td class="num">{% if r.balance > 0 %}<strong>{{ r.balance|money }}</strong>{% elif r.balance < 0 %}<span class="muted">{% translate "Credit" %} {{ r.balance|money }}</span>{% else %}—{% endif %}</td>
-        </tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>{% else %}<p class="empty-note">{% translate "No bills yet." %}</p>{% endif %}
+  <dl class="account-sums">
+    <div><dt>{% translate "Total" %}</dt><dd class="num">{{ statement.total|money }}</dd></div>
+    <div><dt>{% translate "Paid" %}</dt><dd class="num">{{ statement.paid|money }}</dd></div>
+    <div class="{% if statement.left > 0 %}owes{% endif %}"><dt>{% translate "Remaining" %}</dt><dd class="num">{% if statement.left > 0 %}{{ statement.left|money }}{% else %}{{ 0|money }}{% endif %}</dd></div>
+  </dl>
 </section>
 {% endif %}
 {{ patient|json_script:"patient-data" }}

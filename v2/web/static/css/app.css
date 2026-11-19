@@ -1101,3 +1101,22 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .top-start { display: flex; align-items: center; gap: 12px; }
 .back-btn { min-height: 40px; padding-inline: 10px 14px; }
 [dir="rtl"] .back-btn svg { transform: scaleX(-1); }
+.account-sums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 8px 0 0; }
+.account-sums div { border: 1px solid var(--line, #333); border-radius: 12px; padding: 12px; }
+.account-sums dt { color: var(--muted); font-size: .875rem; }
+.account-sums dd { margin: 4px 0 0; font-size: 1.35rem; font-weight: 700; }
+.account-sums .owes dd { color: var(--amber, #d98c00); }
+.visit-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 0; }
+.visit-card { padding: 14px 0; border-block-end: 1px solid var(--line); }
+.visit-card:last-child { border-block-end: 0; }
+.visit-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.visit-when { display: grid; gap: 2px; min-width: 0; }
+.visit-when span { color: var(--muted); overflow-wrap: anywhere; }
+.visit-side { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.visit-card .visit-detail { margin-block-start: 10px; }
+.file-grid { margin-block-start: 16px; }
+.file-grid > .stack { display: contents; }
+.file-grid { align-items: start; }
+.dated-card { margin-block-end: 14px; }
+.dated-visit { margin-block-start: 12px; border-block-start: 1px solid var(--line); padding-block-start: 10px; }
+.tooth.lit { background: var(--amber-tint); border-color: var(--amber); }

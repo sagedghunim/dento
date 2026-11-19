@@ -154,8 +154,30 @@ def chart_context(ctx, patient, visit=None):
 
 def _render(request, ctx, patient, visit=None):
     record_access(ctx, patient["id"], AuditAccess.Action.HISTORY)
-    return render(request, "web/teeth.html", {**chart_context(ctx, patient, visit),
-                                              "nav_active": "today" if visit else "patients"})
+    context = {**chart_context(ctx, patient, visit), "nav_active": "today" if visit else "patients"}
+    if visit is None:
+        context["dated"] = _dated_visits(ctx, patient["id"])
+    return render(request, "web/teeth.html", context)
+
+
+DATED_VISITS = 30
+
+
+def _dated_visits(ctx, patient_id):
+    """The patient's visits by date above the chart (Saged, 2026-11-19): a tap on a date shows what was done that
+    day and lights its teeth. Finished or arrived visits only, a doctor's own; the latest DATED_VISITS."""
+    from scheduling.selectors import patient_visits
+
+    from .pages import _doctor_names, _with_notes
+
+    found = [v for v in patient_visits(ctx, patient_id, DATED_VISITS, None)["items"]
+             if v["status"] not in ("booked", "cancelled", "no_show")]
+    _with_notes(ctx, found)
+    names = _doctor_names(ctx)
+    for v in found:
+        v["doctor"] = names.get(v["doctor_id"], "")
+        v["teeth"] = ",".join(str(p["tooth"]) for p in v.get("procedures", []) if p["tooth"])
+    return found
 
 
 def _not_found(request, ctx):

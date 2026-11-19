@@ -13,6 +13,27 @@
 
 <div class="pending-bar" data-pending-bar hidden></div>
 
+{% if dated %}
+<section class="card dated-card" aria-labelledby="dated-title" data-dated>
+  <h2 id="dated-title">{% translate "Visits by date" %}</h2>
+  <p class="card-sub">{% translate "Tap a date to see what was done that day; its teeth light up on the chart." %}</p>
+  <div class="chips" role="group" aria-labelledby="dated-title">
+    {% for v in dated %}<button type="button" class="chip-btn" data-date-visit="{{ v.id }}" data-teeth="{{ v.teeth }}" aria-pressed="false">{{ v.day|shortday }}{% if v.procedures %} <span class="count num">{{ v.procedures|length|digits }}</span>{% endif %}</button>{% endfor %}
+  </div>
+  {% for v in dated %}
+  <div class="dated-visit" data-date-detail="{{ v.id }}" hidden>
+    <p><strong>{{ v.day|shortday }}</strong> · <bdi dir="auto">{{ v.service.name }}</bdi> · <bdi dir="auto">{{ v.doctor }}</bdi></p>
+    <dl class="visit-detail">
+      {% if v.note.complaint %}<div><dt>{% translate "Complaint" %}</dt><dd><bdi dir="auto">{{ v.note.complaint }}</bdi></dd></div>{% endif %}
+      {% if v.note.diagnosis %}<div><dt>{% translate "Diagnosis" %}</dt><dd><bdi dir="auto">{{ v.note.diagnosis }}</bdi></dd></div>{% endif %}
+      <div><dt>{% translate "Treatment" %}</dt><dd>{% for p in v.procedures %}<bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</dd></div>
+      {% if v.medicines %}<div><dt>{% translate "Prescription" %}</dt><dd>{% for m in v.medicines %}<bdi dir="ltr">{{ m.name }}</bdi>{% if m.dose %} <span class="muted"><bdi dir="auto">{{ m.dose }}</bdi></span>{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}</dd></div>{% endif %}
+      {% if v.note.notes %}<div><dt>{% translate "Notes" %}</dt><dd><bdi dir="auto">{{ v.note.notes }}</bdi></dd></div>{% endif %}
+    </dl>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 {% include "web/_chart.html" %}
 {% endblock %}
 {% block scripts %}<script type="module" src="{% static 'js/teeth.js' %}"></script>{% endblock %}

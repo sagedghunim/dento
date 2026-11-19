@@ -78,14 +78,15 @@ def book(ctx, request, deltas=None):
             # A booking deposit (Saged, 2026-11-16): for any day, and the clinic's own amount, never the screen's.
             # Not for a patient who is here now (a walk-in, or "here now" in Book): they pay at the visit, so a
             # deposit is only ever money taken before the visit.
+            percent = clinic_settings.deposit_percent(clinic)  # a percent is checked once the fee is known, below
             asked = clinic_settings.deposit(clinic)
             if request["arrive"]:
                 raise ApiError("invalid", _("A patient who is here now pays at the visit, not a deposit."),
                                fields={"payment.deposit": "here_now"})
-            if not asked:
+            if not percent and not asked:
                 raise ApiError("deposit_off", _("This clinic doesn't take a deposit with bookings."), 409,
                                fields={"payment": "deposit_off"})
-            if payment["amount"] != asked:
+            if not percent and payment["amount"] != asked:
                 raise ApiError("deposit_changed", _("The deposit amount changed. Reload and try again."), 409,
                                fields={"payment.amount": "changed"}, extra={"amount": asked})
         elif day != today:
@@ -136,6 +137,14 @@ def book(ctx, request, deltas=None):
     fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
     qty = (request.get("qty") or 1) if service.kind == "procedure" else 1  # 3 fillings: 3 times the price
     fee *= qty
+    if is_deposit and clinic_settings.deposit_percent(clinic):
+        asked = clinic_settings.deposit(clinic, fee)  # a percent of this visit's fee (Saged, 2026-11-19)
+        if not asked:
+            raise ApiError("deposit_off", _("This visit has no fee, so it takes no deposit."), 409,
+                           fields={"payment": "deposit_off"})
+        if payment["amount"] != asked:
+            raise ApiError("deposit_changed", _("The deposit amount changed. Reload and try again."), 409,
+                           fields={"payment.amount": "changed"}, extra={"amount": asked})
     if payment is not None and payment["amount"] > fee and not is_deposit:
         raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"})
 

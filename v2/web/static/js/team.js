@@ -695,12 +695,20 @@ function initSettings() {
 function initBooking() {
   const card = document.querySelector("[data-booking-card]");
   if (!card) return;
-  const now = readJson("booking-data") || { booking_deposit: false, booking_deposit_amount: 0, consultation_free_with_procedure: false };
+  const now = readJson("booking-data") || { booking_deposit: false, booking_deposit_amount: 0, booking_deposit_percent: 0, consultation_free_with_procedure: false };
   const form = card.querySelector("[data-booking-form]");
   const on = form.elements.namedItem("booking_deposit");
   const amount = form.elements.namedItem("booking_deposit_amount");
   const amountBox = card.querySelector("[data-deposit-amount]");
   const freeConsultation = form.elements.namedItem("consultation_free_with_procedure");
+  const pct = form.elements.namedItem("booking_deposit_percent");
+  const kindOf = () => form.querySelector('[name="deposit_kind"]:checked').value;
+  pct.value = now.booking_deposit_percent ? String(now.booking_deposit_percent) : "";
+  form.addEventListener("change", (event) => {
+    if (event.target.name !== "deposit_kind") return;
+    card.querySelector("[data-deposit-fixed]").hidden = kindOf() !== "fixed";
+    card.querySelector("[data-deposit-pct]").hidden = kindOf() !== "percent";
+  });
   const submitter = new Submitter(card);
   amount.value = now.booking_deposit_amount ? amountInput(now.booking_deposit_amount) : "";
   on.addEventListener("change", () => { amountBox.hidden = !on.checked; if (on.checked && !amount.value) amount.focus(); });
@@ -711,7 +719,12 @@ function initBooking() {
     let body = submitter.unknown && submitter.unknown.body;
     if (!body) {
       const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked };
-      if (on.checked || amount.value.trim()) {
+      if (on.checked && kindOf() === "percent") {
+        const n = Number(asciiDigits(pct.value.trim()));
+        if (!Number.isInteger(n) || n < 1 || n > 100) { submitter.say(t("deposit_need_percent")); pct.focus(); return; }
+        changes.booking_deposit_percent = n;
+      } else if (on.checked || amount.value.trim()) {
+        changes.booking_deposit_percent = 0;
         const piastres = parsePiastres(amount.value);
         if (!piastres || piastres <= 0) { submitter.say(t("deposit_need_amount")); amount.focus(); return; }
         changes.booking_deposit_amount = piastres;
@@ -727,6 +740,7 @@ function initBooking() {
       now.booking_deposit = fresh.booking_deposit;
       now.booking_deposit_amount = fresh.booking_deposit_amount;
       now.consultation_free_with_procedure = fresh.consultation_free_with_procedure;
+      now.booking_deposit_percent = fresh.booking_deposit_percent;
       toast(t("settings_saved"));
       return;
     }

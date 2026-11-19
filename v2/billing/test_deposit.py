@@ -873,3 +873,26 @@ class RecipeTests(DepositTestCase):
             self.assertEqual(r.status_code, 404, r.content)  # another clinic's procedure is not found
             kept = next(p for p in self.catalogue(self.owner) if p["id"] == braces["id"])
             self.assertEqual(kept["follow_up"][0]["visit_price"], "follow_up")  # the refusals changed nothing
+
+
+class PercentDepositTests(DepositTestCase):
+    """A deposit as a percent of the visit's fee (Saged, 2026-11-19), to the nearest pound."""
+
+    def test_the_deposit_is_the_percent_of_the_fee(self):
+        with self.on(0):
+            r = call(self.owner, "PUT", "/api/v1/settings/clinic",
+                     {"changes": {"booking_deposit": True, "booking_deposit_percent": 50}, "expected": {}})
+            self.assertEqual(r.status_code, 200, r.content)
+            fee = self.services_a["consultation"].price
+            asked = (fee * 50 + 5000) // 10000 * 100
+            wrong = self.book(payment=self.deposit(asked + 100), expect=409, **self.slot(3))
+            self.assertEqual((wrong.status_code, wrong.json()["error"]["code"]), (409, "deposit_changed"))
+            self.assertEqual(wrong.json()["error"]["amount"], asked)
+            visit = self.book(payment=self.deposit(asked), **self.slot(3, "11:00")).json()["appointment"]
+            self.assertEqual(visit["invoice"]["paid"], asked)
+
+    def test_only_the_owner_sets_it(self):
+        with self.on(0):
+            r = call(self.desk, "PUT", "/api/v1/settings/clinic",
+                     {"changes": {"booking_deposit_percent": 50}, "expected": {}})
+            self.assertEqual(r.status_code, 403)
