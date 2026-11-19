@@ -1082,3 +1082,7 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
   .fu-row { grid-template-columns: minmax(0, 1fr); }
   .fu-row .appt-actions .btn { flex: 1 1 0; }
 }
+
+.proc-search-row { display: flex; gap: 8px; align-items: end; }
+.proc-search-row .proc-search { flex: 1; }
+.proc-count input { width: 4.5em; }

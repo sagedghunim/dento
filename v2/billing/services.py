@@ -30,7 +30,8 @@ from core.errors import ApiError
 from summaries.services import Deltas
 
 APPOINTMENT_LOCK_SQL = """
-    SELECT a.id, a.status, a.day, a.doctor_id, a.patient_id, a.service_id, a.fee, a.is_follow_up, s.name, a.section_id
+    SELECT a.id, a.status, a.day, a.doctor_id, a.patient_id, a.service_id, a.fee, a.is_follow_up, s.name, a.section_id,
+           a.qty
       FROM "scheduling_appointment" a
       JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
      WHERE a.clinic_id = %s AND a.id = %s FOR NO KEY UPDATE OF a"""
@@ -84,7 +85,7 @@ def lock_appointment(ctx, appointment_id):
     if found is None:
         raise not_found("appointment")
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
-                            "service_name", "section_id"), found))
+                            "service_name", "section_id", "qty"), found))
     from scheduling.rules import check_scope
 
     check_scope(ctx, appointment["section_id"], appointment["doctor_id"])  # design G1: another section's visit is 404
@@ -103,8 +104,11 @@ def line_description(appointment):
 
 def create_invoice(ctx, appointment, number, paid=0, deposit=0):
     """The visit's invoice with one line for its service at the appointment's fee (one statement). `deposit` is
-    the part of `paid` that is a booking deposit."""
+    the part of `paid` that is a booking deposit. A booking for 3 of a procedure is one line of qty 3."""
     fee = appointment["fee"]
+    qty = appointment.get("qty") or 1
+    if fee % qty:
+        qty = 1
     now = timezone.now()
     found = sql.row(ctx, f"""
         WITH inv AS (
@@ -114,11 +118,12 @@ def create_invoice(ctx, appointment, number, paid=0, deposit=0):
         line AS (
             INSERT INTO "billing_invoice_line" (clinic_id, invoice_id, kind, service_id, description, qty, unit_price,
                                                 amount, from_list, created_by_id, created_at)
-            SELECT %s, inv.id, 'service', %s, %s, 1, %s, %s, true, %s, %s FROM inv)
+            SELECT %s, inv.id, 'service', %s, %s, %s, %s, %s, true, %s, %s FROM inv)
         SELECT {INVOICE_COLUMNS} FROM inv""", [
         ctx.clinic_id, number, appointment["patient_id"], appointment["id"], fee, fee, paid, deposit, now,
         ctx.membership_id,
-        ctx.clinic_id, appointment["service_id"], line_description(appointment), fee, fee, ctx.membership_id, now])
+        ctx.clinic_id, appointment["service_id"], line_description(appointment), qty, fee // qty, fee, ctx.membership_id,
+        now])
     return _invoice(found)
 
 
@@ -314,12 +319,20 @@ def add_line(ctx, invoice_id, kind, service_id, description, qty, unit_price):
     _require_open(invoice)
     if service_id is None:
         raise price_locked()
-    service = sql.row(ctx, 'SELECT id, name, price, is_active FROM "clinics_service" WHERE clinic_id = %s AND id = %s',
+    service = sql.row(ctx, 'SELECT id, name, price, is_active, kind FROM "clinics_service" WHERE clinic_id = %s AND id = %s',
                       [ctx.clinic_id, service_id])
     if service is None:
         raise not_found("service")
     if not service[3]:
         raise ApiError("invalid", _("This service isn't offered any more."), fields={"service_id": "inactive"})
+    if service[4] == "consultation" and sql.row(ctx, """
+            SELECT 1 FROM "billing_invoice_line" l
+              JOIN "clinics_service" s ON s.clinic_id = l.clinic_id AND s.id = l.service_id
+             WHERE l.clinic_id = %s AND l.invoice_id = %s AND s.kind = 'consultation' LIMIT 1""",
+                                                [ctx.clinic_id, invoice["id"]]):
+        # One consultation a visit (Saged, 2026-11-19): it is never charged twice on one bill.
+        raise ApiError("already_added", _("This visit already has a consultation."), 409,
+                       fields={"service_id": "already_added"})
     if unit_price is not None and unit_price != service[2]:
         raise price_locked()
     description = description or service[1]
@@ -550,8 +563,8 @@ def set_visit_line(ctx, appointment_id, service_id, amount, reason, only_from=No
     invoice = open_invoice(ctx, appointment_id)
     if invoice is None:
         return False
-    line = sql.row(ctx, 'SELECT id, amount FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s '
-                        "AND kind = 'service' AND service_id = %s AND qty = 1 ORDER BY id LIMIT 1",
+    line = sql.row(ctx, 'SELECT id, amount, qty FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s '
+                        "AND kind = 'service' AND service_id = %s ORDER BY id LIMIT 1",
                    [ctx.clinic_id, invoice["id"], service_id])
     if line is None or line[1] == amount or (only_from is not None and line[1] != only_from):
         return False
@@ -562,8 +575,9 @@ def set_visit_line(ctx, appointment_id, service_id, amount, reason, only_from=No
     discount = invoice["discount"] if percent is None else percent_of(left, percent)
     if not fits(invoice, left - discount):
         return False
-    sql.run(ctx, 'UPDATE "billing_invoice_line" SET unit_price = %s, amount = %s WHERE clinic_id = %s AND id = %s',
-            [amount, amount, ctx.clinic_id, line[0]])
+    qty = line[2] if amount % line[2] == 0 else 1  # a booking for 3 keeps its count: the unit price changes
+    sql.run(ctx, 'UPDATE "billing_invoice_line" SET qty = %s, unit_price = %s, amount = %s WHERE clinic_id = %s '
+                 "AND id = %s", [qty, amount // qty, amount, ctx.clinic_id, line[0]])
     move_subtotal(ctx, invoice["id"], amount - line[1])
     record_change(ctx, "invoice.visit_fee", "invoice", invoice["id"], before={"line": line[0], "amount": line[1]},
                   after={"amount": amount}, reason=reason)

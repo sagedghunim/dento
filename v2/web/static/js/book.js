@@ -7,7 +7,7 @@
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
+import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
@@ -205,6 +205,18 @@ export function initBook({ onBooked, defaults } = {}) {
   const sectionId = () => { const c = form.querySelector('[name="section"]:checked'); return c ? c.value : ""; };
   when.sectionOf = sectionId;
   const serviceId = () => { const c = form.querySelector('[name="service"]:checked'); return c ? Number(c.value) : null; };
+  // How many of a procedure (Saged, 2026-11-19): 3 fillings are booked once, at 3 times the price.
+  const qtyBox = form.querySelector("[data-qty-box]");
+  const qty = () => {
+    const c = form.querySelector('[name="service"]:checked');
+    if (!c || c.dataset.kind !== "procedure") return 1;
+    const n = Number(asciiDigits(field("qty").value.trim()));
+    return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
+  };
+  function showQty() {
+    const c = form.querySelector('[name="service"]:checked');
+    qtyBox.hidden = !c || c.dataset.kind !== "procedure";
+  }
 
   function filterBySection() {
     const section = sectionId();
@@ -221,6 +233,7 @@ export function initBook({ onBooked, defaults } = {}) {
     const visible = [...form.querySelectorAll("[data-services] .chip:not([hidden]) input")];
     const consult = visible.find((input) => input.dataset.kind === "consultation") || visible[0];
     if (consult) consult.checked = true;
+    showQty();
   }
 
   function pickOnlyDoctor() {
@@ -230,7 +243,8 @@ export function initBook({ onBooked, defaults } = {}) {
 
   form.addEventListener("change", (event) => {
     if (event.target.name === "section") { filterBySection(); when.loadMonth(true); when.refresh(); }
-    if (event.target.name === "service") quote();
+    if (event.target.name === "service") { showQty(); quote(); }
+    if (event.target.name === "qty") quote();
     if (event.target.name === "collect" || event.target.name === "arrive" || event.target.name === "deposit") labels();
     if (event.target.name === "amount") field("amount").dataset.touched = "1";
     if (event.target.name === "source") { try { localStorage.setItem("hamada.source", event.target.value); } catch (e) { /* none */ } }
@@ -251,10 +265,10 @@ export function initBook({ onBooked, defaults } = {}) {
     const result = await get(url);
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = errorMessage(result, ""); return; }
-    lastFee = result.data.fee;
+    lastFee = result.data.fee == null ? null : result.data.fee * qty();
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = amountInput(result.data.fee);
+    if (field("amount") && !field("amount").dataset.touched) field("amount").value = amountInput(lastFee);
     labels();
   }
 
@@ -285,6 +299,7 @@ export function initBook({ onBooked, defaults } = {}) {
 
   function body() {
     const out = { doctor_id: when.doctor(), service_id: serviceId(), day: when.day(), source: form.querySelector('[name="source"]:checked').value };
+    if (qty() > 1) out.qty = qty();
     if (patient) out.patient_id = patient.id;
     else if (newBox && !newBox.hidden) out.new_patient = np.values();
     if (confirmOther) out.confirm_other_doctor = true;
@@ -383,6 +398,7 @@ export function initBook({ onBooked, defaults } = {}) {
     confirmOther = false;
     hideConflict(dialog);
     if (field("amount")) delete field("amount").dataset.touched;
+    qtyBox.hidden = true;
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
     // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.
     try {

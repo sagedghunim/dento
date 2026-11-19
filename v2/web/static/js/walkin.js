@@ -4,7 +4,7 @@
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
 import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
-import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
@@ -100,6 +100,15 @@ export function initWalkIn({ onBooked } = {}) {
   const doctorId = () => Number(field("doctor").value) || defaults.doctor_id || null;
   const serviceId = () => Number(field("service").value) || (field("doctor").value && Number(field("doctor").value) !== defaults.doctor_id ? null : defaults.service_id) || null;
 
+  // How many of a procedure (Saged, 2026-11-19): shown for a procedure service only.
+  const qtyBox = form.querySelector("[data-qty-box]");
+  const isProcedure = () => { const o = field("service").selectedOptions[0]; return Boolean(o && o.dataset.kind === "procedure"); };
+  const qty = () => {
+    if (!isProcedure()) return 1;
+    const n = Number(asciiDigits(field("qty").value.trim()));
+    return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
+  };
+
   // Only the services of the chosen doctor's sections (a doctor's sections are those of their sessions today).
   function filterServices() {
     const option = field("doctor").selectedOptions[0];
@@ -116,6 +125,7 @@ export function initWalkIn({ onBooked } = {}) {
     const name = event.target.name;
     if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }
     if (name === "service") quote();
+    if (name === "qty") quote();
     if (name === "amount") field("amount").dataset.touched = "1";
     if (name === "collect") { collectFields.hidden = !field("collect").checked; if (field("collect").checked) field("amount").focus(); }
   });
@@ -144,16 +154,17 @@ export function initWalkIn({ onBooked } = {}) {
     const doctor = doctorId();
     const service = serviceId();
     const seq = ++quoteSeq;
+    qtyBox.hidden = !isProcedure();
     if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;
     if (patient) url += `&patient=${patient.id}`;
     const result = await get(url);
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = ""; return; }
-    lastFee = result.data.fee;
+    lastFee = result.data.fee == null ? null : result.data.fee * qty();
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = result.data.fee ? amountInput(result.data.fee) : "";
+    if (field("amount") && !field("amount").dataset.touched) field("amount").value = lastFee ? amountInput(lastFee) : "";
   }
 
   let configCache = null;
@@ -171,6 +182,7 @@ export function initWalkIn({ onBooked } = {}) {
     if (confirmOther) out.confirm_other_doctor = true;
     if (field("doctor").value) out.doctor_id = Number(field("doctor").value);
     if (field("service").value) out.service_id = Number(field("service").value);
+    if (qty() > 1) out.qty = qty();
     if (field("collect") && field("collect").checked && lastFee !== 0) {  // a free follow-up has nothing to collect
       out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
     }

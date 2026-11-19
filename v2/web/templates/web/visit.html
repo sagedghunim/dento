@@ -62,9 +62,13 @@
         <div class="chips" data-top-procedures>
           {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi>{% if perms.money %} <span class="count num">{{ p.price|money }}</span>{% endif %}</button>{% endfor %}
         </div>
-        <label class="field proc-search">{% translate "Another procedure" %}
-          <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
-        </label>
+        <div class="proc-search-row">
+          <label class="field proc-search">{% translate "Another procedure" %}
+            <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
+          </label>
+          {# How many of the next procedure tapped (Saged, 2026-11-19): 3 fillings at once. A tooth number makes it one. #}
+          <label class="field proc-count">{% translate "Count" %}<input name="count" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr" data-proc-count></label>
+        </div>
         <div class="chips" data-proc-results aria-live="polite"></div>
         <div class="proc-confirm" data-proc-confirm hidden>
           <strong><bdi dir="auto" data-proc-name></bdi></strong>
@@ -78,7 +82,7 @@
     </div>
     {% endif %}
     <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
-      <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi></span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
+      <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi>{% if visit.qty > 1 %} × {{ visit.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
     </ul>
     <ul class="proc-list bill" data-procedures{% if perms.record %} data-removable{% endif %}>
       {% for p in record.procedures %}<li data-record="{{ p.id }}"><span class="proc-what"><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ p.amount|money }}</span>{% endif %}{% if perms.record %}<button type="button" class="icon-btn danger-icon" data-remove-record aria-label="{% translate "Remove" %}: {{ p.name }}" title="{% translate "Remove" %}"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>{% endif %}</li>{% endfor %}

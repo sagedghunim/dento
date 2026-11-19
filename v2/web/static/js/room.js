@@ -216,6 +216,11 @@ if (adder) {
   const search = adder.querySelector("[data-proc-search]");
   const results = adder.querySelector("[data-proc-results]");
   const cancel = adder.querySelector("[data-proc-cancel]");
+  const countInput = adder.querySelector("[data-proc-count]");
+  const count = () => {
+    const n = Number(asciiDigits(countInput.value.trim()));
+    return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
+  };
   const submitter = new Submitter(adder, { label: t("record") });
   let chosen = null;
 
@@ -247,6 +252,7 @@ if (adder) {
       if (box && !box.querySelector("[data-plan-item]")) box.hidden = true;
     }
     addProcedure(result.data);
+    countInput.value = "1";
     toast(t("proc_added", { name: nameOf(result.data.procedure) }));
     search.value = "";
     results.replaceChildren();
@@ -257,7 +263,7 @@ if (adder) {
     submitter.say("");
     // The procedure the plan set for this session: recorded against its plan item (which keeps its tooth and price).
     if (planItem) { record({ procedure_id: p.id, plan_item_id: planItem }); return; }
-    if (p.unit !== "tooth") { record({ procedure_id: p.id }); return; }
+    if (p.unit !== "tooth") { record(count() > 1 ? { procedure_id: p.id, qty: count() } : { procedure_id: p.id }); return; }
     chosen = p;  // a tooth procedure: the number is optional, one more tap records it
     adder.querySelector("[data-proc-name]").textContent = p.name;
     confirmBox.hidden = false;
@@ -279,6 +285,7 @@ if (adder) {
     const tooth = Number(asciiDigits(toothInput.value.trim()));
     if (toothInput.value.trim() && !tooth) { submitter.say(t("need_tooth")); return; }
     if (tooth) body.tooth = tooth;
+    else if (count() > 1) body.qty = count();  // no tooth named: the count stands
     record(body);
   });
 

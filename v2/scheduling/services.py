@@ -134,6 +134,8 @@ def book(ctx, request, deltas=None):
         found_price = visit_price_of(ctx, request["follow_up_id"])
         visit_price = found_price if service.kind == "consultation" else ""
     fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
+    qty = (request.get("qty") or 1) if service.kind == "procedure" else 1  # 3 fillings: 3 times the price
+    fee *= qty
     if payment is not None and payment["amount"] > fee and not is_deposit:
         raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"})
 
@@ -161,7 +163,7 @@ def book(ctx, request, deltas=None):
             section_id=service.section_id, day=day, queue_no=queue_no, starts_at=starts_at, ends_at=ends_at,
             is_extra=is_extra,
             status="waiting" if request["arrive"] else "booked", source=request["source"], fee=fee,
-            is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"], visit_price=visit_price,
+            is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"], visit_price=visit_price, qty=qty,
             arrived_at=now if request["arrive"] else None, created_at=now, created_by_id=ctx.membership_id,
             updated_at=now, updated_by_id=ctx.membership_id)
     except IntegrityError as error:
@@ -173,7 +175,7 @@ def book(ctx, request, deltas=None):
     if payment is not None:
         locked = {"id": appointment.id, "status": appointment.status, "day": day, "doctor_id": doctor.doctor_id,
                   "patient_id": patient["id"], "service_id": service.id, "fee": fee, "service_name": service.name,
-                  "section_id": service.section_id}
+                  "section_id": service.section_id, "qty": qty}
         # The summary changes are already in `deltas` above, so collect into a throwaway.
         _payment, invoice = billing.collect(ctx, locked, payment["amount"], payment["method"], Deltas(),
                                             invoice_number=invoice_number, today=today, shift_id=shift_id,
@@ -194,7 +196,7 @@ def book(ctx, request, deltas=None):
         "id": appointment.id, "day": day, "queue_no": queue_no, "status": appointment.status, "starts_at": starts_at,
         "ends_at": ends_at, "is_extra": is_extra, "source": request["source"], "fee": fee, "is_follow_up": is_follow_up,
         "is_new": not has_arrived, "auto_closed": False, "note": request["note"], "arrived_at": appointment.arrived_at,
-        "visit_price": visit_price,
+        "visit_price": visit_price, "qty": qty,
         "called_at": None, "finished_at": None, "cancelled_at": None, "cancel_reason": "", "created_at": now,
         "doctor_id": doctor.doctor_id,
         "patient_id": patient["id"], "patient_name": patient["full_name"], "patient_phone": patient["phone"],
@@ -322,12 +324,12 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
                            "RETURNING id, status, day, doctor_id, patient_id, service_id, fee, is_follow_up, "
                            '(SELECT name FROM "clinics_service" s WHERE s.clinic_id = "scheduling_appointment".clinic_id '
                            'AND s.id = "scheduling_appointment".service_id), section_id, arrived_at, called_at, '
-                           "finished_at, visit_price", params)
+                           "finished_at, visit_price, qty", params)
     if changed is None:
         return _unchanged(ctx, appointment_id, action, target, today,
                           with_payment=payment is not None or earlier is not None or next_visit is not None)
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
-                            "service_name", "section_id", "arrived_at", "called_at", "finished_at", "visit_price"),
+                            "service_name", "section_id", "arrived_at", "called_at", "finished_at", "visit_price", "qty"),
                            changed))
     day, doctor_id = appointment["day"], appointment["doctor_id"]
     deltas = Deltas().clinic_day(day)
@@ -555,6 +557,7 @@ def _recheck_follow_up(ctx, appointment):
     kind, price, follow_price, follow_active, eligible, _arrived, has_invoice = found
     service = rules.ServiceInfo(appointment["service_id"], "", kind, price, follow_price if follow_active else None)
     fee, is_follow_up = rules.fee_for(service, eligible, appointment.get("visit_price") or "")
+    fee *= appointment.get("qty") or 1
     if (fee, is_follow_up) != (appointment["fee"], appointment["is_follow_up"]):
         if has_invoice:
             invoice = billing.open_invoice(ctx, appointment["id"])
@@ -704,7 +707,7 @@ def walk_in(ctx, request):
     appointment, version = book(ctx, {
         "patient_id": request["patient_id"], "new_patient": request["new_patient"], "doctor_id": doctor_id,
         "service_id": service_id, "day": today, "starts_at": None, "extra": False, "arrive": True, "walk_in": True,
-        "source": "clinic", "note": request["note"], "payment": request["payment"],
+        "source": "clinic", "note": request["note"], "payment": request["payment"], "qty": request.get("qty") or 1,
         "confirm_other_doctor": request.get("confirm_other_doctor", False)})
     return appointment, version, waiting_ahead(ctx, appointment)
 

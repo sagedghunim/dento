@@ -20,6 +20,9 @@ class TsTzRange(Func):
 SOURCES = ["clinic", "phone", "online", "whatsapp"]
 
 
+MAX_QTY = 20  # a booking's count of one procedure
+
+
 class Appointment(models.Model):
     class Status(models.TextChoices):
         BOOKED = "booked"
@@ -77,6 +80,9 @@ class Appointment(models.Model):
     # A plan session's visit fee rule (clinical.models.VISIT_PRICES), copied from its plan item at booking so the
     # arrival-time recompute keeps it; "" for any other visit (the follow-up rule decides).
     visit_price = models.CharField(max_length=12, blank=True, default="", db_default="")
+    # How many of a procedure service this booking is for (Saged, 2026-11-19): three fillings on three teeth.
+    # The fee is the service's price times it; a consultation or follow-up is always 1.
+    qty = models.PositiveSmallIntegerField(default=1, db_default=1)
     # The slot index reads only this column, so status changes stay HOT updates (design 4.4).
     holds_slot = models.GeneratedField(
         expression=Q(starts_at__isnull=False, is_extra=False) & ~Q(status__in=["cancelled", "no_show"]),
@@ -99,6 +105,7 @@ class Appointment(models.Model):
             models.CheckConstraint(condition=Q(status__in=STATUSES), name="appointment_status_valid"),
             models.CheckConstraint(condition=Q(source__in=SOURCES), name="appointment_source_valid"),
             models.CheckConstraint(condition=Q(fee__gte=0), name="appointment_fee_not_negative"),
+            models.CheckConstraint(condition=Q(qty__gte=1, qty__lte=MAX_QTY), name="appointment_qty_valid"),
             models.CheckConstraint(condition=Q(queue_no__gt=0), name="appointment_queue_no_positive"),
             models.CheckConstraint(condition=Q(visit_price__in=["", "none", "follow_up", "consultation"]),
                                    name="appointment_visit_price_valid"),

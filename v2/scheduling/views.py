@@ -50,6 +50,18 @@ def poll_headers():
     return {"Poll-After": str(settings.POLL_AFTER_SECONDS)}
 
 
+def _qty(data):
+    """How many of a procedure (Saged, 2026-11-19): 1 to 20, 1 when not sent."""
+    from .models import MAX_QTY
+
+    value = data.get("qty", 1)
+    if value is None:
+        return 1
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_QTY:
+        raise ApiError("invalid", _("Enter a count from 1 to 20."), fields={"qty": "range"})
+    return value
+
+
 @api("GET", headers=poll_headers)
 def today_view(request, ctx, data):
     """Today's queues with an ETag. The version is read before the data; every answer carries Poll-After.
@@ -101,6 +113,7 @@ def book_view(request, ctx, data):
                          if data.get("follow_up_id") is not None else None),
         # The desk saw "has a booking that day with another doctor" and books anyway (Saged, 2026-11-17).
         "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"),
+        "qty": _qty(data),
     }
     appointment, version = services.book(ctx, body)
     from billing import visibility
@@ -314,7 +327,7 @@ def walk_in_view(request, ctx, data):
         "new_patient": new_patient, "doctor_id": _optional_id(data, "doctor_id"),
         "service_id": _optional_id(data, "service_id"), "section_id": _optional_id(data, "section_id"),
         "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
-        "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"),
+        "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"), "qty": _qty(data),
     }
     appointment, version, ahead = services.walk_in(ctx, body)
     from billing import visibility

@@ -3952,3 +3952,12 @@ msgstr ""
 
 msgid "Only the account's owner can change this."
 msgstr "صاحب الحساب بس هو اللي يقدر يغيّر ده."
+
+msgid "How many (for example 3 fillings)"
+msgstr "العدد (مثلًا 3 حشوات)"
+
+msgid "Enter a count from 1 to 20."
+msgstr "اكتب عدد من 1 لـ 20."
+
+msgid "This visit already has a consultation."
+msgstr "الزيارة دي فيها كشف بالفعل."

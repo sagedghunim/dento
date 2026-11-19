@@ -29,7 +29,7 @@ ROW_SQL = """
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name, s.name_en AS service_name_en,
            i.id AS invoice_id, i.number AS invoice_number, i.total AS invoice_total, i.paid AS invoice_paid,
-           a.visit_price
+           a.visit_price, a.qty
       FROM "scheduling_appointment" a
       JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
       JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
@@ -68,7 +68,7 @@ def payload(clinic, r):
         "id": r["id"], "day": r["day"].isoformat(), "queue_no": r["queue_no"], "status": r["status"],
         "starts_at": _iso(clinic, r["starts_at"]), "ends_at": _iso(clinic, r["ends_at"]), "is_extra": r["is_extra"],
         "source": r["source"], "fee": r["fee"], "is_follow_up": r["is_follow_up"], "is_new": r["is_new"],
-        "visit_price": r.get("visit_price") or "",
+        "visit_price": r.get("visit_price") or "", "qty": r.get("qty") or 1,
         "auto_closed": r["auto_closed"], "note": r["note"], "arrived_at": _iso(clinic, r["arrived_at"]),
         "with_assistant_at": _iso(clinic, r.get("with_assistant_at")), "ready_at": _iso(clinic, r.get("ready_at")),
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
