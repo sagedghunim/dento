@@ -14,7 +14,12 @@
   </div>
   <nav class="main-nav" aria-label="{% translate "Main" %}">
     {% for section in sections %}
-      {% if section.ready %}
+      {% if section.ready and section.parts %}
+      <details class="nav-group" data-nav-group{% if section.key == nav_active %} open{% endif %}>
+        <summary class="nav-btn" data-href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}</summary>
+        <div class="nav-parts">{% for part in section.parts %}<a class="nav-part" href="{{ part.url }}" data-nav-part>{{ part.label }}</a>{% endfor %}</div>
+      </details>
+      {% elif section.ready %}
       <a class="nav-btn" href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}{% if section.key == "alerts" %}{% alerts_unseen ctx as fresh %}{% if fresh %} <span class="nav-count num">{{ fresh|digits }}</span>{% endif %}{% endif %}</a>
       {% else %}
       <span class="nav-btn soon" aria-disabled="true">{{ section.label }} <span class="nav-soon">{% translate "Soon" %}</span></span>

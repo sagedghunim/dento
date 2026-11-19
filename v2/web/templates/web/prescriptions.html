@@ -10,7 +10,7 @@
 <div class="pending-bar" data-pending-bar hidden></div>
 
 <div class="grid-2 rx-grid">
-  <section class="card" aria-labelledby="med-title">
+  <section class="card" aria-labelledby="med-title" data-part="medicines">
     <div class="card-head">
       <div>
         <h2 id="med-title">{% translate "Medicines" %}</h2>
@@ -24,7 +24,7 @@
     <div data-medicines aria-live="polite">{% include "web/_medicine_rows.html" %}</div>
   </section>
 
-  <section class="card" aria-labelledby="rx-title">
+  <section class="card" aria-labelledby="rx-title" data-part="templates">
     <div class="card-head">
       <div>
         <h2 id="rx-title">{% translate "Ready prescriptions" %}</h2>

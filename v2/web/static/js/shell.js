@@ -161,3 +161,21 @@ if (backButton) {
   try { from = document.referrer ? new URL(document.referrer) : null; } catch (e) { from = null; }
   backButton.hidden = !(from && from.origin === window.location.origin && from.pathname !== "/login" && window.history.length > 1);
 }
+
+// --- parts of a page from the side bar (Saged, 2026-11-19): ?part= shows that part alone; the menu marks it ---
+{
+  const here = new URLSearchParams(window.location.search);
+  const part = here.get("part");
+  const parts = [...document.querySelectorAll("main [data-part]")];
+  if (part && parts.some((p) => p.dataset.part === part)) {
+    parts.forEach((p) => { if (p.dataset.part !== part) p.hidden = true; });
+    document.body.classList.add("one-part");
+  }
+  const path = window.location.pathname;
+  const key = part || here.get("tab");
+  document.querySelectorAll("[data-nav-part]").forEach((link) => {
+    const url = new URL(link.href, window.location.href);
+    const linkKey = url.searchParams.get("part") || url.searchParams.get("tab");
+    if (url.pathname === path && linkKey === key) link.setAttribute("aria-current", "page");
+  });
+}

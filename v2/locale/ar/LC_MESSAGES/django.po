@@ -4080,3 +4080,15 @@ msgid ""
 "Nothing to report. The team hasn't removed, discounted or refunded anything "
 "lately."
 msgstr "مفيش حاجة. الفريق ما شالش ولا خصم ولا رجّع فلوس الفترة اللي فاتت."
+
+msgid "Stock items"
+msgstr "الأصناف"
+
+msgid "Materials of each procedure"
+msgstr "خامات كل إجراء"
+
+msgid "The team and permissions"
+msgstr "الفريق والصلاحيات"
+
+msgid "The clinic and its sections"
+msgstr "بيانات العيادة والأقسام"

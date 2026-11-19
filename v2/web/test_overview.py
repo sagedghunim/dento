@@ -11,7 +11,7 @@ from core.testing import ShardTestCase
 
 def nav_links(html):
     side = html.split('class="main-nav"', 1)[1].split("</nav>", 1)[0]
-    return re.findall(r'<a class="nav-btn" href="([^"]+)"', side)
+    return re.findall(r'class="nav-btn" (?:data-)?href="([^"]+)"', side)  # a link, or an entry with parts
 
 
 class OverviewCase(ShardTestCase):

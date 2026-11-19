@@ -5,9 +5,17 @@ until then the entry shows disabled with "Soon". A person sees an entry only if 
 its codes; the server checks the codes again on every page and action.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.utils.translation import gettext_lazy as _
+
+
+@dataclass(frozen=True)
+class Part:
+    key: str
+    label: str
+    url: str
+    codes: tuple  # any one of these shows it ("owner": the owner role)
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,7 @@ class Section:
     url: str
     codes: tuple  # any one of these shows the entry
     ready: bool   # built in the current milestone
+    parts: tuple = ()  # opened under the entry with a tap (Saged, 2026-11-19); each shows one part of the page
 
 
 SECTIONS = (
@@ -24,13 +33,31 @@ SECTIONS = (
     Section("followups", _("Follow-ups"), "/follow-ups", ("appointments.book",), True),                    # plans
     Section("overview", _("Overview"), "/overview", ("reports.view",), True),                              # M3
     Section("patients", _("Patients"), "/patients", ("patients.view",), True),
-    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True),        # M3
-    Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True),  # M3
-    Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True),           # M2
+    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True, (
+        Part("items", _("Stock items"), "/inventory?part=items", ("inventory.use", "inventory.manage")),
+        Part("materials", _("Materials of each procedure"), "/inventory?part=materials", ("inventory.manage",)),
+    )),
+    Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True, (
+        Part("month", _("This month"), "/finances?tab=month", ("finances.view",)),
+        Part("register", _("Cash register"), "/finances?tab=register", ("cash.collect", "cash.shift")),
+        Part("expenses", _("Expenses"), "/finances?tab=expenses", ("expenses.manage",)),
+        Part("pay", _("Staff pay"), "/finances?tab=pay", ("finances.view",)),
+        Part("owed", _("Patients who owe"), "/finances?tab=owed", ("finances.view",)),
+    )),
+    Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True, (
+        Part("medicines", _("Medicines"), "/prescriptions?part=medicines", ("settings.medicines",)),
+        Part("templates", _("Ready prescriptions"), "/prescriptions?part=templates", ("settings.medicines",)),
+    )),
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
     # The owner's alerts (Saged, 2026-11-19): "owner" is not a code; visible() reads it as the owner role.
     Section("alerts", _("Alerts"), "/alerts", ("owner",), True),
-    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage", "procedures.record"), True),               # M3
+    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage", "procedures.record"), True, (
+        Part("team", _("The team and permissions"), "/team?part=team", ("team.manage",)),
+        Part("clinic", _("The clinic and its sections"), "/team?part=clinic", ("settings.manage",)),
+        Part("billing", _("Booking and bills"), "/team?part=billing", ("owner",)),
+        Part("followups", _("Follow-ups after a procedure"), "/team?part=followups", ("settings.manage", "procedures.record")),
+        Part("discounts", _("Discount types"), "/team?part=discounts", ("settings.manage",)),
+    )),
 )
 
 
@@ -55,8 +82,11 @@ def is_manager(ctx):
 def visible(ctx):
     """The sections this person may see, in order."""
     owner = getattr(ctx, "membership", None) is not None and ctx.membership.is_owner
-    shown = [section for section in SECTIONS
-             if any(ctx.can(code) or (code == "owner" and owner) for code in section.codes)]
+    allowed = lambda codes: any(ctx.can(code) or (code == "owner" and owner) for code in codes)  # noqa: E731
+    shown = [section for section in SECTIONS if allowed(section.codes)]
+    # Only the parts this person may open; one part alone is no menu.
+    shown = [replace(s, parts=tuple(p for p in s.parts if allowed(p.codes))) for s in shown]
+    shown = [replace(s, parts=()) if len(s.parts) < 2 else s for s in shown]
     keys = {"manager": MANAGER_SECTIONS, "doctor": TREATING_OWNER_SECTIONS}.get(owner_mode(ctx))
     if keys:
         order = {key: i for i, key in enumerate(keys)}

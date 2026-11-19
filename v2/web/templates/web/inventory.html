@@ -12,7 +12,7 @@
 
 <div class="pending-bar" data-pending-bar hidden></div>
 
-<section class="card" aria-labelledby="items-title">
+<section class="card" aria-labelledby="items-title" data-part="items">
   <h2 id="items-title" class="visually-hidden">{% translate "Items" %}</h2>
   <div class="list-tools">
     <label class="field grow-field">{% translate "Search the items" %}
@@ -27,7 +27,7 @@
 </section>
 
 {% if perms.manage %}
-<section class="card" aria-labelledby="materials-title">
+<section class="card" aria-labelledby="materials-title" data-part="materials">
   <h2 id="materials-title">{% translate "What each procedure uses" %}</h2>
   <p class="card-sub">{% translate "Recording a procedure takes these from stock on its own." %}</p>
   {% if procedures %}

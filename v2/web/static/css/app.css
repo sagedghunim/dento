@@ -1131,3 +1131,13 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .alert-row p { margin: 0; }
 .alert-main { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
 .alert-amount { font-weight: 700; white-space: nowrap; }
+/* Parts under a side bar entry (Saged, 2026-11-19) */
+.nav-group summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.nav-group summary::-webkit-details-marker { display: none; }
+.nav-group summary::after { content: ""; inline-size: 8px; block-size: 8px; border-inline-end: 2px solid currentColor; border-block-end: 2px solid currentColor; transform: rotate(45deg); margin-inline-start: 8px; opacity: .6; transition: transform .15s; }
+.nav-group[open] summary::after { transform: rotate(-135deg); }
+.nav-parts { display: grid; gap: 2px; padding-inline-start: 14px; margin-block: 4px 8px; border-inline-start: 2px solid var(--line); margin-inline-start: 14px; }
+.nav-part { display: block; padding: 8px 12px; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; min-height: 40px; }
+.nav-part:hover { background: var(--surface-2); color: inherit; }
+.nav-part[aria-current="page"] { color: var(--teal-dark); background: var(--teal-tint); }
+.one-part .rx-grid { grid-template-columns: minmax(0, 1fr); }

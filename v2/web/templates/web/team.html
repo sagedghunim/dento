@@ -10,7 +10,7 @@
 <div class="pending-bar" data-pending-bar hidden></div>
 
 {% if can_team %}
-<section class="card" aria-labelledby="overview-title">
+<section class="card" aria-labelledby="overview-title" data-part="team">
   <div class="card-head">
     <div>
       <h2 id="overview-title">{% translate "Who works where" %}</h2>
@@ -20,7 +20,7 @@
   <ul class="people" data-overview></ul>
 </section>
 
-<section class="card" id="matrix-card" aria-labelledby="matrix-title" data-matrix-card>
+<section class="card" id="matrix-card" aria-labelledby="matrix-title" data-matrix-card data-part="team">
   <div class="card-head">
     <div>
       <h2 id="matrix-title">{% translate "Who can do what" %}</h2>
@@ -45,7 +45,7 @@
   <p class="muted matrix-note">{% translate "The owner always has full access, and only the owner gives or removes the owner's permissions." %}</p>
 </section>
 
-<section class="card" aria-labelledby="members-title">
+<section class="card" aria-labelledby="members-title" data-part="team">
   <div class="card-head">
     <div>
       <h2 id="members-title">{% translate "The team" %}</h2>
@@ -58,7 +58,7 @@
 {% endif %}
 
 {% if can_settings %}
-<section class="card" aria-labelledby="settings-title" data-profile-card>
+<section class="card" aria-labelledby="settings-title" data-profile-card data-part="clinic">
   <h2 id="settings-title">{% translate "Settings" %}</h2>
   <p class="card-sub">{% translate "The clinic's name and contact details, as patients see them on receipts and prescriptions." %}</p>
   <form novalidate data-profile-form>
@@ -92,7 +92,7 @@
 
 {# Booking and bills: the account's owner only (Saged, 2026-11-19). #}
 {% if booking %}
-<section class="card" aria-labelledby="booking-title" data-booking-card>
+<section class="card" aria-labelledby="booking-title" data-booking-card data-part="billing">
   <h2 id="booking-title">{% translate "Booking and bills" %}</h2>
   <form novalidate data-booking-form>
     <label class="check"><input type="checkbox" name="booking_deposit"{% if booking.booking_deposit %} checked{% endif %}> {% translate "Ask for a deposit when booking" %}</label>
@@ -249,7 +249,7 @@
 </dialog>
 {% endif %}
 {% if can_recipes %}
-<section class="card" aria-labelledby="recipes-title" data-recipes>
+<section class="card" aria-labelledby="recipes-title" data-recipes data-part="followups">
   <div class="card-head">
     <div>
       <h2 id="recipes-title">{% translate "Follow-ups after a procedure" %}</h2>
@@ -283,7 +283,7 @@
 </dialog>
 {% endif %}
 {% if can_settings %}
-<section class="card" aria-labelledby="discounts-title" data-discount-card>
+<section class="card" aria-labelledby="discounts-title" data-discount-card data-part="discounts">
   <div class="card-head">
     <div>
       <h2 id="discounts-title">{% translate "Discount types" %}</h2>
