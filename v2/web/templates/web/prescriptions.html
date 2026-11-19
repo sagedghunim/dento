@@ -145,5 +145,6 @@
   </footer>
 </form>
 </dialog>
+{% if can_recipes %}{% include "web/_recipes.html" %}{% endif %}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/prescriptions.js' %}"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/prescriptions.js' %}"></script>{% if can_recipes %}<script type="module" src="{% static 'js/recipes.js' %}"></script>{% endif %}{% endblock %}

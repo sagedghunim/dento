@@ -10,6 +10,7 @@ The owner only. Opening the page marks them seen (Membership.alerts_seen_at); th
 import datetime as dt
 import json
 
+from django.db import OperationalError, transaction
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -147,6 +148,10 @@ def alerts_page(request, ctx):
     from clinics.models import Membership
 
     now = timezone.now()
-    Membership.objects.filter(clinic_id=ctx.clinic_id, id=ctx.membership_id).update(alerts_seen_at=now)
-    ctx.membership.alerts_seen_at = now  # the side bar on this page counts none
+    try:  # marking them seen never stops the page (a long write holding the row: they stay new until next time)
+        with transaction.atomic(using=ctx.alias):
+            Membership.objects.filter(clinic_id=ctx.clinic_id, id=ctx.membership_id).update(alerts_seen_at=now)
+        ctx.membership.alerts_seen_at = now  # the side bar on this page counts none
+    except OperationalError:
+        pass
     return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS})

@@ -90,15 +90,14 @@ def _overview(ctx):
 @clinic_page
 def team_page(request, ctx):
     can_team, can_settings = ctx.can("team.manage"), ctx.can("settings.manage")
-    # The doctor keeps the follow-ups after a procedure (Saged, 2026-11-19): Team shows them that card only.
-    can_recipes = can_settings or ctx.can("procedures.record")
-    if not (can_team or can_settings or can_recipes):
+    # An employed doctor has no Team & settings (Saged, 2026-11-19): their follow-ups are under Prescription.
+    if not (can_team or can_settings):
         return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
     from clinics import team
 
     sections = _sections(ctx)
     center = places.is_center(ctx.clinic)
-    context = {"ctx": ctx, "nav_active": "team", "can_team": can_team, "can_settings": can_settings, "can_recipes": can_recipes,
+    context = {"ctx": ctx, "nav_active": "team", "can_team": can_team, "can_settings": can_settings,
                "sections": sections}
     if can_team:
         context["team"] = {

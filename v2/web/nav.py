@@ -47,15 +47,16 @@ SECTIONS = (
     Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True, (
         Part("medicines", _("Medicines"), "/prescriptions?part=medicines", ("settings.medicines",)),
         Part("templates", _("Ready prescriptions"), "/prescriptions?part=templates", ("settings.medicines",)),
+        Part("followups", _("Follow-ups after a procedure"), "/prescriptions?part=followups", ("procedures.record",)),
     )),
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
     # The owner's alerts (Saged, 2026-11-19): "owner" is not a code; visible() reads it as the owner role.
     Section("alerts", _("Alerts"), "/alerts", ("owner",), True),
-    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage", "procedures.record"), True, (
+    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage"), True, (
         Part("team", _("The team and permissions"), "/team?part=team", ("team.manage",)),
         Part("clinic", _("The clinic and its sections"), "/team?part=clinic", ("settings.manage",)),
         Part("billing", _("Booking and bills"), "/team?part=billing", ("owner",)),
-        Part("followups", _("Follow-ups after a procedure"), "/team?part=followups", ("settings.manage", "procedures.record")),
+        Part("followups", _("Follow-ups after a procedure"), "/team?part=followups", ("settings.manage",)),
         Part("discounts", _("Discount types"), "/team?part=discounts", ("settings.manage",)),
     )),
 )

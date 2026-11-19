@@ -58,7 +58,7 @@ def prescriptions_page(request, ctx):
     if nav.is_manager(ctx):  # the owner manages; doctors write prescriptions (Saged, 2026-11-12)
         return redirect("/overview")
     sections = places.sections(ctx)
-    return render(request, "web/prescriptions.html", {
+    return render(request, "web/prescriptions.html", {"can_recipes": ctx.can("procedures.record"),
         "ctx": ctx, "nav_active": "prescription", "medicines": _medicines(ctx), "templates": _templates(ctx),
         "sections": sections if len(sections) > 1 else [],
     })
