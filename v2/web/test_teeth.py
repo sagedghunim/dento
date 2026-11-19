@@ -87,6 +87,7 @@ class TeethPageTests(M2TestCase):
 
 class TeethPermissionTests(M2TestCase):
     def test_without_clinical_view_the_pages_are_refused_and_not_linked(self):
+        self.set_codes("assistant", revoked=["clinical.view"])  # the owner switched it off for this person
         visit = self.in_room()
         p = visit["patient"]["id"]
         self.assertEqual(self.desk.get(f"/visits/{visit['id']}/teeth").status_code, 403)

@@ -138,7 +138,7 @@ class NoteTests(M2TestCase):
     def test_writing_needs_visits_notes_and_reading_needs_clinical_view_with_an_access_event(self):
         self.assertEqual(put(self.desk, self.url, {"complaint": "x"}, 0).status_code, 403)
         put(self.doc, self.url, {"complaint": "x"}, 0)
-        self.assertEqual(call(self.desk, "GET", self.url).status_code, 403)
+        self.assertEqual(call(self.desk, "GET", self.url).status_code, 200) # the desk reads the file (Saged, 2026-11-19)
         with clinic_transaction(self.a.id, self.a.shard):
             before = AuditAccess.objects.filter(clinic_id=self.a.id, action=AuditAccess.Action.NOTE).count()
         self.assertEqual(call(self.doc, "GET", self.url).json()["note"]["complaint"], "x")

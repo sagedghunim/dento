@@ -41,6 +41,7 @@ document.addEventListener("click", async (event) => {
   document.querySelectorAll("details.menu[open]").forEach((menu) => { if (!menu.contains(event.target)) menu.open = false; });
   const button = event.target.closest("[data-action]");
   if (!button) return;
+  if (button.dataset.action === "back") { window.history.back(); return; }
   if (button.dataset.action === "logout") {
     button.disabled = true;
     await send("POST", "/api/v1/auth/logout", {});
@@ -152,3 +153,11 @@ settlePending().then((results) => {
   }
   window.dispatchEvent(new CustomEvent("hamada:pending-settled"));
 });
+
+// The back arrow shows when the page before is one of ours (not the sign-in page, not another site).
+const backButton = document.querySelector('[data-action="back"]');
+if (backButton) {
+  let from = null;
+  try { from = document.referrer ? new URL(document.referrer) : null; } catch (e) { from = null; }
+  backButton.hidden = !(from && from.origin === window.location.origin && from.pathname !== "/login" && window.history.length > 1);
+}

@@ -31,7 +31,8 @@ class VisitScreenTests(M2TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('lang="ar" dir="rtl"', html)
         self.assertIn("Mohamed Ahmed", html)
-        self.assertIn(f'href="tel:{visit["patient"]["phone"]}"', html)
+        self.assertNotIn('href="tel:', html)  # no phone on the visit screen (Saged, 2026-11-19)
+        self.assertIn(f'href="/patients/{visit["patient"]["id"]}" target="_blank"', html)
         self.assertIn("Penicillin", html)
         self.assertIn("Diabetes", html)
         self.assertIn("خلص الكشف", html)
@@ -84,7 +85,7 @@ class VisitScreenTests(M2TestCase):
         self.assertEqual(self.act(visit["id"], "finish", "in_room", client=self.doc).status_code, 200)
         html = self.doc.get(f"/patients/{visit['patient']['id']}").content.decode()
         self.assertIn("حشو 36، تنظيف", html)
-        self.assertNotIn("حشو 36", self.desk.get(f"/patients/{visit['patient']['id']}").content.decode())  # no clinical.view
+        self.assertIn("حشو 36", self.desk.get(f"/patients/{visit['patient']['id']}").content.decode()) # the desk reads the file (Saged, 2026-11-19)
         # The next visit's band shows what was done last time.
         again = self.in_room(patient_id=visit["patient"]["id"])
         html = self.doc.get(f"/visits/{again['id']}").content.decode()

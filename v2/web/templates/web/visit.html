@@ -17,8 +17,8 @@
       <p class="visit-timer"><span class="visually-hidden">{% translate "Time with the doctor" %}</span><span class="timer-num ltr num" data-timer role="timer" aria-live="off">0:00</span></p>
     </div>
     <div class="band-links">
-      {% if patient.phone %}<a class="btn ghost" href="tel:{{ patient.phone }}" aria-label="{% translate "Call" %} {{ patient.phone }}">{{ patient.phone|phone }}</a>{% endif %}
-      {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" target="_blank" rel="noopener">{% translate "Patient file" %}</a>{% endif %}
+      {# No phone here (Saged, 2026-11-19): a tap on it left the visit. The file opens in a new tab, the visit stays. #}
+      {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>{% translate "Patient file" %}</a>{% endif %}
     </div>
     {% if patient.allergies or patient.chronic_conditions %}
     <ul class="health-flags">

@@ -1,7 +1,13 @@
 {% load i18n hamada %}{% for v in items %}
 <tr data-visit data-id="{{ v.id }}" data-status="{{ v.status }}" {% if perms.money %}data-due="{{ v.due }}" data-fee="{{ v.fee }}" {% endif %}data-invoice="{{ v.invoice.id|default_if_none:'' }}" data-service="{{ v.service.name }}">
   <td><span class="nowrap">{{ v.day|shortday }}</span>{% if v.starts_at %} · {{ v.starts_at|clock }}{% endif %}</td>
-  <td><bdi dir="auto">{{ v.service.name }}</bdi><div class="muted"><bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi> · {% translate "Turn" %} {{ v.queue_no|num }}</div>{% if v.note_text %}<p class="visit-note"><bdi dir="auto">{{ v.note_text|truncatechars:300 }}</bdi></p>{% endif %}</td>
+  <td><bdi dir="auto">{{ v.service.name }}</bdi><div class="muted"><bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi> · {% translate "Turn" %} {{ v.queue_no|num }}</div>{% if v.note %}<dl class="visit-detail">
+    {% if v.note.complaint %}<div><dt>{% translate "Complaint" %}</dt><dd><bdi dir="auto">{{ v.note.complaint }}</bdi></dd></div>{% endif %}
+    {% if v.note.diagnosis %}<div><dt>{% translate "Diagnosis" %}</dt><dd><bdi dir="auto">{{ v.note.diagnosis }}</bdi></dd></div>{% endif %}
+    {% if v.procedures %}<div><dt>{% translate "Treatment" %}</dt><dd>{% for p in v.procedures %}<bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}</dd></div>{% endif %}
+    {% if v.medicines %}<div><dt>{% translate "Prescription" %}</dt><dd>{% for m in v.medicines %}<bdi dir="ltr">{{ m.name }}</bdi>{% if m.dose %} <span class="muted"><bdi dir="auto">{{ m.dose }}</bdi></span>{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}</dd></div>{% endif %}
+    {% if v.note.notes %}<div><dt>{% translate "Notes" %}</dt><dd><bdi dir="auto">{{ v.note.notes }}</bdi></dd></div>{% endif %}
+  </dl>{% elif v.note_text %}<p class="visit-note"><bdi dir="auto">{{ v.note_text|truncatechars:300 }}</bdi></p>{% endif %}</td>
   <td>{% include "web/_status_pill.html" with status=v.status %}</td>
   {% if perms.money %}<td class="num">{{ v.fee|money }}{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}<div class="muted">{% translate "Owes" %} {{ v.due|money }}</div>{% endif %}</td>{% endif %}
   <td><div class="appt-actions">

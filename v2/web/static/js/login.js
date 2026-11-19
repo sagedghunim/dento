@@ -40,6 +40,18 @@ passwordForm.addEventListener("submit", (event) => {
   const data = new FormData(passwordForm);
   submit(passwordForm, "/api/v1/auth/login", { username: data.get("username"), password: data.get("password") });
 });
+// Back from the code: the half sign-in ends, and the account and password come back (Saged, 2026-11-19).
+codeForm.querySelector("[data-back-to-password]").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  await send("POST", "/api/v1/auth/logout", {});
+  event.target.disabled = false;
+  codeForm.reset();
+  codeForm.querySelector("[data-error]").textContent = "";
+  codeForm.hidden = true;
+  passwordForm.hidden = false;
+  passwordForm.querySelector("input").focus();
+});
+
 codeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   submit(codeForm, "/api/v1/auth/code", { code: new FormData(codeForm).get("code") });

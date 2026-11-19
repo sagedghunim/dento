@@ -28,7 +28,7 @@ SECTIONS = (
     Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True),  # M3
     Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True),           # M2
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
-    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage"), True),               # M3
+    Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage", "procedures.record"), True),               # M3
 )
 
 

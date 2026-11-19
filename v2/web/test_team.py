@@ -50,9 +50,12 @@ class TeamPageTests(ShardTestCase):
 
     def test_no_team_or_settings_code_is_refused(self):
         self.assertEqual(self.a.client("assistant").get("/team").status_code, 403)
+        # The doctor sees Team for the follow-ups after a procedure only (Saged, 2026-11-19).
         doctor = self.a.client("doctor")
-        self.assertEqual(doctor.get("/team").status_code, 403)
-        self.assertNotIn('href="/team"', doctor.get("/patients").content.decode())
+        page = doctor.get("/team").content.decode()
+        self.assertIn("data-recipes", page)
+        self.assertNotIn("data-discount-card", page)
+        self.assertNotIn("data-booking-card", page)
 
     def test_settings_only_shows_the_settings_card(self):
         set_codes(self.a, "doctor", granted=["settings.manage"])

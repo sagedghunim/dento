@@ -1086,3 +1086,18 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .proc-search-row { display: flex; gap: 8px; align-items: end; }
 .proc-search-row .proc-search { flex: 1; }
 .proc-count input { width: 4.5em; }
+/* The patient file (Saged, 2026-11-17) */
+.file-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+.visit-detail { margin: 6px 0 0; font-size: .875rem; display: grid; gap: 2px; }
+.visit-detail div { display: flex; gap: 6px; flex-wrap: wrap; }
+.visit-detail dt { color: var(--muted, #667); min-width: 4.5em; }
+.visit-detail dd { margin: 0; overflow-wrap: anywhere; white-space: pre-line; flex: 1; min-width: 12em; }
+.plan-block + .plan-block { margin-block-start: 12px; }
+.plan-steps { margin: 6px 0 0; padding-inline-start: 1.4em; display: grid; gap: 4px; }
+.plan-steps li.done { text-decoration: line-through; text-decoration-color: var(--muted, #889); }
+.file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.statement td { vertical-align: top; }
+.statement-card { margin-block-start: 16px; }
+.top-start { display: flex; align-items: center; gap: 12px; }
+.back-btn { min-height: 40px; padding-inline: 10px 14px; }
+[dir="rtl"] .back-btn svg { transform: scaleX(-1); }

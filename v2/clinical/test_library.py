@@ -38,7 +38,7 @@ class MedicineTests(M2TestCase):
 
     def test_editing_needs_settings_medicines(self):
         self.assertEqual(call(self.desk, "POST", "/api/v1/medicines", {"name": "X"}).status_code, 403)
-        self.assertEqual(call(self.desk, "GET", "/api/v1/medicines").status_code, 403)
+        self.assertEqual(call(self.desk, "GET", "/api/v1/medicines").status_code, 200) # the desk reads the file (Saged, 2026-11-19)
         self.set_codes("doctor", revoked=["settings.medicines"])
         self.assertEqual(call(self.doc, "POST", "/api/v1/medicines", {"name": "X"}).status_code, 403)
         self.assertEqual(call(self.doc, "GET", "/api/v1/medicines").status_code, 200)  # prescriptions.write reads it
@@ -166,7 +166,7 @@ class AttachmentTests(M2TestCase):
         self.assertEqual((attachment["content_type"], attachment["size"]), ("image/png", len(PNG)))
         pdf = upload(self.desk, self.url, PDF, name="report.pdf", content_type="application/pdf")
         self.assertEqual(pdf.json()["attachment"]["content_type"], "application/pdf")
-        self.assertEqual(call(self.desk, "GET", attachment["url"]).status_code, 403)  # the desk uploads, can't read
+        self.assertEqual(call(self.desk, "GET", attachment["url"]).status_code, 200) # the desk reads the file (Saged, 2026-11-19)
         with clinic_transaction(self.a.id, self.a.shard):
             before = AuditAccess.objects.filter(clinic_id=self.a.id, action=AuditAccess.Action.ATTACHMENT).count()
         opened = self.doc.get(attachment["url"], headers={"X-Membership": str(self.doc.membership_id)})

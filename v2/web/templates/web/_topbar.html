@@ -1,6 +1,10 @@
 {% load i18n hamada %}{% get_current_language as LANG %}{% business_day ctx as bday %}
 <div class="topbar">
-  <p class="today-date">{{ bday|longday }}</p>
+  {# One arrow back to the page before (Saged, 2026-11-19); shown only when there is one in this app. #}
+  <div class="top-start">
+    <button type="button" class="btn ghost back-btn" data-action="back" hidden><svg class="icon" aria-hidden="true"><use href="#i-chev"/></svg>{% translate "Back" %}</button>
+    <p class="today-date">{{ bday|longday }}</p>
+  </div>
   <div class="top-actions">
     <details class="menu account">
       <summary><span><bdi dir="auto">{{ ctx.membership.display_name }}</bdi></span> <span class="role">· {{ ctx.membership.role|role_label }}</span></summary>

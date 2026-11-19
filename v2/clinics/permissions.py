@@ -59,9 +59,11 @@ TEMPLATES = {
         "clinical.write", "inventory.use", "consults.manage",
         "visits.vitals", "visits.notes", "prescriptions.write", "settings.medicines", "procedures.record",
     }),
+    # The desk reads the patient's file like the doctor (Saged, 2026-11-19): notes, prescriptions, plans and x-rays.
+    # The owner can still switch it off per person on Team.
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
-        "visits.vitals", "cash.collect", "cash.shift", "money.view",
+        "visits.vitals", "cash.collect", "cash.shift", "money.view", "clinical.view",
     }),
 }
 

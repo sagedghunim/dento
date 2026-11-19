@@ -537,10 +537,16 @@ def procedure_create_view(request, ctx, data):
     return Result({"procedure": procedure}, status=201, target_type="procedure", target_id=procedure["id"])
 
 
-@api("PATCH", perm="settings.manage", replay=_replay_procedure)
+@api("PATCH", perm="clinical.view", replay=_replay_procedure)
 def procedure_update_view(request, ctx, data, procedure_id):
+    """settings.manage changes anything; a doctor (procedures.record) changes the follow-ups only (Saged,
+    2026-11-19: the doctor keeps the follow-ups after a procedure)."""
     procedure_id = _id(procedure_id, "procedure")
     changes = services.clean_procedure(_changes(data, PROCEDURE_CHANGES), partial=True)
+    if not ctx.can("settings.manage"):
+        ctx.require("procedures.record")
+        if set(changes) - {"follow_up"}:
+            ctx.require("settings.manage")
     procedure = services.update_procedure(ctx, procedure_id, changes)
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)
 

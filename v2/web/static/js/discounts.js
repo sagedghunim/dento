@@ -27,9 +27,12 @@ if (card && dialog) {
 
   // Active types first, in their order: each with "Edit", and "Move up" from the second on. Stopped ones follow,
   // muted, with "Use it again". Every change is one request; the list is read again after it.
+  // Removed types stay out of sight unless asked for (Saged, 2026-11-19): bills that used them keep their name.
+  let showRemoved = false;
   function render() {
     const active = types.filter((d) => d.is_active);
-    list.replaceChildren(...types.map((d) => {
+    const removed = types.length - active.length;
+    const rows = types.filter((d) => d.is_active || showRemoved).map((d) => {
       const li = el("li");
       if (!d.is_active) li.classList.add("stopped");
       const what = el("span");
@@ -52,13 +55,27 @@ if (card && dialog) {
         const at = active.indexOf(d);
         if (at > 0) actions.append(button(t("discount_up"), () => moveUp(at)));
         actions.append(button(t("recipe_edit"), (event) => open(d, event.currentTarget)));
+        actions.append(button(t("discount_remove"), () => remove(d)));
       } else {
         actions.append(button(t("discount_use_again"), () => useAgain(d)));
       }
       li.append(what, actions);
       return li;
-    }));
-    status.textContent = types.length ? "" : t("discount_none");
+    });
+    if (removed) {
+      const toggle = el("button", "link-btn", showRemoved ? t("discount_hide_removed") : t("discount_show_removed", { n: localDigits(removed) }));
+      toggle.type = "button";
+      toggle.addEventListener("click", () => { showRemoved = !showRemoved; render(); });
+      const li = el("li");
+      li.append(toggle);
+      rows.push(li);
+    }
+    list.replaceChildren(...rows);
+    status.textContent = active.length ? "" : t("discount_none");
+  }
+
+  function remove(d) {
+    quick("PATCH", `/api/v1/discount-types/${d.id}`, { is_active: false }, d.name, t("removed", { name: d.name }));
   }
 
   // One quick request each (no dialog): its own key, and the list read again whatever the answer.

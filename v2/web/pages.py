@@ -392,10 +392,69 @@ def patient_page(request, ctx, patient_id):
     visits = patient_visits(ctx, patient.id, VISITS_PAGE, None)
     _with_notes(ctx, visits["items"])
     payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None) if ctx.can("money.view") else None
+    clinical_view = ctx.can("clinical.view")
+    if clinical_view:
+        from clinical import selectors as clinical
+
+        plans = clinical.plans(ctx, patient.id)["items"]
+        files = clinical.attachments(ctx, patient.id, FILES_PAGE, None)["items"]
+    else:
+        plans, files = [], []
     return render(request, "web/patient.html", {
         "ctx": ctx, "nav_active": "patients", "patient": selectors.file_payload(patient, today),
         "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
+        "summary": _visit_summary(ctx, patient.id), "plans": plans, "files": files,
+        "statement": _statement(ctx, patient.id) if ctx.can("money.view") else None,
+        "method_names": dict(_labels()["methods"]),
         "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
+
+
+FILES_PAGE = 24
+STATEMENT_ROWS = 60
+
+
+def _visit_summary(ctx, patient_id):
+    """First and last finished visit and how many (a doctor's own only), for the top of the patient file."""
+    from core import sql
+    from scheduling.rules import visit_sql
+
+    own, own_params = visit_sql(ctx, "doctor_id")
+    found = sql.row(ctx, 'SELECT min(day), max(day), count(*) FROM "scheduling_appointment" '
+                         f"WHERE clinic_id = %s AND patient_id = %s AND status = 'done'{own}",
+                    [ctx.clinic_id, patient_id, *own_params])
+    return {"first": found[0], "last": found[1], "count": found[2]}
+
+
+def _statement(ctx, patient_id):
+    """The patient's account (Saged, 2026-11-17): each visit's bill and each payment or refund, oldest first, with
+    what is owed after each one. Two statements; the last STATEMENT_ROWS rows are shown, the balance counts all."""
+    from core import sql
+
+    bills = sql.dicts(ctx, """
+        SELECT i.id, i.number, i.total, i.created_at AS at, a.day, s.name AS service, i.discount
+          FROM "billing_invoice" i
+          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
+          LEFT JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
+         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status <> 'void' AND i.total > 0""", [ctx.clinic_id, patient_id])
+    payments = sql.dicts(ctx, """
+        SELECT id, kind, method, amount, received_at AS at, is_deposit, invoice_id FROM "billing_payment"
+         WHERE clinic_id = %s AND patient_id = %s""", [ctx.clinic_id, patient_id])
+    rows = [(b["at"], 0, b["id"], "bill", b) for b in bills] + [(p["at"], 1, p["id"], p["kind"], p) for p in payments]
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    balance, out = 0, []
+    for at, _rank, _id, kind, r in rows:
+        if kind == "bill":
+            balance += r["total"]
+            out.append({"kind": "bill", "at": local_iso(ctx.clinic, at), "day": r["day"], "number": r["number"],
+                        "service": r["service"] or "", "charge": r["total"], "discount": r["discount"],
+                        "balance": balance})
+        else:
+            sign = -1 if kind == "payment" else 1
+            balance += sign * r["amount"]
+            out.append({"kind": kind, "at": local_iso(ctx.clinic, at), "method": r["method"], "deposit": r["is_deposit"],
+                        "paid": r["amount"] if kind == "payment" else None,
+                        "refund": r["amount"] if kind == "refund" else None, "balance": balance})
+    return {"rows": out[-STATEMENT_ROWS:], "hidden": max(0, len(out) - STATEMENT_ROWS), "balance": balance}
 
 
 def _with_notes(ctx, items):
@@ -407,9 +466,27 @@ def _with_notes(ctx, items):
     rows = sql.rows(ctx, 'SELECT appointment_id, complaint, diagnosis, notes FROM "clinical_visit_note" '
                          "WHERE clinic_id = %s AND appointment_id = ANY(%s::bigint[])",
                     [ctx.clinic_id, [v["id"] for v in items]])
-    notes = {r[0]: " · ".join(part for part in r[1:] if part) for r in rows}
+    notes = {r[0]: r[1:] for r in rows}
+    ids = [v["id"] for v in items]
+    # What was done in each visit and its prescriptions (Saged, 2026-11-17): one statement each for the page.
+    procedures = {}
+    for r in sql.rows(ctx, """
+        SELECT v.appointment_id, c.name_ar, c.name_en, v.tooth, v.qty FROM "clinical_visit_procedure" v
+          JOIN "clinical_procedure" c ON c.clinic_id = v.clinic_id AND c.id = v.procedure_id
+         WHERE v.clinic_id = %s AND v.appointment_id = ANY(%s::bigint[]) ORDER BY v.id""", [ctx.clinic_id, ids]):
+        procedures.setdefault(r[0], []).append({"name": pick(r[1], r[2]), "tooth": r[3], "qty": r[4]})
+    medicines = {}
+    for r in sql.rows(ctx, """
+        SELECT p.appointment_id, i.name, i.strength, i.dose FROM "clinical_prescription" p
+          JOIN "clinical_prescription_item" i ON i.clinic_id = p.clinic_id AND i.prescription_id = p.id
+         WHERE p.clinic_id = %s AND p.appointment_id = ANY(%s::bigint[]) ORDER BY p.id, i.position""", [ctx.clinic_id, ids]):
+        medicines.setdefault(r[0], []).append({"name": " ".join(part for part in r[1:3] if part), "dose": r[3]})
     for v in items:
-        v["note_text"] = notes.get(v["id"], "")
+        complaint, diagnosis, text = notes.get(v["id"], ("", "", ""))
+        v["note_text"] = " · ".join(part for part in (complaint, diagnosis, text) if part)
+        v["note"] = {"complaint": complaint, "diagnosis": diagnosis, "notes": text}
+        v["procedures"] = procedures.get(v["id"], [])
+        v["medicines"] = medicines.get(v["id"], [])
     return items
 
 

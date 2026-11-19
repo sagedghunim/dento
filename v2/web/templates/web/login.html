@@ -23,6 +23,8 @@
       <input name="code" inputmode="numeric" autocomplete="one-time-code" dir="ltr" required maxlength="11">
     </label>
     <button class="btn" type="submit">{% translate "Continue" %}</button>
+    {# A way back (Saged, 2026-11-19): another account, or the code isn't at hand. #}
+    <button class="btn ghost" type="button" data-back-to-password>{% translate "Back: sign in with another account" %}</button>
     <p class="form-error" data-error></p>
   </form>
   <p class="signup-link">{% translate "New clinic or center?" %} <a href="/signup">{% translate "Sign up now" %}</a></p>

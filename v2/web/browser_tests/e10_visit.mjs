@@ -52,7 +52,7 @@ export async function run() {
     await page.eval(`document.querySelector('.appt[data-id="${first.id}"] [data-act="call"]').click()`);
     await page.until(`location.pathname === "/visits/${first.id}" && Boolean(document.querySelector("[data-notes]"))`, 15000, "the doctor's call-in opens the visit screen");
     check((await page.eval(`document.querySelector("#visit-patient").textContent`)).includes(first.patient.name), "the band names the patient");
-    check(await page.eval(`Boolean(document.querySelector('a[href^="tel:"]'))`), "the phone is a tap-to-call link");
+    check(await page.eval(`!document.querySelector('a[href^="tel:"]') && Boolean(document.querySelector('a[target="_blank"][href^="/patients/"]'))`), "no phone; the patient file opens in a new tab");
     // A doctor without "Sees prices and money" sees no amount (Saged, 2026-11-16): no price, no bill, no total.
     check(await page.eval(`!document.querySelector(".money, [data-procs-total], .bill-total") &&
       ![...document.querySelectorAll("[data-suggest-discount] .count")].length`), "the doctor without the money switch sees no amount");

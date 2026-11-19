@@ -90,8 +90,7 @@
 {{ profile|json_script:"profile-data" }}
 {{ sections|json_script:"sections-data" }}
 
-{# Booking and bills (Saged, 2026-11-16, 2026-11-19): the account's owner only. An optional deposit taken with a
-   booking, ticked in Book by default; a consultation that costs nothing when a procedure is done in the same visit. #}
+{# Booking and bills: the account's owner only (Saged, 2026-11-19). #}
 {% if booking %}
 <section class="card" aria-labelledby="booking-title" data-booking-card>
   <h2 id="booking-title">{% translate "Booking and bills" %}</h2>
@@ -244,7 +243,7 @@
 </form>
 </dialog>
 {% endif %}
-{% if can_settings %}
+{% if can_recipes %}
 <section class="card" aria-labelledby="recipes-title" data-recipes>
   <div class="card-head">
     <div>
@@ -277,7 +276,8 @@
   </footer>
 </form>
 </dialog>
-
+{% endif %}
+{% if can_settings %}
 <section class="card" aria-labelledby="discounts-title" data-discount-card>
   <div class="card-head">
     <div>
@@ -319,4 +319,4 @@
 </dialog>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% if can_settings %}<script type="module" src="{% static 'js/recipes.js' %}"></script><script type="module" src="{% static 'js/discounts.js' %}"></script>{% endif %}{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/team.js' %}"></script>{% if can_recipes %}<script type="module" src="{% static 'js/recipes.js' %}"></script>{% endif %}{% if can_settings %}<script type="module" src="{% static 'js/discounts.js' %}"></script>{% endif %}{% endblock %}

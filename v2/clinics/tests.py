@@ -16,8 +16,8 @@ def member(id, role, granted=(), revoked=()):
 class GrantRuleTests(SimpleTestCase):
     def test_templates_and_overrides(self):
         self.assertEqual(effective_codes("owner"), ALL)
-        self.assertNotIn("clinical.view", effective_codes("assistant"))
-        self.assertIn("clinical.view", effective_codes("assistant", granted=["clinical.view"]))
+        self.assertIn("clinical.view", effective_codes("assistant")) # the desk reads the file (Saged, 2026-11-19)
+        self.assertNotIn("clinical.view", effective_codes("assistant", revoked=["clinical.view"]))
         self.assertNotIn("billing.collect", effective_codes("doctor", revoked=["billing.collect"]))
         self.assertNotIn("made.up", effective_codes("doctor", granted=["made.up"]))
 

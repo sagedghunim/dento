@@ -3961,3 +3961,70 @@ msgstr "اكتب عدد من 1 لـ 20."
 
 msgid "This visit already has a consultation."
 msgstr "الزيارة دي فيها كشف بالفعل."
+
+msgid "Complaint"
+msgstr "الشكوى"
+
+msgid "Diagnosis"
+msgstr "التشخيص"
+
+msgid "Treatment"
+msgstr "اتعمل"
+
+msgid "First visit:"
+msgstr "أول زيارة:"
+
+msgid "Treatment plans"
+msgstr "خطط العلاج"
+
+msgid "Plan"
+msgstr "خطة"
+
+msgid "Steps left:"
+msgstr "خطوات فاضلة:"
+
+msgid "All steps done"
+msgstr "كل الخطوات خلصت"
+
+msgid "Not yet"
+msgstr "لسه"
+
+msgid "No treatment plan yet."
+msgstr "مفيش خطة علاج لسه."
+
+msgid "X-rays and files"
+msgstr "الأشعة والملفات"
+
+msgid "No x-rays or files yet."
+msgstr "مفيش أشعة أو ملفات لسه."
+
+msgid "Every bill and payment, oldest first, with what is owed after each."
+msgstr ""
+"كل فاتورة وكل دفعة بالترتيب من الأقدم، وجنب كل واحدة الباقي عليه بعدها."
+
+msgid "Charged"
+msgstr "المطلوب"
+
+msgid "Owed after"
+msgstr "الباقي بعدها"
+
+msgid "Credit"
+msgstr "رصيد له"
+
+msgid "No bills yet."
+msgstr "مفيش فواتير لسه."
+
+msgid "The file didn't open. Try again."
+msgstr "الملف ما اتفتحش. جرّب تاني."
+
+msgid "Back"
+msgstr "رجوع"
+
+msgid "Back: sign in with another account"
+msgstr "رجوع: الدخول بحساب تاني"
+
+msgid "Show removed ones ({n})"
+msgstr "اعرض اللي اتشالوا ({n})"
+
+msgid "Hide removed ones"
+msgstr "اخفي اللي اتشالوا"

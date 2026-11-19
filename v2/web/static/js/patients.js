@@ -1,6 +1,6 @@
 // Patients (design 5.7, 7.3): search as you type, the patient file with "load more", editing a file,
 // booking for this patient and taking a payment on a visit.
-import { errorMessage, fetchText, isOk } from "./api.js";
+import { errorMessage, fetchText, isOk, membership } from "./api.js";
 import { initBook, patientFrom } from "./book.js";
 import { Submitter, openDialog, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { localDigits } from "./numbers.js";
@@ -184,3 +184,24 @@ if (current) {
 }
 
 if (new URLSearchParams(window.location.search).get("saved")) toast(t("saved"));
+
+// --- an x-ray or file (Saged, 2026-11-17): read with the clinic's header, shown in a new tab ---
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-open-file]");
+  if (!button || button.disabled) return;
+  const tab = window.open("", "_blank");  // opened in the click, so no pop-up blocker stops it
+  button.disabled = true;
+  try {
+    const response = await fetch(button.dataset.openFile, { headers: { "X-Membership": membership() }, credentials: "same-origin" });
+    if (!response.ok) throw new Error(String(response.status));
+    const url = URL.createObjectURL(await response.blob());
+    if (tab) tab.location.href = url; else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    if (tab) tab.close();
+    alertMessage(t("file_failed"));
+  } finally {
+    button.disabled = false;
+  }
+});
