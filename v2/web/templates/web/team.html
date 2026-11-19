@@ -107,6 +107,19 @@
     <p class="muted">{% translate "The deposit is paid on the visit's bill. If the patient doesn't come, the clinic keeps it; refund it from the bill when needed." %}</p>
     <label class="check"><input type="checkbox" name="consultation_free_with_procedure"{% if booking.consultation_free_with_procedure %} checked{% endif %}> {% translate "No consultation fee when a procedure is done in the same visit" %}</label>
     <p class="muted">{% translate "For example: a patient books a consultation and gets a root canal in it. With this on, the bill has the root canal only. Off, it has both." %}</p>
+    <fieldset class="group">
+      <legend>{% translate "Installments start with" %}</legend>
+      <div class="grid-form">
+        <label class="field">{% translate "Down payment (%)" %}<input name="installment_down_percent" dir="ltr" inputmode="numeric" maxlength="2" value="{{ booking.installment_down_percent }}"></label>
+        <label class="field">{% translate "How many installments" %}<input name="installment_count" dir="ltr" inputmode="numeric" maxlength="2" value="{{ booking.installment_count }}"></label>
+        <label class="field">{% translate "Every" %}<select name="installment_every">
+          <option value="week"{% if booking.installment_every == "week" %} selected{% endif %}>{% translate "A week" %}</option>
+          <option value="2weeks"{% if booking.installment_every == "2weeks" %} selected{% endif %}>{% translate "Two weeks" %}</option>
+          <option value="month"{% if booking.installment_every == "month" %} selected{% endif %}>{% translate "A month" %}</option>
+        </select></label>
+      </div>
+      <p class="muted">{% translate "The desk or the doctor changes these for each patient." %}</p>
+    </fieldset>
     <div class="form-actions">
       <p class="form-error" data-error role="alert"></p>
       <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>

@@ -48,6 +48,16 @@
   <div data-slot="truncated">{% if truncated %}<p class="notice">{% translate "This day has more bookings than one screen shows. Use the doctor filters." %}</p>{% endif %}</div>
 </section>
 
+{% if installments_due %}
+<section class="card" aria-labelledby="inst-due-title">
+  <h2 id="inst-due-title">{% translate "Installments due" %}</h2>
+  <ul class="inst-due">
+    {% for d in installments_due %}<li><a href="/patients/{{ d.patient_id }}"><bdi dir="auto">{{ d.name }}</bdi></a> <span class="muted">· {% translate "File" %} {{ d.file_no|num }}</span>
+      {% if d.late %}<span class="pill red">{% translate "Late" %} {{ d.late|money }}</span>{% endif %}
+      {% if d.today %}<span class="pill amber">{% translate "Due today" %} {{ d.today|money }}</span>{% endif %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
 <div data-slot="money">{% include "web/_money.html" %}</div>
 
 {% include "web/_dialogs.html" %}

@@ -719,6 +719,17 @@ function initBooking() {
     let body = submitter.unknown && submitter.unknown.body;
     if (!body) {
       const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked };
+      const whole = (name, low, high) => {
+        const n = Number(asciiDigits(form.elements.namedItem(name).value.trim()));
+        return Number.isInteger(n) && n >= low && n <= high ? n : null;
+      };
+      changes.installment_down_percent = whole("installment_down_percent", 0, 90);
+      changes.installment_count = whole("installment_count", 1, 24);
+      changes.installment_every = form.elements.namedItem("installment_every").value;
+      if (changes.installment_down_percent === null || changes.installment_count === null) {
+        submitter.say(t("inst_defaults_bad"));
+        return;
+      }
       if (on.checked && kindOf() === "percent") {
         const n = Number(asciiDigits(pct.value.trim()));
         if (!Number.isInteger(n) || n < 1 || n > 100) { submitter.say(t("deposit_need_percent")); pct.focus(); return; }
@@ -741,6 +752,7 @@ function initBooking() {
       now.booking_deposit_amount = fresh.booking_deposit_amount;
       now.consultation_free_with_procedure = fresh.consultation_free_with_procedure;
       now.booking_deposit_percent = fresh.booking_deposit_percent;
+      for (const k of ["installment_down_percent", "installment_count", "installment_every"]) now[k] = fresh[k];
       toast(t("settings_saved"));
       return;
     }

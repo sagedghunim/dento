@@ -289,6 +289,10 @@ def today_page(request, ctx):
         "prev_day": day - dt.timedelta(days=1), "next_day": day + dt.timedelta(days=1),
         "poll_after": settings.POLL_AFTER_SECONDS, **_dialog_context(ctx, today),
     }
+    if day == today and ctx.can("billing.collect") and ctx.can("money.view"):
+        from billing import installments
+
+        context["installments_due"] = installments.due(ctx, today)  # Saged, 2026-11-19
     return render(request, "web/today.html", context)
 
 
@@ -323,9 +327,13 @@ def _with_owed(ctx, results):
     if results and ctx.can("money.view"):
         from billing.selectors import balances
 
+        from billing.installments import late_by_patient
+
         owed = balances(ctx, [p["id"] for p in results])
+        late = late_by_patient(ctx, [p["id"] for p in results])
         for p in results:
             p["owed"] = owed.get(p["id"], 0)
+            p["late"] = late.get(p["id"], 0)
     return results
 
 
@@ -407,11 +415,25 @@ def patient_page(request, ctx, patient_id):
         "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
         "summary": _visit_summary(ctx, patient.id), "plans": plans, "files": files,
         "statement": _statement(ctx, patient.id) if ctx.can("money.view") else None,
+        "installments": _installments(ctx, patient.id),
         "method_names": dict(_labels()["methods"]),
         "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
 
 
 FILES_PAGE = 24
+
+
+def _installments(ctx, patient_id):
+    """The running plan and the owner's defaults for a new one, for the desk with money (Saged, 2026-11-19)."""
+    if not (ctx.can("billing.collect") and ctx.can("money.view")):
+        return None
+    from billing import installments
+    from clinics import settings as clinic_settings
+
+    values = clinic_settings.effective(ctx.clinic.settings)
+    return {"plan": installments.read(ctx, patient_id),
+            "defaults": {"down_percent": values["installment_down_percent"], "every": values["installment_every"],
+                         "count": values["installment_count"], "today": business_day(ctx.clinic).isoformat()}}
 
 
 def _visit_summary(ctx, patient_id):
@@ -436,6 +458,7 @@ def _statement(ctx, patient_id):
                  WHERE clinic_id = %s AND patient_id = %s AND status <> 'void'),
                (SELECT coalesce(sum(CASE WHEN kind = 'refund' THEN -amount ELSE amount END), 0) FROM "billing_payment"
                  WHERE clinic_id = %s AND patient_id = %s)""", [ctx.clinic_id, patient_id, ctx.clinic_id, patient_id])
+    total, paid = int(total), int(paid)  # sums come back as decimals
     return {"total": total, "paid": paid, "left": total - paid}
 
 

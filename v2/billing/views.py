@@ -298,3 +298,61 @@ def suggest_discount_view(request, ctx, data, appointment_id):
     type_id = validate.ident(data["type_id"], "type_id") if data["type_id"] is not None else None
     return Result({"suggested": discounts.suggest(ctx, appointment_id, type_id)}, target_type="appointment",
                   target_id=appointment_id)
+
+
+# --- Installments (Saged, 2026-11-19) -------------------------------------------------------------------------
+
+
+def _installment_answer(ctx, stored):
+    from . import installments
+
+    return {"plan": installments.read(ctx, stored["target_id"])}
+
+
+@api("GET", perm=("billing.collect", "money.view"), access="invoice")
+def installments_view(request, ctx, data, patient_id):
+    from patients.selectors import exists
+
+    from . import installments
+
+    exists(ctx, patient_id)
+    return {"plan": installments.read(ctx, patient_id)}
+
+
+def _day(value, field):
+    try:
+        return validate.iso_day(value, field)
+    except ApiError:
+        raise
+    except Exception:
+        raise ApiError("invalid", f"{field}: a day as YYYY-MM-DD", fields={field: "day"})
+
+
+@api("POST", perm=("billing.collect", "money.view"), replay=_installment_answer)
+def installments_make_view(request, ctx, data, patient_id):
+    """{down, every: week|2weeks|month, amount, first_due?, note?} or {parts: [{due_on, amount}], note?}."""
+    from . import installments
+
+    request_body = {"note": validate.text(data, "note", 200, required=False)}
+    if data.get("parts"):
+        if not isinstance(data["parts"], list):
+            raise ApiError("invalid", "parts must be a list", fields={"parts": "list"})
+        request_body["parts"] = [{"due_on": _day(p.get("due_on"), "due_on"), "amount": parse_money(p.get("amount"), "amount", 1)}
+                                 for p in data["parts"] if isinstance(p, dict)]
+    else:
+        request_body.update({
+            "down": parse_money(data.get("down") or 0, "down"),
+            "every": validate.choice(data, "every", list(installments.EVERY)),
+            "amount": parse_money(data.get("amount"), "amount", 1),
+            "first_due": _day(data["first_due"], "first_due") if data.get("first_due") else None,
+        })
+    plan = installments.make(ctx, patient_id, request_body)
+    return Result({"plan": plan}, status=201, target_type="patient", target_id=patient_id)
+
+
+@api("DELETE", perm=("billing.collect", "money.view"), replay=_installment_answer)
+def installments_cancel_view(request, ctx, data, patient_id):
+    from . import installments
+
+    plan = installments.cancel(ctx, patient_id)
+    return Result({"plan": plan}, target_type="patient", target_id=patient_id)

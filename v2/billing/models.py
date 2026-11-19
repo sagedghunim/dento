@@ -294,3 +294,66 @@ class PatientPackage(models.Model):
             models.Index(fields=["clinic", "patient", "procedure"],
                          condition=Q(used__lt=F("sessions"), voided_at__isnull=True), name="patient_package_open"),
         ]
+
+
+class InstallmentPlan(models.Model):
+    """What a patient owes, paid in parts on set days (Saged, 2026-11-19).
+
+    `total` is what the patient owed when the plan was made, on the bills that existed then; payments on those bills
+    from that moment cover the parts in order (billing.installments). A new visit's bill is outside the plan.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active"
+        DONE = "done"
+        CANCELLED = "cancelled"
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    patient = models.ForeignKey("patients.Patient", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                related_name="+")
+    total = models.BigIntegerField()
+    status = models.CharField(max_length=10, default=Status.ACTIVE)
+    note = models.CharField(max_length=200, blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by_id = models.BigIntegerField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "billing_installment_plan"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="installment_plan_clinic_id_uniq"),
+            models.CheckConstraint(condition=Q(total__gt=0), name="installment_plan_total_positive"),
+            models.CheckConstraint(condition=Q(status__in=["active", "done", "cancelled"]), name="installment_plan_status_valid"),
+            # One running plan per patient: a second one would count the same payments twice.
+            models.UniqueConstraint(fields=["clinic", "patient"], condition=Q(status="active"), name="installment_plan_one_active"),
+            CompositeForeignKey(fields=["clinic", "patient"], to="patients.Patient", to_fields=["clinic", "id"],
+                                name="installment_plan_patient_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "patient", "id"], name="installment_plan_patient")]
+
+
+class Installment(models.Model):
+    """One part of a plan: how much, by which day. Position 0 is the down payment."""
+
+    clinic = models.ForeignKey("clinics.Clinic", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+")
+    plan = models.ForeignKey(InstallmentPlan, on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                             related_name="+")
+    patient = models.ForeignKey("patients.Patient", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                                related_name="+")
+    position = models.SmallIntegerField()
+    due_on = models.DateField()
+    amount = models.BigIntegerField()
+
+    class Meta:
+        db_table = "billing_installment"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "plan", "position"], name="installment_position_uniq"),
+            models.CheckConstraint(condition=Q(amount__gt=0, position__gte=0), name="installment_valid"),
+            CompositeForeignKey(fields=["clinic", "plan"], to="billing.InstallmentPlan", to_fields=["clinic", "id"],
+                                name="installment_plan_fk"),
+            CompositeForeignKey(fields=["clinic", "patient"], to="patients.Patient", to_fields=["clinic", "id"],
+                                name="installment_patient_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "due_on"], name="installment_due")]

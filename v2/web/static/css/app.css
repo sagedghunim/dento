@@ -1141,3 +1141,13 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .nav-part:hover { background: var(--surface-2); color: inherit; }
 .nav-part[aria-current="page"] { color: var(--teal-dark); background: var(--teal-tint); }
 .one-part .rx-grid { grid-template-columns: minmax(0, 1fr); }
+/* Installments (Saged, 2026-11-19) */
+.installments-card { margin-block-start: 16px; }
+.inst-parts { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.inst-parts li { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.inst-parts li > span:first-child { min-width: 9em; font-weight: 600; }
+.inst-parts.preview li { padding: 6px 10px; }
+.inst-parts .inst-late { border-color: var(--red); }
+.inst-due { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.inst-due li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.pill.green { background: var(--teal-tint); color: var(--teal-dark); }

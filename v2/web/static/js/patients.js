@@ -205,3 +205,6 @@ document.addEventListener("click", async (event) => {
     button.disabled = false;
   }
 });
+
+// --- installments (Saged, 2026-11-19): split what is owed; the server makes the parts and checks them ---
+import("./installments.js");

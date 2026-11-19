@@ -22,9 +22,14 @@ DEFAULTS = {
     "booking_deposit_percent": 0,
     # The consultation costs nothing when a procedure is done in the same visit (Saged, 2026-11-19): off by default.
     "consultation_free_with_procedure": False,
+    # Installments (Saged, 2026-11-19): what a new plan starts with; the desk or the doctor changes it per patient.
+    "installment_down_percent": 30,
+    "installment_every": "month",
+    "installment_count": 3,
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
-OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure"}
+OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure",
+              "installment_down_percent", "installment_every", "installment_count"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
 
 _RULES = {
@@ -41,6 +46,9 @@ _RULES = {
     "booking_deposit_amount": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_DEPOSIT,
     "consultation_free_with_procedure": lambda v: isinstance(v, bool),
     "booking_deposit_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100,
+    "installment_down_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
+    "installment_every": lambda v: v in ("week", "2weeks", "month"),
+    "installment_count": lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 24,
 }
 
 

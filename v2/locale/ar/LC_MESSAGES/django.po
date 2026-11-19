@@ -4092,3 +4092,119 @@ msgstr "الفريق والصلاحيات"
 
 msgid "The clinic and its sections"
 msgstr "بيانات العيادة والأقسام"
+
+msgid "Installments"
+msgstr "التقسيط"
+
+msgid "Cancel the installments"
+msgstr "إلغاء التقسيط"
+
+msgid "Split what is owed"
+msgstr "قسّط اللي عليه"
+
+msgid "Late"
+msgstr "متأخر"
+
+msgid "Due today"
+msgstr "عليه النهارده"
+
+msgid "Ahead"
+msgstr "لسه"
+
+msgid ""
+"Payments on the bills count toward the installments by themselves, the "
+"earliest first."
+msgstr "أي فلوس بيدفعها على الفواتير بتتحسب من الأقساط لوحدها، الأقدم الأول."
+
+msgid "No installments. Split what is owed into parts on set days."
+msgstr "مفيش تقسيط. تقدر تقسّط اللي عليه على أيام محددة."
+
+msgid "Nothing owed."
+msgstr "مش عليه حاجة."
+
+msgid "Down payment today (EGP)"
+msgstr "المقدم النهارده (جنيه)"
+
+msgid "Then every"
+msgstr "وبعدين كل"
+
+msgid "Two weeks"
+msgstr "أسبوعين"
+
+msgid "Each installment (EGP)"
+msgstr "القسط الواحد (جنيه)"
+
+msgid "The first one on"
+msgstr "أول قسط يوم"
+
+msgid "Save the installments"
+msgstr "احفظ التقسيط"
+
+msgid "Installments due"
+msgstr "أقساط النهارده والمتأخرة"
+
+msgid "Late installment:"
+msgstr "قسط متأخر:"
+
+msgid "Check the down payment, the amount and the first day."
+msgstr "راجع المقدم والقسط وأول يوم."
+
+msgid "Installments saved: {n} parts."
+msgstr "اتحفظ التقسيط: {n} أقساط."
+
+msgid "The installments were cancelled. What is owed stays on the bills."
+msgstr "التقسيط اتلغى. اللي عليه فاضل على الفواتير."
+
+msgid "Cancel this patient's installments? What is owed stays on the bills."
+msgstr "تلغي تقسيط العيان ده؟ اللي عليه هيفضل على الفواتير."
+
+msgid "Installments start with"
+msgstr "التقسيط بيبدأ بـ"
+
+msgid "Down payment (%)"
+msgstr "المقدم (٪)"
+
+msgid "How many installments"
+msgstr "عدد الأقساط"
+
+msgid "Every"
+msgstr "كل"
+
+msgid "The desk or the doctor changes these for each patient."
+msgstr "السكرتارية أو الدكتور يغيّروها لكل عيان."
+
+msgid "Installments: a down payment from 0 to 90%, and 1 to 24 installments."
+msgstr "التقسيط: المقدم من 0 لـ 90٪، والأقساط من 1 لـ 24."
+
+msgid "The down payment must be less than what is owed."
+msgstr "المقدم لازم يبقى أقل من اللي عليه."
+
+msgid "Enter the amount of each installment."
+msgstr "اكتب قيمة القسط."
+
+msgid "That makes too many installments. Raise the amount."
+msgstr "كده الأقساط كتير أوي. زوّد قيمة القسط."
+
+msgid "This patient owes nothing to split."
+msgstr "العيان ده مش عليه حاجة تتقسط."
+
+msgid "This patient already has installments. Cancel them first."
+msgstr "العيان ده عليه تقسيط بالفعل. الغيه الأول."
+
+msgid "Each installment needs an amount."
+msgstr "كل قسط محتاج مبلغ."
+
+msgid "The installments must add up to what is owed."
+msgstr "مجموع الأقساط لازم يساوي اللي عليه."
+
+msgid "An installment can't be due before today."
+msgstr "ما ينفعش قسط يبقى قبل النهارده."
+
+msgid "This patient has no installments."
+msgstr "العيان ده مالوش تقسيط."
+
+msgid "A month"
+msgstr "شهر"
+
+msgid "A week"
+msgstr "أسبوع"

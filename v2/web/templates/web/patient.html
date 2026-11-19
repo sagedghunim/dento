@@ -90,6 +90,61 @@
   </dl>
 </section>
 {% endif %}
+{% if installments %}
+<section class="card installments-card" aria-labelledby="inst-title" data-installments data-patient="{{ patient.id }}" data-owed="{% if statement %}{{ statement.left }}{% else %}0{% endif %}">
+  <div class="card-head">
+    <h2 id="inst-title">{% translate "Installments" %}</h2>
+    {% if installments.plan and installments.plan.status == "active" %}<button type="button" class="btn ghost danger" data-inst-cancel>{% translate "Cancel the installments" %}</button>
+    {% elif statement and statement.left > 0 %}<button type="button" class="btn" data-inst-open>{% translate "Split what is owed" %}</button>{% endif %}
+  </div>
+  {% with plan=installments.plan %}{% if plan and plan.status == "active" %}
+  <dl class="account-sums">
+    <div><dt>{% translate "Total" %}</dt><dd class="num">{{ plan.total|money }}</dd></div>
+    <div><dt>{% translate "Paid" %}</dt><dd class="num">{{ plan.paid|money }}</dd></div>
+    <div class="{% if plan.late %}owes{% endif %}"><dt>{% if plan.late %}{% translate "Late" %}{% else %}{% translate "Remaining" %}{% endif %}</dt><dd class="num">{% if plan.late %}{{ plan.late|money }}{% else %}{{ plan.left|money }}{% endif %}</dd></div>
+  </dl>
+  <ol class="inst-parts">
+    {% for p in plan.parts %}<li class="inst-{{ p.state }}">
+      <span>{{ p.due_on|shortday }}</span>
+      <span class="num">{{ p.amount|money }}</span>
+      <span class="pill {% if p.state == 'paid' %}green{% elif p.state == 'late' %}red{% elif p.state == 'today' %}amber{% else %}grey{% endif %}">{% if p.state == "paid" %}{% translate "Paid" %}{% elif p.state == "late" %}{% translate "Late" %}{% if p.paid %} · {% translate "Paid" %} {{ p.paid|money }}{% endif %}{% elif p.state == "today" %}{% translate "Due today" %}{% else %}{% translate "Ahead" %}{% endif %}</span>
+    </li>{% endfor %}
+  </ol>
+  <p class="muted">{% translate "Payments on the bills count toward the installments by themselves, the earliest first." %}</p>
+  {% else %}<p class="empty-note">{% if statement and statement.left > 0 %}{% translate "No installments. Split what is owed into parts on set days." %}{% else %}{% translate "Nothing owed." %}{% endif %}</p>{% endif %}{% endwith %}
+  <p class="form-error" data-inst-error role="alert"></p>
+</section>
+<dialog class="sheet small" id="inst-dialog" aria-labelledby="inst-dialog-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="inst-dialog-title">{% translate "Split what is owed" %} · <span class="num" data-inst-owed></span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Down payment today (EGP)" %}<input name="down" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+    <fieldset class="group">
+      <legend>{% translate "Then every" %}</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="every" value="week"><span>{% translate "A week" %}</span></label>
+        <label class="chip"><input type="radio" name="every" value="2weeks"><span>{% translate "Two weeks" %}</span></label>
+        <label class="chip"><input type="radio" name="every" value="month"><span>{% translate "A month" %}</span></label>
+      </div>
+    </fieldset>
+    <div class="grid-form">
+      <label class="field">{% translate "Each installment (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+      <label class="field">{% translate "The first one on" %}<input name="first_due" type="date" dir="ltr"></label>
+    </div>
+    <ol class="inst-parts preview" data-inst-preview></ol>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save the installments" %}</button>
+  </footer>
+</form>
+</dialog>
+{{ installments.defaults|json_script:"inst-defaults" }}
+{% endif %}
 {{ patient|json_script:"patient-data" }}
 {% include "web/_dialogs.html" %}
 {% if perms.edit_patients %}{% include "web/_dialog_patient.html" %}{% endif %}
