@@ -57,7 +57,8 @@ def _mine(ctx):
     WHERE clause of each scan (Saged, 2026-11-13). Empty for everyone else."""
     from scheduling.rules import patient_sql
 
-    return patient_sql(ctx, '"patients_patient".clinic_id', '"patients_patient".id')
+    mine, params = patient_sql(ctx, '"patients_patient".clinic_id', '"patients_patient".id')
+    return ' AND "patients_patient".archived_at IS NULL' + mine, params  # a deleted file is gone (Saged, 2026-11-19)
 
 
 def _search(ctx, query, today):
@@ -208,7 +209,7 @@ def _visible(ctx, patient_id):
     from scheduling.models import Appointment
     from scheduling.rules import own_doctor
 
-    found = Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient_id)
+    found = Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient_id, archived_at__isnull=True)
     doctor = own_doctor(ctx)
     if doctor is not None:
         visits = Appointment.objects.filter(clinic_id=OuterRef("clinic_id"), patient_id=OuterRef("id"), doctor_id=doctor)

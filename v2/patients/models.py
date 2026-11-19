@@ -54,6 +54,10 @@ class Patient(models.Model):
     created_by_id = models.BigIntegerField(null=True, blank=True)
     updated_at = models.DateTimeField(default=timezone.now)
 
+    # Deleted by the owner (Saged, 2026-11-19): a file with history is hidden, not removed, so the money stays.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by_id = models.BigIntegerField(null=True, blank=True)
+
     class Meta:
         db_table = "patients_patient"
         constraints = [

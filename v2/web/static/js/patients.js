@@ -208,3 +208,67 @@ document.addEventListener("click", async (event) => {
 
 // --- installments (Saged, 2026-11-19): split what is owed; the server makes the parts and checks them ---
 import("./installments.js");
+
+// --- the owner deletes a file, or brings a hidden one back (Saged, 2026-11-19) ---
+document.addEventListener("click", async (event) => {
+  const del = event.target.closest("[data-delete-patient]");
+  const back = event.target.closest("[data-restore-patient]");
+  const button = del || back;
+  if (!button || button.disabled) return;
+  if (del && !window.confirm(t("patient_delete_confirm", { name: del.dataset.name }))) return;
+  button.disabled = true;
+  const { isOk: ok, newKey: key, save: send, errorMessage: message } = await import("./api.js");
+  const url = `/api/v1/patients/${button.dataset.id}/${del ? "delete" : "restore"}`;
+  const result = await send("POST", url, {}, { key: key(), label: button.dataset.name });
+  if (result.settled && ok(result)) {
+    if (del) { window.location.href = "/patients"; return; }
+    toast(t("patient_restored", { name: button.dataset.name }));
+    button.closest("li").remove();
+    return;
+  }
+  button.disabled = false;
+  alertMessage(message(result, t("failed")));
+});
+
+// --- the patient's tags (Saged, 2026-11-19): one PUT with the ticked ones; a new tag is one POST first ---
+const tagsDialog = document.getElementById("tags-dialog");
+if (tagsDialog) {
+  wireClose(tagsDialog);
+  const tagForm = tagsDialog.querySelector("form");
+  const tagError = tagsDialog.querySelector("[data-error]");
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-open-tags]")) openDialog(tagsDialog, event.target);
+  });
+  const add = tagsDialog.querySelector("[data-add-tag]");
+  if (add) {
+    add.addEventListener("click", async () => {
+      const input = tagForm.elements.namedItem("new_tag");
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      add.disabled = true;
+      const { isOk: ok, newKey: key, save: send } = await import("./api.js");
+      const result = await send("POST", "/api/v1/patient-tags", { name }, { key: key(), label: name });
+      add.disabled = false;
+      if (!(result.settled && ok(result))) { tagError.textContent = errorMessage(result, t("failed")); return; }
+      const tag = result.data.tag;
+      const label = document.createElement("label");
+      label.className = "chip";
+      label.innerHTML = '<input type="checkbox" name="tag" checked><span><bdi dir="auto"></bdi></span>';
+      label.querySelector("input").value = tag.id;
+      label.querySelector("bdi").textContent = tag.name;
+      tagsDialog.querySelector("[data-tag-chips]").append(label);
+      input.value = "";
+    });
+  }
+  tagForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const ids = [...tagForm.querySelectorAll('[name="tag"]:checked')].map((c) => Number(c.value));
+    const { isOk: ok, newKey: key, save: send } = await import("./api.js");
+    const button = tagForm.querySelector("[data-submit]");
+    button.disabled = true;
+    const result = await send("PUT", `/api/v1/patients/${tagsDialog.dataset.patient}/tags`, { tag_ids: ids }, { key: key(), label: t("tags_title") });
+    button.disabled = false;
+    if (result.settled && ok(result)) { window.location.reload(); return; }
+    tagError.textContent = errorMessage(result, t("failed"));
+  });
+}

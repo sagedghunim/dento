@@ -4208,3 +4208,56 @@ msgstr "شهر"
 
 msgid "A week"
 msgstr "أسبوع"
+
+msgid "Delete the patient"
+msgstr "مسح المريض"
+
+msgid "Deleted patients"
+msgstr "المرضى الممسوحين"
+
+msgid ""
+"Files with visits or money are hidden, not removed: their money stays in the"
+" accounts. Bring one back if it was deleted by mistake."
+msgstr ""
+"الملف اللي ليه زيارات أو فلوس بيستخبّى بس، وفلوسه بتفضل في الحسابات. رجّعه "
+"لو اتمسح بالغلط."
+
+msgid "Bring back"
+msgstr "رجّعه"
+
+msgid ""
+"Delete {name}? A file with visits or money is hidden and its money stays in "
+"the accounts; you can bring it back from Patients."
+msgstr ""
+"تمسح {name}؟ لو ليه زيارات أو فلوس هيستخبّى وفلوسه تفضل في الحسابات، وتقدر "
+"ترجّعه من صفحة المرضى."
+
+msgid "{name} is back."
+msgstr "{name} رجع."
+
+msgid "Deleted a patient"
+msgstr "مسح مريض"
+
+msgid "Only the account's owner can delete a patient."
+msgstr "صاحب الحساب بس هو اللي يقدر يمسح مريض."
+
+msgid "Change tags"
+msgstr "غيّر العلامات"
+
+msgid "Add a tag"
+msgstr "ضيف علامة"
+
+msgid "Tags"
+msgstr "العلامات"
+
+msgid "A new tag"
+msgstr "علامة جديدة"
+
+msgid "For example: comes with her mother"
+msgstr "مثلًا: بييجي مع والدته"
+
+msgid "All"
+msgstr "الكل"
+
+msgid "No patient has this tag yet. Open a patient's file to add it."
+msgstr "مفيش عيان عليه العلامة دي لسه. افتح ملف العيان وضيفها."

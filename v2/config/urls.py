@@ -41,6 +41,7 @@ urlpatterns = [
     path("", include("billing.discount_urls")),
     path("", include("billing.installment_urls")),
     path("", include("patients.tag_urls")),
+    path("", include("patients.delete_urls")),
     path("", include("inventory.urls")),
     path("", include("finance.urls")),
     path("", include("reports.urls")),

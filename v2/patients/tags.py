@@ -145,3 +145,27 @@ def keep_tagged(ctx, patient_ids, tag_id):
     return {r[0] for r in sql.rows(ctx, 'SELECT patient_id FROM "patients_patient_tag" WHERE clinic_id = %s '
                                         "AND tag_id = %s AND patient_id = ANY(%s::bigint[])",
                                    [ctx.clinic_id, tag_id, list(patient_ids)])}
+
+
+# The tags a place starts with (Saged, 2026-11-19); the desk and the owner add their own.
+DEFAULT_TAGS = (
+    ("مميز VIP", "VIP", "#C8A400"),
+    ("قايمة سودا", "Blocklist", "#C62828"),
+    ("كتير الغياب", "Often misses visits", "#EF6C00"),
+    ("بيدفع متأخر", "Pays late", "#AD1457"),
+    ("تأمين", "Insurance", "#2E7D32"),
+    ("إحالة من دكتور", "Referred by a doctor", "#6A1B9A"),
+    ("من فيسبوك", "Facebook", "#1565C0"),
+    ("قريب أو صاحب", "Friend or family", "#00838F"),
+    ("بيخاف من العلاج", "Anxious patient", "#5D4037"),
+)
+
+
+def add_defaults(clinic_id, using):
+    """Add the starting tags a place doesn't have yet (by name). Never changes or removes one."""
+    from .models import Tag
+
+    have = set(Tag.objects.using(using).filter(clinic_id=clinic_id).values_list("name", flat=True))
+    Tag.objects.using(using).bulk_create([
+        Tag(clinic_id=clinic_id, name=name, name_en=english, color=color, sort=sort)
+        for sort, (name, english, color) in enumerate(DEFAULT_TAGS) if name not in have])

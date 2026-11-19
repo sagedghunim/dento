@@ -23,7 +23,7 @@ from core.days import local_iso
 from .http import clinic_page
 
 ACTIONS = ("visit_procedure.remove", "invoice.line_remove", "invoice.discount", "payment.refund", "invoice.void",
-           "shift.close", "procedure.price", "expense.void", "item.count")
+           "shift.close", "procedure.price", "expense.void", "item.count", "patient.hide", "patient.delete")
 DAYS = 60
 LIMIT = 150
 # A register closed with the count matching is not news.
@@ -131,6 +131,10 @@ def items(ctx):
         elif action == "expense.void":
             item["what"] = _("Voided an expense")
             item["amount"] = before.get("amount")
+        elif action in ("patient.hide", "patient.delete"):
+            item["what"] = _("Deleted a patient")
+            item["detail"] = f"{before.get('full_name', '')} · {_('File')} {before.get('file_no', '')}"
+            item["level"] = "bad"
         elif action == "item.count":
             item["what"] = _("A stock count changed the quantity")
             item["detail"] = f"{stock.get(r['target_id'], '')} · {before.get('quantity')} → {after.get('quantity')}"

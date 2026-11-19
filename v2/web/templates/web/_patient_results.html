@@ -5,6 +5,7 @@
     {% if pick %}<button type="button" class="result" data-pick-patient data-id="{{ p.id }}" data-name="{{ p.name }}" data-file="{{ p.file_no }}" data-phone="{{ p.phone }}" data-owed="{{ p.owed|default:0 }}">{% else %}<a class="result" href="/patients/{{ p.id }}">{% endif %}
       <bdi class="who" dir="auto">{{ p.name }}</bdi>
       {% if p.today %}<span class="pill amber tag"><svg class="icon"><use href="#i-calendar"/></svg>{% translate "Booked today" %} · {% translate "Turn" %} {{ p.today.queue_no|num }}</span>{% endif %}
+      {% for tag in p.tags %}<span class="pill tag tag-pill" style="--tag: {{ tag.color|default:'#607D8B' }}"><bdi dir="auto">{{ tag.name }}</bdi></span>{% endfor %}
       {% if p.late %}<span class="pill red tag">{% translate "Late installment:" %} {{ p.late|money }}</span>{% endif %}
       {% if p.owed %}<span class="pill amber tag"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Owed from before:" %} {{ p.owed|money }}</span>{% endif %}
       <span class="meta">{% translate "File" %} {{ p.file_no|num }}{% if p.phone %} · {{ p.phone|phone }}{% endif %}{% if p.age is not None %} · {% translate "Age:" %} {{ p.age|digits }}{% endif %}{% if p.sex == "m" %} · {% translate "Male" %}{% elif p.sex == "f" %} · {% translate "Female" %}{% endif %}{% if p.last_visit %} · {% translate "Last visit:" %} {{ p.last_visit|shortday }}{% endif %}{% if p.visits %} · {% translate "Visits:" %} {{ p.visits|digits }}{% endif %}</span>

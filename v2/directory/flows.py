@@ -181,6 +181,9 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
         for section in existing:
             copy_services(clinic, section, language)
             copy_catalogues(clinic, section, language)
+        from patients.tags import add_defaults
+
+        add_defaults(clinic.id, clinic._state.db)  # VIP, blocklist and the other usual tags (Saged, 2026-11-19)
         for counter in ("patient_file", "invoice", "prescription"):
             Counter.objects.get_or_create(clinic=clinic, name=counter)
         from finance.services import seed_categories

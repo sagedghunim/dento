@@ -322,8 +322,26 @@ def walk_in_defaults(request, ctx):
 # --- Patients --------------------------------------------------------------------------------------------------
 
 
+def _with_tags(ctx, results):
+    """Each result's tags (one statement): VIP, blocklist and the rest show next to the name (Saged, 2026-11-19)."""
+    if results:
+        from core import sql
+
+        found = {}
+        for pid, name, color in sql.rows(ctx, """
+            SELECT pt.patient_id, t.name, t.color FROM "patients_patient_tag" pt
+              JOIN "patients_tag" t ON t.clinic_id = pt.clinic_id AND t.id = pt.tag_id
+             WHERE pt.clinic_id = %s AND pt.patient_id = ANY(%s::bigint[]) AND t.is_active ORDER BY t.sort, t.id""",
+                                         [ctx.clinic_id, [p["id"] for p in results]]):
+            found.setdefault(pid, []).append({"name": name, "color": color})
+        for p in results:
+            p["tags"] = found.get(p["id"], [])
+    return results
+
+
 def _with_owed(ctx, results):
     """Each result's balance, for those who see money (desk review 3, 9): one grouped statement for the page."""
+    _with_tags(ctx, results)
     if results and ctx.can("money.view"):
         from billing.selectors import balances
 
@@ -346,10 +364,23 @@ def patients_page(request, ctx):
 
     today = business_day(ctx.clinic)
     query = request.GET.get("q", "")[:60]
-    results = _with_owed(ctx, selectors.search(ctx, query, today)) if query else None
-    recent = None if query else _with_owed(ctx, selectors.recent(ctx, today))
+    # The tags on top (Saged, 2026-11-19): a tap shows the patients who carry it.
+    from patients import tags as patient_tags
+
+    all_tags = patient_tags.tags(ctx)
+    tag = next((t for t in all_tags if str(t["id"]) == request.GET.get("tag", "")), None)
+    if tag is not None:
+        ids = patient_tags.patients_with_tag(ctx, tag["id"])
+        results = _with_owed(ctx, selectors.by_ids(ctx, ids, today)) or None  # none: "no patient has this tag"
+    else:
+        results = _with_owed(ctx, selectors.search(ctx, query, today)) if query else None
+    recent = None if query or tag else _with_owed(ctx, selectors.recent(ctx, today))
+    from patients import services as patient_services
+
+    hidden = patient_services.hidden(ctx) if ctx.membership.is_owner else []
     return render(request, "web/patients.html", {
-        "ctx": ctx, "nav_active": "patients", "q": query, "results": results, "recent": recent, "perms": _perms(ctx),
+        "ctx": ctx, "nav_active": "patients", "q": query, "results": results, "recent": recent, "hidden": hidden, "perms": _perms(ctx),
+        "all_tags": all_tags, "tag": tag,
         **_dialog_context(ctx, today)})
 
 
@@ -416,11 +447,22 @@ def patient_page(request, ctx, patient_id):
         "summary": _visit_summary(ctx, patient.id), "plans": plans, "files": files,
         "statement": _statement(ctx, patient.id) if ctx.can("money.view") else None,
         "installments": _installments(ctx, patient.id),
+        "patient_tags": _patient_tags(ctx, patient.id),
         "method_names": dict(_labels()["methods"]),
         "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
 
 
 FILES_PAGE = 24
+
+
+def _patient_tags(ctx, patient_id):
+    """The patient's tags and the place's active ones, for the file's tag dialog (Saged, 2026-11-19)."""
+    from patients import tags
+
+    mine = tags.patient_tags(ctx, patient_id)
+    ids = {t["id"] for t in mine}
+    return {"mine": mine, "all": [{**t, "on": t["id"] in ids} for t in tags.tags(ctx)],
+            "manage": ctx.can("patients.tags"), "edit": ctx.can("patients.edit")}
 
 
 def _installments(ctx, patient_id):
