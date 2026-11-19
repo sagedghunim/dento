@@ -68,7 +68,8 @@ class Command(BaseCommand):
         out.append(f"{added} discount types")
         if sql.row(ctx, 'SELECT 1 FROM "audit_change" WHERE clinic_id = %s AND request_id = %s '
                         "AND action IN ('invoice.discount', 'payment.refund') LIMIT 1", [clinic.id, "seed_extras"]):
-            return ", ".join(out) + " (the rest was done before)"
+            out.append("discounts and refunds were done before")
+            return ", ".join(self.installments(ctx, clinic, owner, out))
         types = [t for t in discounts.types(ctx) if t["is_active"]]
 
         # 2. Discounts on some open bills that still have something to pay.
@@ -99,11 +100,14 @@ class Command(BaseCommand):
                 pass
         out.append(f"{refunded} refunds")
 
+        return ", ".join(self.installments(ctx, clinic, owner, out))
+
+    def installments(self, ctx, clinic, owner, out):
         # 4. Installments for patients who owe the most; the first ones started weeks ago, so some parts are late.
         today = business_day(clinic)
         owing = sql.rows(ctx, """
             SELECT patient_id, sum(total - paid) FROM "billing_invoice" WHERE clinic_id = %s AND status = 'open'
-               AND paid < total GROUP BY patient_id HAVING sum(total - paid) >= 60000 ORDER BY 2 DESC LIMIT 5""",
+               AND paid < total GROUP BY patient_id HAVING sum(total - paid) >= 30000 ORDER BY 2 DESC LIMIT 5""",
                          [clinic.id])
         plans = 0
         for n, (patient_id, owed) in enumerate(owing):
@@ -128,4 +132,4 @@ class Command(BaseCommand):
                              "VALUES (%s, %s, %s, %s, %s, %s)", [clinic.id, plan_id, patient_id, position, day, amount])
             plans += 1
         out.append(f"{plans} installment plans")
-        return ", ".join(out)
+        return out
