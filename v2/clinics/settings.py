@@ -18,7 +18,11 @@ DEFAULTS = {
     # An optional deposit taken with a booking (Saged, 2026-11-16): off by default; the amount in piastres.
     "booking_deposit": False,
     "booking_deposit_amount": 0,
+    # The consultation costs nothing when a procedure is done in the same visit (Saged, 2026-11-19): off by default.
+    "consultation_free_with_procedure": False,
 }
+# Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
+OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "consultation_free_with_procedure"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
 
 _RULES = {
@@ -33,6 +37,7 @@ _RULES = {
     "booking_step_minutes": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 120 and v % 5 == 0,
     "booking_deposit": lambda v: isinstance(v, bool),
     "booking_deposit_amount": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_DEPOSIT,
+    "consultation_free_with_procedure": lambda v: isinstance(v, bool),
 }
 
 

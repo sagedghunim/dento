@@ -241,3 +241,33 @@ def file_payload(patient, today):
 def summary_payload(patient):
     """What writes answer with: no file details beyond what the client sent (design 10, T9)."""
     return {"id": patient.id, "file_no": patient.file_no, "full_name": patient.full_name, "phone": patient.phone}
+
+
+RECENT_LIMIT = 30
+
+
+def recent(ctx, today):
+    """The patients seen last, newest first, with how many finished visits: what the Patients page opens on (Saged,
+    2026-11-17). A doctor gets their own (their finished visits, grouped); everyone else the clinic's patient
+    stats, one row per patient. Then the usual details (one statement)."""
+    from scheduling.rules import own_doctor
+
+    doctor = own_doctor(ctx)
+    if doctor is not None:
+        rows = sql.rows(ctx, """
+            SELECT a.patient_id, max(a.day) AS last_day, count(*) FROM "scheduling_appointment" a
+             WHERE a.clinic_id = %s AND a.doctor_id = %s AND a.status = 'done'
+             GROUP BY a.patient_id ORDER BY last_day DESC, a.patient_id DESC LIMIT %s""",
+                        [ctx.clinic_id, doctor, RECENT_LIMIT])
+    else:
+        rows = sql.rows(ctx, 'SELECT patient_id, last_day, visits FROM "summaries_patient" WHERE clinic_id = %s '
+                             "ORDER BY last_day DESC, patient_id DESC LIMIT %s", [ctx.clinic_id, RECENT_LIMIT])
+    if not rows:
+        return []
+    found = {r[0]: r for r in sql.rows(ctx, f'SELECT {_SUMMARY} FROM "patients_patient" WHERE clinic_id = %s '
+                                            "AND id = ANY(%s::bigint[])", [ctx.clinic_id, [r[0] for r in rows]])}
+    items = _with_details(ctx, [found[r[0]] for r in rows if r[0] in found], today)
+    counts = {r[0]: r[2] for r in rows}
+    for item in items:
+        item["visits"] = counts.get(item["id"], 0)
+    return items

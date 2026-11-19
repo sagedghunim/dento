@@ -1035,7 +1035,8 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 /* ---------- the visit's small bill, "what comes next" and the Follow-ups list (Saged, 2026-11-13) ---------- */
 .proc-search { margin-block-start: 12px; max-width: 420px; }
 [data-proc-results] { margin-block-start: 8px; }
-[data-proc-results]:empty { display: none; }
+[data-proc-results]:empty, [data-rx-medicines]:empty { display: none; }
+[data-rx-medicines] { margin-block-start: 8px; }
 .proc-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-block-start: 12px; }
 .proc-confirm[hidden] { display: none; }
 .proc-confirm > strong { align-self: center; flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }

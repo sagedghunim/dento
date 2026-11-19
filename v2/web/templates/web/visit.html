@@ -173,10 +173,10 @@
   <div class="dialog-body">
     <div class="rx-picks" data-rx-templates></div>
     <div class="rx-add">
-      <label class="field grow-field">{% translate "Medicine" %}<input name="medicine" list="rx-medicines" dir="auto" autocomplete="off" maxlength="120"></label>
-      <datalist id="rx-medicines" data-rx-medicines></datalist>
+      <label class="field grow-field">{% translate "Medicine" %}<input name="medicine" dir="auto" autocomplete="off" maxlength="120"></label>
       <button type="button" class="btn ghost" data-rx-add>{% translate "Add" %}</button>
     </div>
+    <div class="chips" data-rx-medicines aria-live="polite"></div>
     <ol class="rx-write-lines" data-rx-lines></ol>
     <label class="field">{% translate "Notes (optional)" %}<textarea name="notes" maxlength="1000" dir="auto" rows="2"></textarea></label>
   </div>

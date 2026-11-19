@@ -113,5 +113,6 @@ def team_page(request, ctx):
         from clinics import settings as clinic_settings
 
         effective = clinic_settings.effective(clinic.settings)
-        context["booking"] = {key: effective[key] for key in ("booking_deposit", "booking_deposit_amount")}
+        if ctx.membership.is_owner:  # money policies: the account's owner only (Saged, 2026-11-19)
+            context["booking"] = {key: effective[key] for key in sorted(clinic_settings.OWNER_ONLY)}
     return render(request, "web/team.html", context)

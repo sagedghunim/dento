@@ -944,6 +944,7 @@ def record_procedure(ctx, appointment_id, request):
     if package is not None:
         description = f"{description} - {package['name']}"
     line_id, invoice = billing.add_visit_line(ctx, appointment, "procedure", description, qty, unit_price, from_list)
+    invoice = billing.consultation_rule(ctx, appointment, invoice)  # the owner's free-consultation option
     now = timezone.now()
     record_id = sql.row(ctx, """
         INSERT INTO "clinical_visit_procedure" (clinic_id, appointment_id, patient_id, procedure_id, plan_item_id, tooth,
@@ -1089,7 +1090,8 @@ def remove_procedure(ctx, appointment_id, record_id):
                  ctx.clinic_id, record["plan_item_id"], appointment_id])
     invoice = None
     if record["invoice_line_id"] is not None:
-        invoice = billing.remove_visit_line(ctx, appointment, record["invoice_line_id"])
+        invoice = billing.consultation_rule(ctx, appointment,
+                                            billing.remove_visit_line(ctx, appointment, record["invoice_line_id"]))
     from inventory.services import return_materials
 
     deltas = Deltas()

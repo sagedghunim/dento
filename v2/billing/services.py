@@ -786,3 +786,41 @@ def void_packages(ctx, invoice_id, line_id=None):
     sql.run(ctx, 'UPDATE "billing_patient_package" SET voided_at = %s WHERE clinic_id = %s AND id = ANY(%s::bigint[]) '
                  "AND used = 0 AND voided_at IS NULL", [timezone.now(), ctx.clinic_id, [r[0] for r in rows]])
     return len(rows)
+
+
+# --- A free consultation when a procedure is done in the same visit (Saged, 2026-11-19) ------------------------------
+
+
+def consultation_rule(ctx, appointment, invoice):
+    """Under the appointment's and the invoice's locks, after a procedure line came or went: with the owner's option
+    `consultation_free_with_procedure`, the visit's consultation line costs 0 while the visit has a procedure line,
+    and its list price again when the last one goes. Nothing changes when it would leave more paid than the total
+    (the desk refunds first) or the option is off. Returns the invoice as it now is."""
+    from clinics import settings as clinic_settings
+
+    if invoice is None or invoice["status"] != "open" or appointment["service_id"] is None:
+        return invoice
+    if not clinic_settings.effective(ctx.clinic.settings)["consultation_free_with_procedure"]:
+        return invoice
+    found = sql.row(ctx, """
+        SELECT l.id, l.unit_price, l.qty, s.price FROM "billing_invoice_line" l
+          JOIN "clinics_service" s ON s.clinic_id = l.clinic_id AND s.id = l.service_id
+         WHERE l.clinic_id = %s AND l.invoice_id = %s AND l.kind = 'service' AND l.service_id = %s
+           AND s.kind = 'consultation' ORDER BY l.id LIMIT 1""", [ctx.clinic_id, invoice["id"], appointment["service_id"]])
+    if found is None:
+        return invoice
+    line_id, unit_price, qty, list_price = found
+    has_procedure = sql.row(ctx, 'SELECT 1 FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s '
+                                 "AND kind = 'procedure' AND amount > 0 LIMIT 1", [ctx.clinic_id, invoice["id"]])
+    new_price = 0 if has_procedure else list_price
+    if new_price == unit_price:
+        return invoice
+    change = qty * (new_price - unit_price)
+    if change < 0 and not fits(invoice, invoice["total"] + change):
+        return invoice
+    sql.run(ctx, 'UPDATE "billing_invoice_line" SET unit_price = %s, amount = %s WHERE clinic_id = %s AND id = %s',
+            [new_price, qty * new_price, ctx.clinic_id, line_id])
+    after = move_subtotal(ctx, invoice["id"], change)
+    record_change(ctx, "invoice_line.consultation_free" if new_price == 0 else "invoice_line.consultation_charged",
+                  "invoice_line", line_id, before={"unit_price": unit_price}, after={"unit_price": new_price})
+    return after

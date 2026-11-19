@@ -695,11 +695,12 @@ function initSettings() {
 function initBooking() {
   const card = document.querySelector("[data-booking-card]");
   if (!card) return;
-  const now = readJson("booking-data") || { booking_deposit: false, booking_deposit_amount: 0 };
+  const now = readJson("booking-data") || { booking_deposit: false, booking_deposit_amount: 0, consultation_free_with_procedure: false };
   const form = card.querySelector("[data-booking-form]");
   const on = form.elements.namedItem("booking_deposit");
   const amount = form.elements.namedItem("booking_deposit_amount");
   const amountBox = card.querySelector("[data-deposit-amount]");
+  const freeConsultation = form.elements.namedItem("consultation_free_with_procedure");
   const submitter = new Submitter(card);
   amount.value = now.booking_deposit_amount ? amountInput(now.booking_deposit_amount) : "";
   on.addEventListener("change", () => { amountBox.hidden = !on.checked; if (on.checked && !amount.value) amount.focus(); });
@@ -709,7 +710,7 @@ function initBooking() {
     if (card.dataset.busy) return;
     let body = submitter.unknown && submitter.unknown.body;
     if (!body) {
-      const changes = { booking_deposit: on.checked };
+      const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked };
       if (on.checked || amount.value.trim()) {
         const piastres = parsePiastres(amount.value);
         if (!piastres || piastres <= 0) { submitter.say(t("deposit_need_amount")); amount.focus(); return; }
@@ -725,6 +726,7 @@ function initBooking() {
       const fresh = result.data.settings;
       now.booking_deposit = fresh.booking_deposit;
       now.booking_deposit_amount = fresh.booking_deposit_amount;
+      now.consultation_free_with_procedure = fresh.consultation_free_with_procedure;
       toast(t("settings_saved"));
       return;
     }

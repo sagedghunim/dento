@@ -6,7 +6,7 @@
       <bdi class="who" dir="auto">{{ p.name }}</bdi>
       {% if p.today %}<span class="pill amber tag"><svg class="icon"><use href="#i-calendar"/></svg>{% translate "Booked today" %} · {% translate "Turn" %} {{ p.today.queue_no|num }}</span>{% endif %}
       {% if p.owed %}<span class="pill amber tag"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Owed from before:" %} {{ p.owed|money }}</span>{% endif %}
-      <span class="meta">{% translate "File" %} {{ p.file_no|num }}{% if p.phone %} · {{ p.phone|phone }}{% endif %}{% if p.age is not None %} · {% translate "Age:" %} {{ p.age|digits }}{% endif %}{% if p.sex == "m" %} · {% translate "Male" %}{% elif p.sex == "f" %} · {% translate "Female" %}{% endif %}{% if p.last_visit %} · {% translate "Last visit:" %} {{ p.last_visit|shortday }}{% endif %}</span>
+      <span class="meta">{% translate "File" %} {{ p.file_no|num }}{% if p.phone %} · {{ p.phone|phone }}{% endif %}{% if p.age is not None %} · {% translate "Age:" %} {{ p.age|digits }}{% endif %}{% if p.sex == "m" %} · {% translate "Male" %}{% elif p.sex == "f" %} · {% translate "Female" %}{% endif %}{% if p.last_visit %} · {% translate "Last visit:" %} {{ p.last_visit|shortday }}{% endif %}{% if p.visits %} · {% translate "Visits:" %} {{ p.visits|digits }}{% endif %}</span>
     {% if pick %}</button>{% else %}</a>{% endif %}
   </li>
   {% endfor %}

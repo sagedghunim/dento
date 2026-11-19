@@ -16,6 +16,7 @@ if (searchForm) {
   const input = searchForm.elements.namedItem("q");
   const results = document.querySelector("[data-results]");
   const status = document.querySelector("[data-search-status]");
+  const firstList = input.value.trim() ? null : [...results.childNodes];  // the patients seen lately
   let controller = null;
   let timer = null;
   async function search() {
@@ -24,7 +25,11 @@ if (searchForm) {
     const url = new URL(window.location.href);
     if (q) url.searchParams.set("q", q); else url.searchParams.delete("q");
     window.history.replaceState(null, "", url);
-    if (q.length < 2) { status.textContent = ""; return; }
+    if (q.length < 2) {
+      status.textContent = "";
+      if (!q && firstList) results.replaceChildren(...firstList);
+      return;
+    }
     controller = new AbortController();
     status.textContent = t("searching");
     const result = await fetchText(`/patients/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });

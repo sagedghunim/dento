@@ -337,8 +337,9 @@ def patients_page(request, ctx):
     today = business_day(ctx.clinic)
     query = request.GET.get("q", "")[:60]
     results = _with_owed(ctx, selectors.search(ctx, query, today)) if query else None
+    recent = None if query else _with_owed(ctx, selectors.recent(ctx, today))
     return render(request, "web/patients.html", {
-        "ctx": ctx, "nav_active": "patients", "q": query, "results": results, "perms": _perms(ctx),
+        "ctx": ctx, "nav_active": "patients", "q": query, "results": results, "recent": recent, "perms": _perms(ctx),
         **_dialog_context(ctx, today)})
 
 

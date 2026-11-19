@@ -8,6 +8,7 @@ import { discardPending, errorMessage, fetchText, get, isOk, membership, newKey,
 import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { asciiDigits, localDigits, moneyText } from "./numbers.js";
 import { alertMessage, renderPending, toast } from "./shell.js";
+import { soundsLike } from "./sounds.js";
 import { t } from "./strings.js";
 
 const data = JSON.parse(document.getElementById("visit-data").textContent);
@@ -569,7 +570,6 @@ if (rxDialog) {
     if (!isOk(rx) || !isOk(meds)) { writing.say(errorMessage(isOk(rx) ? meds : rx, t("failed"))); return; }
     library = true;
     medicines = meds.data.items;
-    list.replaceChildren(...medicines.map((m) => { const o = el("option"); o.value = m.name; return o; }));
     picks.replaceChildren(...rx.data.items.map((r) => {
       const b = el("button", "btn ghost", r.name);
       b.type = "button";
@@ -583,18 +583,46 @@ if (rxDialog) {
     }));
   }
 
-  rxDialog.querySelector("[data-rx-add]").addEventListener("click", () => {
-    const input = form.elements.namedItem("medicine");
-    const typed = input.value.trim();
-    if (!typed) return;
-    const m = medicines.find((x) => x.name.toLocaleLowerCase() === typed.toLocaleLowerCase());
-    addLine(m ? { medicine_id: m.id, name: m.name, strength: m.strength, dose: m.default_dose, note: m.default_note }
-      : { name: typed });
-    input.value = "";
-    input.focus();
+  // Suggestions as the doctor types (Saged, 2026-11-19): our own list, not the browser's <datalist>, whose
+  // drop-down froze on Windows. From one letter; name or active ingredient; spelling variants match; a word that
+  // starts with what was typed comes first; at most 8. A tap adds the medicine.
+  const medInput = form.elements.namedItem("medicine");
+  const plainText = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  const lineOf = (m) => ({ medicine_id: m.id, name: m.name, strength: m.strength, dose: m.default_dose, note: m.default_note });
+  function addTyped(m) {
+    const typed = medInput.value.trim();
+    if (!m && !typed) return;
+    m = m || medicines.find((x) => plainText(x.name) === plainText(typed));
+    addLine(m ? lineOf(m) : { name: typed });
+    medInput.value = "";
+    list.replaceChildren();
+    medInput.focus();
+  }
+  medInput.addEventListener("input", () => {
+    const q = plainText(medInput.value.trim());
+    const rank = (m) => {
+      const text = plainText(`${m.name} ${m.generic || ""}`);
+      if (!q) return -1;
+      if (!text.includes(q)) return soundsLike(medInput.value, m.name) ? 3 : soundsLike(medInput.value, m.generic) ? 4 : -1;
+      return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
+    };
+    const found = medicines.map((m) => [rank(m), m]).filter(([r]) => r >= 0)
+      .sort((a, b) => a[0] - b[0]).slice(0, 8).map(([, m]) => m);
+    list.replaceChildren(...found.map((m) => {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      const name = el("bdi", null, [m.name, m.strength].filter(Boolean).join(" "));
+      name.dir = "auto";
+      b.append(name);
+      b.addEventListener("click", () => addTyped(m));
+      return b;
+    }));
   });
-  form.elements.namedItem("medicine").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); rxDialog.querySelector("[data-rx-add]").click(); }
+  rxDialog.querySelector("[data-rx-add]").addEventListener("click", () => addTyped(null));
+  medInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); addTyped(null); }
+    if (event.key === "ArrowDown") { const first = list.querySelector("button"); if (first) { event.preventDefault(); first.focus(); } }
   });
 
   form.addEventListener("submit", async (event) => {

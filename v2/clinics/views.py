@@ -101,6 +101,9 @@ def clinic_settings_view(request, ctx, data):
     day_changes = _clean_day_settings({key: changes[key] for key in DAY_SETTINGS if key in changes})
     changes = {key: value for key, value in changes.items() if key not in DAY_SETTINGS}
     clinic_settings.validated(changes, ctx.clinic.kind)
+    if set(changes) & clinic_settings.OWNER_ONLY and not ctx.membership.is_owner:
+        raise ApiError("forbidden", _("Only the account's owner can change this."), 403,
+                       fields={key: "owner" for key in set(changes) & clinic_settings.OWNER_ONLY})
     clinic = Clinic.objects.select_for_update(no_key=True).get(id=ctx.clinic_id)
     current = {**clinic_settings.effective(clinic.settings), "timezone": clinic.timezone,
                "day_ends_at": clinic.day_ends_at.strftime("%H:%M")}

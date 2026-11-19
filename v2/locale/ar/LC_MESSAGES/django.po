@@ -1161,10 +1161,6 @@ msgstr "الاسم أو الموبايل أو رقم الملف"
 msgid "Search"
 msgstr "بحث"
 
-msgid ""
-"Type at least two letters or digits. Lists never load every patient at once."
-msgstr "اكتب حرفين أو رقمين على الأقل. القوائم لا تعرض كل المرضى مرة واحدة."
-
 msgid "Receipt"
 msgstr "إيصال"
 
@@ -3693,9 +3689,6 @@ msgstr "المريض الموجود دلوقتي بيدفع في الزيارة�
 msgid "Ask for a deposit when booking"
 msgstr "اطلب عربون مع الحجز"
 
-msgid "Booking"
-msgstr "الحجز"
-
 msgid "Deposit"
 msgstr "عربون"
 
@@ -3934,3 +3927,28 @@ msgstr "مع المساعد"
 
 msgid "with the doctor"
 msgstr "عند الدكتور"
+
+msgid "Seen lately"
+msgstr "اتشافوا مؤخرًا"
+
+msgid "No patients yet. Add one with New patient, or book a visit."
+msgstr "مفيش مرضى لسه. ضيف واحد من «مريض جديد» أو احجز زيارة."
+
+msgid "Visits:"
+msgstr "الزيارات:"
+
+msgid "Booking and bills"
+msgstr "الحجز والفواتير"
+
+msgid "No consultation fee when a procedure is done in the same visit"
+msgstr "الكشف مجاني لو اتعمل إجراء في نفس الزيارة"
+
+msgid ""
+"For example: a patient books a consultation and gets a root canal in it. "
+"With this on, the bill has the root canal only. Off, it has both."
+msgstr ""
+"مثال: مريض حجز كشف واتعمله حشو عصب في نفس الزيارة. لو الاختيار ده شغال، "
+"الفاتورة فيها حشو العصب بس. لو مقفول، فيها الاتنين."
+
+msgid "Only the account's owner can change this."
+msgstr "صاحب الحساب بس هو اللي يقدر يغيّر ده."

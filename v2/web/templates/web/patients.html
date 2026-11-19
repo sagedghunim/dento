@@ -16,7 +16,7 @@
     <button class="btn" type="submit"><svg class="icon"><use href="#i-search"/></svg>{% translate "Search" %}</button>
   </form>
   <p class="muted" data-search-status role="status"></p>
-  <div data-results>{% if results is not None %}{% include "web/_patient_results.html" %}{% else %}<p class="empty-note">{% translate "Type at least two letters or digits. Lists never load every patient at once." %}</p>{% endif %}</div>
+  <div data-results>{% if results is not None %}{% include "web/_patient_results.html" %}{% elif recent %}<h2 class="list-title">{% translate "Seen lately" %}</h2>{% include "web/_patient_results.html" with results=recent %}{% else %}<p class="empty-note">{% translate "No patients yet. Add one with New patient, or book a visit." %}</p>{% endif %}</div>
 </section>
 {% if perms.edit_patients %}{% include "web/_dialog_patient.html" %}{% endif %}
 {{ config|json_script:"clinic-config" }}
