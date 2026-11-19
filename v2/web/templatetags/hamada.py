@@ -66,6 +66,14 @@ def nav_sections(ctx):
 
 
 @register.simple_tag
+def alerts_unseen(ctx):
+    """The owner's new alerts, for the side bar's count (web/alerts.py)."""
+    from web import alerts
+
+    return alerts.unseen(ctx) if ctx is not None else 0
+
+
+@register.simple_tag
 def money_pattern():
     """For scripts. {% translate %} escapes "%" in literals, so it can't look this one up."""
     from django.utils.translation import gettext as _

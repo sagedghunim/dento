@@ -15,7 +15,7 @@
   <nav class="main-nav" aria-label="{% translate "Main" %}">
     {% for section in sections %}
       {% if section.ready %}
-      <a class="nav-btn" href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}</a>
+      <a class="nav-btn" href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}{% if section.key == "alerts" %}{% alerts_unseen ctx as fresh %}{% if fresh %} <span class="nav-count num">{{ fresh|digits }}</span>{% endif %}{% endif %}</a>
       {% else %}
       <span class="nav-btn soon" aria-disabled="true">{{ section.label }} <span class="nav-soon">{% translate "Soon" %}</span></span>
       {% endif %}

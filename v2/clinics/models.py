@@ -87,6 +87,8 @@ class Membership(models.Model):
     # The account lives in the directory database: a plain integer, no foreign key (design 3.3).
     user_id = models.BigIntegerField()
     role = models.CharField(max_length=10, choices=Role.choices)
+    # The owner opened their alerts up to here (web/alerts.py, Saged 2026-11-19); newer ones are counted.
+    alerts_seen_at = models.DateTimeField(null=True, blank=True)
     display_name = models.CharField(max_length=120)
     display_name_en = models.CharField(max_length=120, blank=True, default="", db_default="")
     title = models.CharField(max_length=120, blank=True, default="")

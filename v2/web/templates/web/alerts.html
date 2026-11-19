@@ -1,0 +1,27 @@
+{% extends "web/base.html" %}{% load i18n hamada %}
+{% block title %}{% translate "Alerts" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Alerts" %}</h1>
+  <p>{% translate "What the team did with money and records in the last two months: removed procedures and bill lines, discounts, refunds, voided bills, the register short or over, price changes and stock counts." %}</p>
+</div>
+<section class="card">
+  {% if items %}
+  <ul class="alert-list">
+    {% for a in items %}
+    <li class="alert-row level-{{ a.level }}{% if a.new %} is-new{% endif %}">
+      <div class="alert-main">
+        <p class="alert-what"><strong>{{ a.what }}</strong>{% if a.new %} <span class="pill amber">{% translate "New" %}</span>{% endif %}</p>
+        <p class="muted">
+          <bdi dir="auto">{{ a.who }}</bdi> · {{ a.at|shortday }} · {{ a.at|clock }}
+          {% if a.patient %} · {% if a.patient_id %}<a href="/patients/{{ a.patient_id }}"><bdi dir="auto">{{ a.patient }}</bdi></a>{% else %}<bdi dir="auto">{{ a.patient }}</bdi>{% endif %}{% endif %}
+          {% if a.detail %} · <bdi dir="auto">{{ a.detail }}</bdi>{% endif %}
+        </p>
+      </div>
+      {% if a.amount is not None %}<p class="alert-amount num">{% if a.before_amount is not None %}{{ a.before_amount|money }} → {% endif %}{{ a.amount|money }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty-note">{% translate "Nothing to report. The team hasn't removed, discounted or refunded anything lately." %}</p>{% endif %}
+</section>
+{% endblock %}

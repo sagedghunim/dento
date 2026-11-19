@@ -2,10 +2,11 @@
 
 from django.urls import path
 
-from . import finance_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
+from . import alerts, finance_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
 
 urlpatterns = [
     path("today", pages.today_page, name="today"),
+    path("alerts", alerts.alerts_page, name="alerts"),
     path("today/queue", pages.today_queue, name="today-queue"),
     path("today/walk-in", pages.walk_in_defaults, name="walk-in-defaults"),
     path("patients", pages.patients_page, name="patients"),

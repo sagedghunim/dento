@@ -1120,3 +1120,14 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .dated-card { margin-block-end: 14px; }
 .dated-visit { margin-block-start: 12px; border-block-start: 1px solid var(--line); padding-block-start: 10px; }
 .tooth.lit { background: var(--amber-tint); border-color: var(--amber); }
+/* The owner's alerts (Saged, 2026-11-19) */
+.nav-count { display: inline-block; min-width: 1.6em; padding: 0 6px; margin-inline-start: 6px; border-radius: 999px; background: var(--amber); color: #111; font-size: .8rem; text-align: center; }
+.alert-list { list-style: none; margin: 0; padding: 0; }
+.alert-row { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 12px; border-inline-start: 4px solid var(--line); border-block-end: 1px solid var(--line); }
+.alert-row.level-bad { border-inline-start-color: var(--red, #d64545); }
+.alert-row.level-warn { border-inline-start-color: var(--amber); }
+.alert-row.level-info { border-inline-start-color: var(--teal); }
+.alert-row.is-new { background: var(--amber-tint); }
+.alert-row p { margin: 0; }
+.alert-main { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.alert-amount { font-weight: 700; white-space: nowrap; }

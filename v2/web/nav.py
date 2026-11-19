@@ -28,13 +28,15 @@ SECTIONS = (
     Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True),  # M3
     Section("prescription", _("Prescription"), "/prescriptions", ("settings.medicines",), True),           # M2
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
+    # The owner's alerts (Saged, 2026-11-19): "owner" is not a code; visible() reads it as the owner role.
+    Section("alerts", _("Alerts"), "/alerts", ("owner",), True),
     Section("team", _("Team & settings"), "/team", ("team.manage", "settings.manage", "procedures.record"), True),               # M3
 )
 
 
 # The owner's side bar (Saged, 2026-11-13), in this order. A solo owner sees every section, as SECTIONS orders them.
-MANAGER_SECTIONS = ("overview", "finances", "team", "patients")
-TREATING_OWNER_SECTIONS = ("today", "prescription", "overview", "finances", "team", "patients")
+MANAGER_SECTIONS = ("overview", "alerts", "finances", "team", "patients")
+TREATING_OWNER_SECTIONS = ("today", "prescription", "overview", "alerts", "finances", "team", "patients")
 
 
 def owner_mode(ctx):
@@ -52,7 +54,9 @@ def is_manager(ctx):
 
 def visible(ctx):
     """The sections this person may see, in order."""
-    shown = [section for section in SECTIONS if any(ctx.can(code) for code in section.codes)]
+    owner = getattr(ctx, "membership", None) is not None and ctx.membership.is_owner
+    shown = [section for section in SECTIONS
+             if any(ctx.can(code) or (code == "owner" and owner) for code in section.codes)]
     keys = {"manager": MANAGER_SECTIONS, "doctor": TREATING_OWNER_SECTIONS}.get(owner_mode(ctx))
     if keys:
         order = {key: i for i, key in enumerate(keys)}

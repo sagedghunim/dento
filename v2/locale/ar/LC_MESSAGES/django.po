@@ -4026,3 +4026,57 @@ msgstr "الزيارة دي ببلاش، فمفيش عربون."
 
 msgid "Remaining"
 msgstr "الباقي"
+
+msgid "Alerts"
+msgstr "التنبيهات"
+
+msgid "The system"
+msgstr "السيستم"
+
+msgid "Removed a recorded procedure"
+msgstr "شال إجراء بعد ما اتسجّل"
+
+msgid "Removed a line from a bill"
+msgstr "شال بند من فاتورة"
+
+msgid "Gave a discount"
+msgstr "عمل خصم"
+
+msgid "Voided a bill"
+msgstr "لغى فاتورة"
+
+#, python-format
+msgid "Bill %(number)s"
+msgstr "فاتورة %(number)s"
+
+msgid "Refunded money to a patient"
+msgstr "رجّع فلوس لعيان"
+
+msgid "The register was short"
+msgstr "الخزنة طلعت ناقصة"
+
+msgid "The register was over"
+msgstr "الخزنة طلعت زيادة"
+
+msgid "Changed a price"
+msgstr "غيّر سعر"
+
+msgid "Voided an expense"
+msgstr "لغى مصروف"
+
+msgid "A stock count changed the quantity"
+msgstr "الجرد غيّر الكمية في المخزن"
+
+msgid ""
+"What the team did with money and records in the last two months: removed "
+"procedures and bill lines, discounts, refunds, voided bills, the register "
+"short or over, price changes and stock counts."
+msgstr ""
+"اللي الفريق عمله في الفلوس والسجلات آخر شهرين: إجراءات أو بنود فواتير "
+"اتشالت، وخصومات، وفلوس اترجّعت، وفواتير اتلغت، والخزنة لو ناقصة أو زيادة، "
+"وتغيير أسعار، وجرد المخزن."
+
+msgid ""
+"Nothing to report. The team hasn't removed, discounted or refunded anything "
+"lately."
+msgstr "مفيش حاجة. الفريق ما شالش ولا خصم ولا رجّع فلوس الفترة اللي فاتت."
