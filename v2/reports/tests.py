@@ -20,7 +20,8 @@ class TagTests(M2TestCase):
         dup = call(self.owner, "POST", "/api/v1/patient-tags", {"name": "VIP"})
         self.assertEqual((dup.status_code, dup.json()["error"]["code"]), (409, "duplicate"))
         self.assertEqual(call(self.owner, "POST", "/api/v1/patient-tags", {"name": "x", "color": "red"}).status_code, 400)
-        self.assertEqual(call(self.desk, "POST", "/api/v1/patient-tags", {"name": "Desk"}).status_code, 403)
+        # The desk adds tags too (Saged, 2026-11-19).
+        self.assertEqual(call(self.desk, "POST", "/api/v1/patient-tags", {"name": "Desk"}).status_code, 201)
         one = self.book().json()["appointment"]["patient"]["id"]
         self.book(new_patient=new_patient(full_name="Mohamed Ali", phone="01099999999"))
         r = call(self.desk, "PUT", f"/api/v1/patients/{one}/tags", {"tag_ids": [vip["id"], insured["id"]]})
