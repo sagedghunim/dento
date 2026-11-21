@@ -114,7 +114,7 @@ def book(ctx, request, deltas=None):
     if request["patient_id"] is not None:
         mine, mine_params = rules.patient_sql(ctx, "p.clinic_id", "p.id")  # another doctor's patient is 404 to a doctor
         found = sql.row(ctx, f'SELECT p.id, p.full_name, p.phone, p.file_no, {rules.history_sql("p.id")} '
-                             f'FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s{mine}',
+                             f'FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s AND p.archived_at IS NULL{mine}',
                         [*rules.history_params(ctx, doctor.doctor_id, day, rules.follow_up_window(clinic)),
                          ctx.clinic_id, request["patient_id"], *mine_params])
         if found is None:

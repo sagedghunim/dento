@@ -209,13 +209,13 @@ export function initBook({ onBooked, defaults } = {}) {
   const qtyBox = form.querySelector("[data-qty-box]");
   const qty = () => {
     const c = form.querySelector('[name="service"]:checked');
-    if (!c || c.dataset.kind !== "procedure") return 1;
+    if (!c || c.dataset.kind !== "procedure" || !field("qty")) return 1;
     const n = Number(asciiDigits(field("qty").value.trim()));
     return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
   };
   function showQty() {
     const c = form.querySelector('[name="service"]:checked');
-    qtyBox.hidden = !c || c.dataset.kind !== "procedure";
+    if (qtyBox) qtyBox.hidden = !c || c.dataset.kind !== "procedure";
   }
 
   function filterBySection() {
@@ -404,7 +404,7 @@ export function initBook({ onBooked, defaults } = {}) {
     confirmOther = false;
     hideConflict(dialog);
     if (field("amount")) delete field("amount").dataset.touched;
-    qtyBox.hidden = true;
+    if (qtyBox) qtyBox.hidden = true;
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
     // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.
     try {

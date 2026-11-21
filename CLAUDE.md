@@ -53,3 +53,11 @@ python manage.py runserver
 7. Patients are matched by exact name, so two people with one name share a record. Add phone numbers before real use.
 8. Read access to patient data is not logged; only sensitive changes are.
 9. This holds health data. Get a qualified review of Egypt's data protection rules before real patients.
+
+
+## Session handoff (automatic, never wait to be asked)
+- At the start of every session, read `HANDOFF.md` first, treat it as the current truth, don't ask the user to re-explain, and start on its **Next step**.
+- When the session gets long (many turns, big files or many tool calls), a task is finished, or the user says handoff / wrap up / new chat: rewrite `HANDOFF.md` at the project root (replace it, never add a second one), then say in one line that it's saved and to start a fresh session (`/clear` or a new chat).
+- Build it from this session only; no extra searches or file reads.
+- Sections, exactly: **Project** (one line + stack), **State now** (works / half-done / broken), **Decisions** (choice + reason, one line each), **Key paths** (files, commands, env names), **Next step** (one concrete action), **Open questions**.
+- Under ~400 words, bullet fragments, English, no history of how we got here. Write "unknown" instead of guessing. Never include passwords, keys or tokens.

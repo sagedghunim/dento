@@ -37,13 +37,14 @@
     <fieldset class="group" data-sections>
       <legend>{% translate "Section" %}</legend>
       <div class="chips">{% for s in config.sections %}<label class="chip"><input type="radio" name="section" value="{{ s.id }}"><span><bdi dir="auto">{{ s.name }}</bdi></span></label>{% endfor %}</div>
-      <label class="field qty-field" data-qty-box hidden>{% translate "How many (for example 3 fillings)" %}<input name="qty" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr"></label>
     </fieldset>
     {% endif %}
 
     <fieldset class="group">
       <legend>{% translate "Service" %}</legend>
       <div class="chips" data-services>{% for s in config.services %}<label class="chip" data-section="{{ s.section_id|default_if_none:'' }}"><input type="radio" name="service" value="{{ s.id }}" data-kind="{{ s.kind }}"><span><bdi dir="auto">{{ s.name }}</bdi></span></label>{% endfor %}</div>
+      {# Always rendered, also for a clinic with one section (Instinct review, 2026-11-21): book.js reads it on every service pick, and a missing box crashed the dialog. #}
+      <label class="field qty-field" data-qty-box hidden>{% translate "How many (for example 3 fillings)" %}<input name="qty" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr"></label>
     </fieldset>
 
     {% include "web/_when.html" with prefix="book" %}

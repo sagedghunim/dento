@@ -2,6 +2,7 @@ from django.urls import include, path
 
 from accounts import views as accounts
 from clinics import views as clinics
+from core import cron
 from core import views as core
 from web import views as web
 
@@ -10,6 +11,7 @@ api = "api/v1/"
 urlpatterns = [
     path("healthz", core.healthz),
     path("readyz", core.readyz),
+    path("cron/daily", cron.daily),  # Vercel Cron, see core/cron.py
     # Pages (design 7.3)
     path("", web.home, name="home"),
     path("login", web.login_page, name="login"),

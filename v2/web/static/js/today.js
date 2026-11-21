@@ -247,7 +247,12 @@ function tooSoon(row) {
   return true;
 }
 window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
-card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
+card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); setTimeout(flushHeld, 0); });
+// A row held because the mouse was on it is updated once the mouse moves off that row (Instinct review, 2026-11-21).
+card.addEventListener("pointerout", (event) => {
+  const row = event.target.closest && event.target.closest(".appt");
+  if (row && !row.contains(event.relatedTarget) && heldRows.has(row.dataset.id)) setTimeout(flushHeld, 0);
+});
 if (strip) strip.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); });
 card.addEventListener("focusout", () => setTimeout(flushHeld, 0));
 card.addEventListener("toggle", (event) => {
@@ -274,7 +279,7 @@ function held(row) {
 function flushDeferred() {
   if (deferred && !hot()) { const html = deferred; deferred = null; apply(html); }
 }
-setInterval(flushDeferred, 700);
+setInterval(() => { flushDeferred(); if (heldRows.size) flushHeld(); }, 700);
 
 function flushHeld() {
   const before = heldRows.size ? snapshot() : null;
