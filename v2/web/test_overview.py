@@ -46,7 +46,7 @@ class OwnerNavTests(OverviewCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(r["Location"], "/overview")
         html = owner.get("/overview").content.decode()
-        self.assertEqual(nav_links(html), ["/overview", "/alerts", "/finances", "/team", "/patients"])
+        self.assertEqual(nav_links(html), ["/overview", "/alerts", "/finances", "/prices", "/team", "/patients"])
         self.assertNotIn("data-book-patient", owner.get("/patients").content.decode())  # lookup only
         self.assertEqual(owner.get("/today")["Location"], "/overview")
 
@@ -55,7 +55,7 @@ class OwnerNavTests(OverviewCase):
         r = owner.get("/")
         self.assertEqual(r.status_code, 200)
         html = r.content.decode()
-        self.assertEqual(nav_links(html), ["/", "/prescriptions", "/overview", "/alerts", "/finances", "/team", "/patients"])
+        self.assertEqual(nav_links(html), ["/", "/prescriptions", "/prices", "/overview", "/alerts", "/finances", "/team", "/patients"])
         for marker in ("data-open-walkin", "data-open-book", 'id="walkin-dialog"'):
             self.assertNotIn(marker, html, marker)  # booking stays the desk's
         self.assertEqual(owner.get("/prescriptions").status_code, 200)

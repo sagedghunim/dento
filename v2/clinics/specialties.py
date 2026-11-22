@@ -23,15 +23,17 @@ def recipe(steps):
     return [{"days": days, "label": ar, "label_en": en} for days, ar, en in steps]
 
 
-def _build(name, services, procedures, medicines, templates=(), descriptions=None, descriptions_en=None, follow_ups=None):
+def _build(name, services, procedures, medicines, templates=(), descriptions=None, descriptions_en=None, follow_ups=None,
+           families=None):
     descriptions, descriptions_en, follow_ups = descriptions or {}, descriptions_en or {}, follow_ups or {}
+    families = families or {}
     return {
         "name": name,
         "services": [(ar, en, kind, price * 100, minutes) for ar, en, kind, price, minutes in services],
         "procedures": [{"name_ar": ar, "name_en": en, "category": category, "unit": unit, "price": price * 100,
                         "typical_min": low * 100, "typical_max": high * 100, "condition": condition,
                         "description": descriptions.get(en, ""), "description_en": descriptions_en.get(en, ""),
-                        "follow_up": recipe(follow_ups.get(en, ()))}
+                        "follow_up": recipe(follow_ups.get(en, ())), "family": families.get(en, "")}
                        for ar, en, category, unit, price, low, high, condition in procedures],
         "medicines": [{"name": name_, "generic": generic, "strength": strength, "form": form, "default_dose": dose,
                        "default_note": note, "form_en": english(form), "default_dose_en": english(dose),
@@ -42,7 +44,7 @@ def _build(name, services, procedures, medicines, templates=(), descriptions=Non
 
 
 SPECIALTIES = {"dental": _build(dental.NAME, dental.SERVICES, dental.PROCEDURES, dental.MEDICINES, dental.TEMPLATES,
-                               dental.DESCRIPTIONS, DENTAL_DESCRIPTIONS, dental.FOLLOW_UPS)}
+                               dental.DESCRIPTIONS, DENTAL_DESCRIPTIONS, dental.FOLLOW_UPS, dental.FAMILY_OF)}
 for _code in [*CARDS[1:], "internal"]:
     _spec = others.SPECIALTIES[_code]
     SPECIALTIES[_code] = _build(_spec["name"], _spec["services"], _spec["procedures"], _spec["medicines"],
@@ -51,3 +53,7 @@ for _code in [*CARDS[1:], "internal"]:
 
 def choices():
     return list(SPECIALTIES)
+
+# The price list's main services (Saged, 2026-11-22), in his order: the key on a procedure, its names, its place.
+FAMILY_LABELS = {key: (ar, en) for key, ar, en in dental.FAMILIES}
+FAMILY_ORDER = {key: index for index, (key, _ar, _en) in enumerate(dental.FAMILIES)}

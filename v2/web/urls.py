@@ -2,7 +2,7 @@
 
 from django.urls import path
 
-from . import alerts, file_history, finance_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
+from . import alerts, file_history, finance_pages, price_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
 
 urlpatterns = [
     path("today", pages.today_page, name="today"),
@@ -39,5 +39,6 @@ urlpatterns = [
     path("print/receipts/<int:invoice_id>", pages.receipt_page, name="receipt"),
     path("signup", pages.signup_page, name="signup"),
     path("places/new", pages.place_new_page, name="place-new"),
+    path("prices", price_pages.prices_page, name="prices"),
     path("team", team_pages.team_page, name="team"),
 ]

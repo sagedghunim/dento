@@ -142,7 +142,7 @@ def _open_visit(appointment):
 
 
 # Columns added after clinical 0002 (design G3, then the follow-up recipe): that older migration skips them.
-ENGLISH_COLUMNS = {"clinical_procedure": {"description_en", "follow_up"},
+ENGLISH_COLUMNS = {"clinical_procedure": {"description_en", "follow_up", "family"},
                    "clinical_medicine": {"form_en", "default_dose_en", "default_note_en"},
                    "clinical_prescription_template": {"name_en", "notes_en"}}
 
@@ -208,7 +208,7 @@ def copy_specialty(clinic_id, section, language="ar"):
                   category=p["category"], unit=p["unit"], price=p["price"], typical_min=p["typical_min"],
                   typical_max=p["typical_max"], description=p.get("description", ""),
                   description_en=p.get("description_en", ""), condition=p["condition"],
-                  follow_up=p.get("follow_up", []), sort=sort)
+                  follow_up=p.get("follow_up", []), family=p.get("family", ""), sort=sort)
         for sort, p in enumerate(spec["procedures"]) if p["name_ar"] not in have])
     have = set(Medicine.objects.filter(clinic_id=clinic_id, section_id=section.id, is_active=True)
                .values_list("name", "strength"))
@@ -699,9 +699,9 @@ def add_attachment(ctx, patient_id, appointment_id, title, upload):
 
 # --- Procedure catalogue (design E3) ---------------------------------------------------------------------------
 
-PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500, "description_en": 500}
+PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500, "description_en": 500, "family": 40}
 PROCEDURE_COLUMNS = ("id, section_id, name_ar, name_en, category, unit, price, typical_min, typical_max, description, "
-                     "internal_cost, condition, is_active, sort, description_en, follow_up")
+                     "internal_cost, condition, is_active, sort, description_en, follow_up, family")
 
 
 def procedure_row(values):
@@ -780,12 +780,13 @@ def create_procedure(ctx, section, values):
     found = _savepoint_insert(ctx, f"""
         INSERT INTO "clinical_procedure" (clinic_id, section_id, name_ar, name_en, category, unit, price, typical_min,
                                           typical_max, description, description_en, internal_cost, condition,
-                                          is_active, sort, created_at, follow_up)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
+                                          is_active, sort, created_at, follow_up, family)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s, %s) RETURNING {PROCEDURE_COLUMNS}""", [
         ctx.clinic_id, section["id"], values["name_ar"], values["name_en"], values["category"], values["unit"],
         values["price"], values["typical_min"], values["typical_max"], values["description"],
         values.get("description_en", ""), values["internal_cost"],
-        values["condition"], values.get("sort", 1000), timezone.now(), values.get("follow_up", "[]")],
+        values["condition"], values.get("sort", 1000), timezone.now(), values.get("follow_up", "[]"),
+        values.get("family", "")],
         {"procedure_active_name_uniq": _duplicate_procedure(),
          "procedure_typical_range_valid": ApiError("invalid", _("The typical range is upside down."),
                                                    fields={"typical_max": "range"})})

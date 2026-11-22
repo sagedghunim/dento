@@ -498,6 +498,54 @@ export function countOf(box) {
   return Number.isInteger(n) && n >= 1 && n <= COUNT_MAX[box.dataset.shown] ? n : 1;
 }
 
+// The price list's main services (Saged, 2026-11-22): the desk picks one (a chip), then one of its kinds in `select`.
+// Options carry data-family; data-off marks those the section or doctor leaves out. Options without a family (the
+// consultation) always show. Picking a main service with one kind picks it; otherwise the select's empty choice, or
+// the first kind when it has none. `box` (optional) shows only while a main service is picked. A pick fires change.
+export function wireFamilies(form, select, box = null) {
+  const chips = form.querySelector("[data-families]");
+  if (!select) return { refresh() {}, reset() {}, show: () => null };
+  let current = "";
+  const options = () => [...select.options].filter((o) => o.value);
+  function apply() {
+    for (const o of options()) {
+      const visible = !o.dataset.off && (!o.dataset.family || o.dataset.family === current);
+      o.hidden = o.disabled = !visible;  // Safari shows hidden options
+    }
+    for (const group of select.querySelectorAll("optgroup")) group.hidden = ![...group.children].some((o) => !o.hidden);
+    if (chips) {
+      for (const chip of chips.querySelectorAll("[data-family]")) {
+        chip.hidden = !options().some((o) => o.dataset.family === chip.dataset.family && !o.dataset.off);
+        chip.setAttribute("aria-pressed", String(chip.dataset.family === current));
+      }
+    }
+    if (box) box.hidden = !current;
+  }
+  function pick(key) {
+    current = key;
+    apply();
+    const kinds = options().filter((o) => o.dataset.family === key && !o.disabled);
+    const empty = [...select.options].find((o) => !o.value);
+    select.value = kinds.length === 1 || !empty ? (kinds[0] ? kinds[0].value : "") : "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    if (kinds.length > 1) select.focus();
+  }
+  if (chips) chips.addEventListener("click", (event) => { const chip = event.target.closest("[data-family]"); if (chip) pick(chip.dataset.family); });
+  apply();
+  return {
+    refresh() { if (current && !options().some((o) => o.dataset.family === current && !o.dataset.off)) current = ""; apply(); },
+    reset() { current = ""; apply(); },
+    // Opens the main service of the option `id` (a treatment that goes on) and returns that option, or null.
+    show(id) {
+      const option = options().find((o) => o.value === String(id) && !o.dataset.off);
+      if (!option) return null;
+      current = option.dataset.family || current;
+      apply();
+      return option;
+    },
+  };
+}
+
 export function courseOf(dialog) {
   const select = dialog.querySelector('[name="continues_id"]');
   return select && select.value ? Number(select.value) : null;

@@ -1,0 +1,63 @@
+{% extends "web/base.html" %}{% load i18n static hamada %}
+{% block title %}{% translate "Price list" %}{% endblock %}
+{% block content %}
+<div class="page-head head-row">
+  <div>
+    <h1>{% translate "Price list" %}</h1>
+    <p>{% if perms.manage and perms.price %}{% translate "Every procedure under its main service. Change a price, add a procedure, or take one off." %}{% elif perms.manage %}{% translate "Every procedure under its main service. Add one, change it, or take it off; the desk sets the prices." %}{% else %}{% translate "Every procedure under its main service. Write the new price and press Enter." %}{% endif %}</p>
+  </div>
+  {% if perms.manage %}<div class="appt-actions"><button type="button" class="btn" data-add-procedure><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a procedure" %}</button></div>{% endif %}
+</div>
+<label class="field price-search">{% translate "Search" %}<input type="search" data-price-search autocomplete="off" dir="auto"></label>
+<div data-price-list>
+{% for g in groups %}
+<section class="card price-group" data-group>
+  <h2>{% if g.section %}<bdi dir="auto">{{ g.section }}</bdi> · {% endif %}<bdi dir="auto">{{ g.label }}</bdi></h2>
+  <ul class="price-rows">
+    {% for p in g.items %}
+    <li class="price-row" data-procedure="{{ p.json }}" data-find="{{ p.name_ar }} {{ p.name_en }} {{ g.label }}">
+      <div class="price-what"><strong><bdi dir="auto">{{ p.name }}</bdi></strong> <span class="muted">· {{ p.unit_label }}</span></div>
+      {% if perms.price %}<label class="price-input">{% translate "Price (EGP)" %}<input data-price value="{{ p.price_input }}" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
+      {% elif perms.money %}<span class="num">{{ p.price|money }}</span>{% endif %}
+      {% if perms.manage %}<span class="row-actions"><button type="button" class="btn ghost" data-edit>{% translate "Edit" %}</button><button type="button" class="btn ghost danger" data-take-off>{% translate "Take off" %}</button></span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% empty %}<section class="card"><p class="empty-note">{% translate "No procedures yet." %}</p></section>
+{% endfor %}
+</div>
+{% if perms.manage and removed %}
+<section class="card">
+  <h2>{% translate "Taken off" %}</h2>
+  <ul class="price-rows">
+    {% for p in removed %}<li class="price-row" data-procedure="{{ p.json }}"><div class="price-what"><bdi dir="auto">{{ p.name }}</bdi> <span class="muted">· {{ p.unit_label }}</span></div><button type="button" class="btn ghost" data-bring-back>{% translate "Bring back" %}</button></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if perms.manage %}
+<dialog class="sheet small" id="procedure-dialog" aria-labelledby="procedure-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="procedure-title" data-title-add>{% translate "Add a procedure" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    {% if sections %}<label class="field">{% translate "Section" %}<select name="section_id">{% for s in sections %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label class="field">{% translate "Main service" %}<select name="family"><option value="">{% translate "Other" %}</option>{% for key, label in families %}{% if key != "other" %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}</select></label>
+    <label class="field">{% translate "Name in Arabic" %}<input name="name_ar" dir="rtl" maxlength="160" autocomplete="off" data-autofocus></label>
+    <label class="field">{% translate "Name in English" %}<input name="name_en" dir="ltr" maxlength="160" autocomplete="off"></label>
+    <label class="field">{% translate "Counted" %}<select name="unit">{% for key, label in units %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+    {% if perms.price %}<label class="field">{% translate "Price (EGP)" %}<input name="price" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>{% endif %}
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/prices.js' %}"></script>{% endblock %}

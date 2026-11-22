@@ -44,9 +44,10 @@
 
     <fieldset class="group">
       <legend>{% translate "Service" %}</legend>
-      {# The consultation as a chip, the doctor's price list in one list by its sections (Saged, 2026-11-22). #}
+      {# The consultation as a chip, then the price list's main services; one picked opens its kinds (Saged, 2026-11-22). #}
       <div class="chips" data-services>{% for s in config.services %}{% if s.booking and s.kind == "consultation" %}<label class="chip" data-section="{{ s.section_id|default_if_none:'' }}"><input type="radio" name="service" value="{{ s.id }}" data-kind="{{ s.kind }}"><span><bdi dir="auto">{{ s.name }}</bdi></span></label>{% endif %}{% endfor %}</div>
-      <label class="field" data-price-list>{% translate "Or from the price list" %}<select name="service_list">
+      {% include "web/_family_chips.html" %}
+      <label class="field" data-price-list hidden>{% translate "Which kind?" %}<select name="service_list">
         <option value="">{% translate "Pick a service" %}</option>
         {% include "web/_price_list_options.html" %}
       </select></label>

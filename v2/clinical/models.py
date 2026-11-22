@@ -126,6 +126,8 @@ class Procedure(models.Model):
     name_ar = models.CharField(max_length=160)
     name_en = models.CharField(max_length=160, blank=True, default="")
     category = models.CharField(max_length=40, blank=True, default="")
+    # Its main service on the price list (Saged, 2026-11-22): the desk picks this first, then the procedure.
+    family = models.CharField(max_length=40, blank=True, default="", db_default="")
     unit = models.CharField(max_length=10, default="unit")
     price = models.BigIntegerField(default=0)  # piastres
     typical_min = models.BigIntegerField(null=True, blank=True)  # the market range, a hint only

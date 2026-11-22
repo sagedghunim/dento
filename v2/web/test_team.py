@@ -40,7 +40,7 @@ class TeamPageTests(ShardTestCase):
             self.assertIn(marker, html, marker)
         data = team_data(html)
         self.assertEqual([g["key"] for g in data["groups"]],
-                         ["today", "patients", "visit", "prices", "suggest", "money", "stock", "reports", "settings", "team"])
+                         ["today", "patients", "visit", "prices", "price_list", "suggest", "money", "stock", "reports", "settings", "team"])
         self.assertTrue(all(g["label"] and g["description"] for g in data["groups"]))
         self.assertTrue(data["is_owner"])
         me = next(m for m in data["members"] if m["is_me"])

@@ -90,40 +90,60 @@ def _treats(ctx):
 
 def _booking_groups(ctx, services):
     """Book and walk-in offer the consultation and the doctor's price list (Saged, 2026-11-22): `booking` marks
-    those, `group` names a price-list item's section of the list. No "Follow-up": a visit that goes on with a
-    treatment takes that treatment's service and its next number. The price list leaves out what the visit fee
-    covers (an examination), as on the visit screen."""
+    those. The list comes by its main services (Saged's list, Procedure.family), each a chip the desk picks first,
+    then one of its kinds: `family` is the key, `group` its name. A procedure without one is grouped by its section of
+    the list. No "Follow-up": a visit that goes on with a treatment takes that treatment's service and its next
+    number. The price list leaves out what the visit fee covers (an examination), as on the visit screen.
+    Returns the main services in order, [{key, label}], those with something to book."""
     from clinical.followups import VISIT_FEE_CATEGORIES
     from clinical.models import Procedure
     from clinics.booking_services import COUNTED
+    from clinics.specialties import FAMILY_LABELS, FAMILY_ORDER
 
     from .visit_pages import CATEGORY_WORDS
 
     ids = [s["procedure_id"] for s in services if s["procedure_id"]]
-    found, units = {}, {}
-    for p_id, category, sort, unit in (Procedure.objects.filter(clinic_id=ctx.clinic_id, id__in=ids, is_active=True)
-                                       .values_list("id", "category", "sort", "unit") if ids else ()):
-        found[p_id], units[p_id] = (category, sort), unit
+    found = {}
+    for p_id, category, family, sort, unit in (
+            Procedure.objects.filter(clinic_id=ctx.clinic_id, id__in=ids, is_active=True)
+            .values_list("id", "category", "family", "sort", "unit") if ids else ()):
+        found[p_id] = {"category": category, "family": family, "sort": sort, "unit": unit}
+    first = {}  # where each main service's first item is, for those not on Saged's list
+    for p in found.values():
+        key = p["family"] if p["family"] in FAMILY_ORDER else f"c-{p['category']}"
+        first[key] = min(first.get(key, p["sort"]), p["sort"])
+    families = []
     for s in services:
-        category = found.get(s["procedure_id"], (None,))[0]
+        p = found.get(s["procedure_id"])
         # What a booking counts (Saged, 2026-11-22): teeth, quadrants, arches or units; "" is one, not counted.
-        unit = units.get(s["procedure_id"])
+        unit = p["unit"] if p else None
         s["unit"] = unit if unit in COUNTED else ("" if unit or s["kind"] != "procedure" else "unit")
-        s["booking"] = s["kind"] == "consultation" or (category is not None and category not in VISIT_FEE_CATEGORIES)
-        if category is None or not s["booking"]:
-            s["group"] = ""
+        s["booking"] = s["kind"] == "consultation" or (p is not None and p["category"] not in VISIT_FEE_CATEGORIES)
+        s["family"], s["group"] = "", ""
+        if p is None or not s["booking"]:
+            continue
+        if p["family"] in FAMILY_ORDER:
+            s["family"], (ar, en) = p["family"], FAMILY_LABELS[p["family"]]
+            s["group"] = pick(ar, en)
         else:
-            words = CATEGORY_WORDS.get(category, ())
-            s["group"] = pick(words[0], category.replace("_", " ").capitalize()) if words else _("Other")
-    first = {}  # each section of the list where its first item is, so a group comes once
-    for category, sort in found.values():
-        first[category] = min(first.get(category, sort), sort)
+            s["family"] = f"c-{p['category']}"
+            words = CATEGORY_WORDS.get(p["category"], ())
+            s["group"] = pick(words[0], p["category"].replace("_", " ").capitalize()) if words else _("Other")
+
+    def rank(key, sort=0):
+        return (0, FAMILY_ORDER[key], sort) if key in FAMILY_ORDER else (1, first.get(key, 0), sort)
 
     def order(s):
-        category, sort = found.get(s["procedure_id"], (None, 0))
-        return (s["kind"] != "consultation", first.get(category, 0), sort)
+        p = found.get(s["procedure_id"])
+        return (s["kind"] != "consultation", rank(s["family"], p["sort"] if p else 0) if s["family"] else (0, 0, 0))
 
     services.sort(key=order)
+    seen = {}
+    for s in services:
+        if s["family"] and s["family"] not in seen:
+            seen[s["family"]] = {"key": s["family"], "label": s["group"]}
+    families.extend(sorted(seen.values(), key=lambda f: rank(f["key"])))
+    return families
 
 
 def clinic_config(ctx, today):
@@ -136,7 +156,7 @@ def clinic_config(ctx, today):
                  "section_id": getattr(s, "section_id", None) if with_section else None,
                  "procedure_id": getattr(s, "procedure_id", None)}
                 for s in Service.objects.filter(clinic_id=ctx.clinic_id, is_active=True).order_by("sort", "id")]
-    _booking_groups(ctx, services)
+    families = _booking_groups(ctx, services)
     doctor_sections = {}
     if _has_field(Schedule, "section"):
         for doctor_id, section_id in (Schedule.objects.filter(clinic_id=ctx.clinic_id)
@@ -149,7 +169,7 @@ def clinic_config(ctx, today):
 
     effective = clinic_settings.effective(ctx.clinic.settings)
     return {
-        "services": services, "doctors": doctors, "sections": places.sections(ctx),
+        "services": services, "families": families, "doctors": doctors, "sections": places.sections(ctx),
         "me": {"membership_id": ctx.membership_id, "role": ctx.membership.role, "treats": _treats(ctx)},
         "today": today.isoformat(), "last_day": (today + dt.timedelta(days=365)).isoformat(),
         "digits": effective["digits"], "print_language": effective["print_language"],

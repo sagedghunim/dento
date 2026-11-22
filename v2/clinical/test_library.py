@@ -133,7 +133,7 @@ class ProcedureCatalogueTests(M2TestCase):
         self.assertGreaterEqual(len(self.catalogue()), 55)
         body = {"name_ar": "تركيب دعامة", "name_en": "Post", "unit": "tooth", "price": "350.50", "typical_min": 300,
                 "typical_max": 500, "category": "restorative"}
-        self.assertEqual(call(self.doc, "POST", "/api/v1/procedures", body).status_code, 403)  # settings.manage
+        self.assertEqual(call(self.desk, "POST", "/api/v1/procedures", body).status_code, 403)  # the desk only prices
         r = call(self.owner, "POST", "/api/v1/procedures", body)
         self.assertEqual((r.status_code, r.json()["procedure"]["price"]), (201, 350_50), r.content)
         bad = call(self.owner, "POST", "/api/v1/procedures", {**body, "name_ar": "y", "typical_min": 900})
@@ -208,7 +208,7 @@ class SpecialtyDataTests(M2TestCase):
         from clinical.models import CONDITIONS, UNITS
 
         dental = SPECIALTIES["dental"]
-        self.assertTrue(55 <= len(dental["procedures"]) <= 70, len(dental["procedures"]))
+        self.assertTrue(100 <= len(dental["procedures"]) <= 130, len(dental["procedures"]))  # with Saged's list (2026-11-22)
         self.assertTrue(25 <= len(dental["medicines"]) <= 35, len(dental["medicines"]))
         self.assertTrue(all(p["description"] for p in dental["procedures"]))
         for code, spec in SPECIALTIES.items():

@@ -22,7 +22,7 @@ class GroupTests(SimpleTestCase):
         listed = [code for *_rest, codes in perms.GROUPS for code in codes]
         self.assertEqual(sorted(listed), sorted(perms.CODES))
         self.assertEqual(len(listed), len(set(listed)))
-        self.assertEqual(len(perms.GROUPS), 10)  # the eight sections and the two money switches
+        self.assertEqual(len(perms.GROUPS), 11)  # the eight sections, the two money switches and the price list
 
     def test_wanted_codes_switches_groups_then_codes(self):
         wanted = perms.wanted_codes({"reports.view"}, {"stock": True, "reports": False}, {"inventory.manage": False})

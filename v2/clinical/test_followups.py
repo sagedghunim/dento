@@ -38,8 +38,9 @@ class RecipeTests(M2TestCase):
         self.assertEqual(call(owner, "PATCH", url, {"changes": {"follow_up": []}}).json()["procedure"]["follow_up"], [])
         for bad in ([{"days": 0, "label": "x"}], [{"days": 7}], [{"days": 7, "label": "x"}] * 7, "weekly"):
             self.assertEqual(call(owner, "PATCH", url, {"changes": {"follow_up": bad}}).status_code, 400, bad)
-        # The doctor keeps the follow-ups (Saged, 2026-11-19), and nothing else of the procedure.
-        self.assertEqual(call(self.doc, "PATCH", url, {"changes": {"price": 1}}).status_code, 403)  # settings.manage
+        # The doctor keeps the follow-ups (Saged, 2026-11-19), the procedures and their prices (2026-11-22), never
+        # the cost of materials.
+        self.assertEqual(call(self.doc, "PATCH", url, {"changes": {"internal_cost": 1}}).status_code, 403)  # settings.manage
         self.assertEqual(call(self.desk, "PATCH", url, {"changes": {"follow_up": []}}).status_code, 403)
 
     def test_the_migration_fills_only_untouched_procedures(self):

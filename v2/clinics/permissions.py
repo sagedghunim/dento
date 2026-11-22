@@ -15,6 +15,9 @@ CODES = {
     "prescriptions.write": _("Write prescriptions"),
     "settings.medicines": _("Edit the medicines list and prescription templates"),
     "procedures.record": _("Record procedures, the dental chart and treatment plans"),
+    # The price list (Saged, 2026-11-22): the doctor keeps its procedures, the desk its prices.
+    "procedures.manage": _("Add, change and take off procedures on the price list"),
+    "prices.edit": _("Change the prices on the price list"),
     # A doctor has nothing to do with money unless the owner opens it (Saged, 2026-11-16).
     "money.view": _("See prices, bills and what patients paid or owe"),
     "discounts.suggest": _("Suggest one of the clinic's discounts on the visit"),
@@ -58,12 +61,15 @@ TEMPLATES = {
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "clinical.view",
         "clinical.write", "inventory.use", "consults.manage",
         "visits.vitals", "visits.notes", "prescriptions.write", "settings.medicines", "procedures.record",
+        # The doctor prices their own services on the price list and sees no other money (Saged, 2026-11-22);
+        # the owner switches it off per doctor on Team.
+        "procedures.manage", "prices.edit",
     }),
     # The desk reads the patient's file like the doctor (Saged, 2026-11-19): notes, prescriptions, plans and x-rays.
     # The owner can still switch it off per person on Team.
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
-        "visits.vitals", "cash.collect", "cash.shift", "money.view", "clinical.view", "patients.tags",
+        "visits.vitals", "cash.collect", "cash.shift", "money.view", "clinical.view", "patients.tags", "prices.edit",
     }),
 }
 
@@ -122,10 +128,13 @@ GROUPS = (
      ("patients.view", "patients.edit", "patients.tags", "patients.export")),
     ("visit", _("The visit"), _("Clinical notes, vital signs, prescriptions, procedures and online consultations"),
      ("clinical.view", "clinical.write", "visits.vitals", "visits.notes", "prescriptions.write", "procedures.record",
-      "consults.manage")),
+      "procedures.manage", "consults.manage")),
     # A doctor's two money switches (Saged, 2026-11-16), both off in the doctor's template.
     ("prices", _("Sees prices and money"), _("Prices, bills, payments and the cash register"),
      ("money.view", "billing.collect", "cash.collect", "cash.shift")),
+    # The price list's prices alone (Saged, 2026-11-22): a doctor's own services, without any other money.
+    ("price_list", _("Sets the prices of their services"),
+     _("Changes the prices of their own services on the price list; sees no other money"), ("prices.edit",)),
     ("suggest", _("Suggests discounts"), _("Suggest one of the clinic's discounts on the visit; the desk applies it"),
      ("discounts.suggest",)),
     ("money", _("Finances"), _("Discounts, refunds, expenses, packages, the month's money and staff pay"),

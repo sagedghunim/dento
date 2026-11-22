@@ -4323,9 +4323,6 @@ msgstr "مدفوع زيادة عن الفاتورة، اترجّع"
 msgid "Center doctor"
 msgstr "طبيب المركز"
 
-msgid "Or from the price list"
-msgstr "أو من قايمة الأسعار"
-
 msgid "Pick a service"
 msgstr "اختار الخدمة"
 
@@ -4495,3 +4492,79 @@ msgstr ""
 "اللي الفريق عمله في الفلوس والسجلات آخر شهرين: إجراءات أو بنود فواتير "
 "اتشالت، وخصومات، وفلوس اترجّعت، وفواتير اتلغت، والخزنة لو ناقصة أو زيادة، "
 "وتغيير أسعار، وجرد المخزن، وتعديل في ملف مريض بعد ما الزيارة خلصت."
+
+msgid "Add a procedure"
+msgstr "زوّد خدمة"
+
+msgid "Add, change and take off procedures on the price list"
+msgstr "يزوّد ويعدّل ويشيل الخدمات من قايمة الأسعار"
+
+msgid "Change the prices on the price list"
+msgstr "يغيّر الأسعار في قايمة الأسعار"
+
+msgid ""
+"Every procedure under its main service. Add one, change it, or take it off; "
+"the desk sets the prices."
+msgstr ""
+"كل خدمة تحت الخدمة الرئيسية بتاعتها. زوّد أو عدّل أو شيل؛ والاستقبال بيحط "
+"الأسعار."
+
+msgid ""
+"Every procedure under its main service. Change a price, add a procedure, or "
+"take one off."
+msgstr ""
+"كل خدمة تحت الخدمة الرئيسية بتاعتها. غيّر سعر، أو زوّد خدمة، أو شيل واحدة."
+
+msgid ""
+"Every procedure under its main service. Write the new price and press Enter."
+msgstr "كل خدمة تحت الخدمة الرئيسية بتاعتها. اكتب السعر الجديد ودوس Enter."
+
+msgid "Main service"
+msgstr "الخدمة الرئيسية"
+
+msgid "No procedures yet."
+msgstr "لسه مفيش خدمات."
+
+msgid "Per jaw"
+msgstr "بالفك"
+
+msgid "Per piece"
+msgstr "بالقطعة"
+
+msgid "Per quadrant"
+msgstr "بربع الفم"
+
+msgid "Per session"
+msgstr "بالجلسة"
+
+msgid "Per tooth"
+msgstr "بالسن"
+
+msgid "Price (EGP)"
+msgstr "السعر (جنيه)"
+
+msgid "Price list"
+msgstr "قايمة الأسعار"
+
+msgid "Take off"
+msgstr "شيل"
+
+msgid "Taken off"
+msgstr "اتشالت"
+
+msgid "Which kind?"
+msgstr "أنهي نوع؟"
+
+msgid "Whole case"
+msgstr "للحالة كلها"
+
+msgid "Write the name in Arabic."
+msgstr "اكتب الاسم بالعربي."
+
+msgid "Sets the prices of their services"
+msgstr "يسعّر خدماته"
+
+msgid ""
+"Changes the prices of their own services on the price list; sees no other "
+"money"
+msgstr "يغيّر أسعار خدماته هو في قايمة الأسعار، ومش بيشوف أي فلوس تانية"

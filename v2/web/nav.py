@@ -49,6 +49,8 @@ SECTIONS = (
         Part("templates", _("Ready prescriptions"), "/prescriptions?part=templates", ("settings.medicines",)),
         Part("followups", _("Follow-ups after a procedure"), "/prescriptions?part=followups", ("procedures.record",)),
     )),
+    # The price list (Saged, 2026-11-22): the doctor keeps its procedures, the desk its prices.
+    Section("prices", _("Price list"), "/prices", ("settings.manage", "procedures.manage", "prices.edit"), True),
     Section("consults", _("Online consultations"), "/consults", ("consults.manage",), False),               # M3
     # The owner's alerts (Saged, 2026-11-19): "owner" is not a code; visible() reads it as the owner role.
     Section("alerts", _("Alerts"), "/alerts", ("owner",), True),
@@ -63,8 +65,8 @@ SECTIONS = (
 
 
 # The owner's side bar (Saged, 2026-11-13), in this order. A solo owner sees every section, as SECTIONS orders them.
-MANAGER_SECTIONS = ("overview", "alerts", "finances", "team", "patients")
-TREATING_OWNER_SECTIONS = ("today", "prescription", "overview", "alerts", "finances", "team", "patients")
+MANAGER_SECTIONS = ("overview", "alerts", "finances", "prices", "team", "patients")
+TREATING_OWNER_SECTIONS = ("today", "prescription", "prices", "overview", "alerts", "finances", "team", "patients")
 
 
 def owner_mode(ctx):

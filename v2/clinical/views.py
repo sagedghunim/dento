@@ -551,7 +551,7 @@ def template_remove_view(request, ctx, data, template_id):
 
 @api("GET")
 def procedures_view(request, ctx, data):
-    _any(ctx, "procedures.record", "settings.manage", "clinical.view")
+    _any(ctx, "procedures.record", "settings.manage", "clinical.view", "procedures.manage", "prices.edit")
     return selectors.procedures(ctx, _section_param(request), _flag(request, "all"))
 
 
@@ -563,11 +563,48 @@ PROCEDURE_CHANGES = [*services.PROCEDURE_TEXT, "unit", "condition", "price", "in
                      "typical_max", "sort", "is_active", "follow_up"]
 
 
-@api("POST", perm="settings.manage", replay=_replay_procedure)
+# Who changes what on the price list (Saged, 2026-11-22): settings.manage anything; the doctor (procedures.manage)
+# the procedures themselves; whoever has prices.edit (the desk, a doctor who sees money) the prices; a doctor
+# (procedures.record) the follow-ups after a procedure (2026-11-19). The cost of materials stays the owner's.
+PROCEDURE_FIELDS = {"name_ar", "name_en", "category", "family", "unit", "condition", "description", "description_en",
+                    "sort", "is_active", "follow_up"}
+PRICE_FIELDS = {"price", "typical_min", "typical_max"}
+
+
+def _own_section(ctx, section_id):
+    """A doctor keeps the price list of their own sections only, those they work in (Saged, 2026-11-22)."""
+    from web.price_pages import own_sections
+
+    sections = own_sections(ctx)
+    if sections is not None and section_id not in sections:
+        raise services.not_found("procedure")
+
+
+def _may_change(ctx, names):
+    if ctx.can("settings.manage"):
+        return
+    allowed = set()
+    if ctx.can("procedures.manage"):
+        allowed |= PROCEDURE_FIELDS
+    if ctx.can("prices.edit"):
+        allowed |= PRICE_FIELDS
+    if ctx.can("procedures.record"):
+        allowed |= {"follow_up"}
+    if not names or set(names) - allowed:
+        ctx.require("settings.manage")
+
+
+@api("POST", perm="clinical.view", replay=_replay_procedure)
 def procedure_create_view(request, ctx, data):
-    """POST {section_id?, name_ar, name_en?, category?, unit?, price, typical_min?, typical_max?, description?,
-    internal_cost?, condition?, sort?}."""
+    """POST {section_id?, name_ar, name_en?, category?, family?, unit?, price, typical_min?, typical_max?,
+    description?, internal_cost?, condition?, sort?}. A doctor who doesn't see money adds it without a price; the desk
+    prices it."""
+    if not ctx.can("settings.manage"):
+        ctx.require("procedures.manage")
+        _may_change(ctx, [n for n in (*PRICE_FIELDS, "internal_cost") if data.get(n) not in (None, "", 0)] or ["name_ar"])
     section = services.default_section(ctx, data)
+    if not ctx.can("settings.manage"):
+        _own_section(ctx, section["id"])
     procedure = services.create_procedure(ctx, section, services.clean_procedure(data))
     return Result({"procedure": procedure}, status=201, target_type="procedure", target_id=procedure["id"])
 
@@ -578,17 +615,19 @@ def procedure_update_view(request, ctx, data, procedure_id):
     2026-11-19: the doctor keeps the follow-ups after a procedure)."""
     procedure_id = _id(procedure_id, "procedure")
     changes = services.clean_procedure(_changes(data, PROCEDURE_CHANGES), partial=True)
-    if not ctx.can("settings.manage"):
-        ctx.require("procedures.record")
-        if set(changes) - {"follow_up"}:
-            ctx.require("settings.manage")
+    _may_change(ctx, list(changes))
+    if not ctx.can("settings.manage") and set(changes) - {"follow_up"}:
+        _own_section(ctx, services._procedure(ctx, procedure_id, active=False)["section_id"])
     procedure = services.update_procedure(ctx, procedure_id, changes)
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)
 
 
-@api("DELETE", perm="settings.manage", replay=_replay_procedure)
+@api("DELETE", perm="clinical.view", replay=_replay_procedure)
 def procedure_remove_view(request, ctx, data, procedure_id):
+    _any(ctx, "settings.manage", "procedures.manage")
     procedure_id = _id(procedure_id, "procedure")
+    if not ctx.can("settings.manage"):
+        _own_section(ctx, services._procedure(ctx, procedure_id, active=False)["section_id"])
     procedure = services.update_procedure(ctx, procedure_id, {"is_active": False})
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)
 

@@ -1175,6 +1175,18 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 a.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-color: var(--teal); color: var(--teal-dark); }
 /* The file's history (Saged, 2026-11-22) */
 .history-changes { margin-block-start: 6px; }
+/* The price list and its main services (Saged, 2026-11-22) */
+.family-chips { margin-block: 8px; flex-wrap: wrap; }
+button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-color: var(--teal); color: var(--teal-dark); }
+.price-search { max-width: 360px; margin-block-end: 12px; }
+.price-group h2 { font-size: 1.05rem; }
+.price-rows { list-style: none; margin: 0; padding: 0; }
+.price-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-block-end: 1px solid var(--line); }
+.price-row:last-child { border-block-end: 0; }
+.price-what { flex: 1 1 220px; }
+.price-input { display: flex; gap: 6px; align-items: center; font-size: .9rem; }
+.price-input input { width: 110px; }
+.row-actions { display: flex; gap: 6px; }
 .history-changes summary { cursor: pointer; color: var(--teal-dark); }
 .history-changes dl { margin: 6px 0 0; display: grid; gap: 4px; }
 .history-changes dl div { display: flex; gap: 8px; flex-wrap: wrap; }

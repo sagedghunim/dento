@@ -84,10 +84,11 @@ def mutating(o):
         "template remove": ("DELETE", f"/api/v1/prescription-templates/{o.template}", {}, {"x": 1},
                             ["settings.medicines"], None),
         "procedure add": ("POST", "/api/v1/procedures", {"name_ar": "مصفوفة", "price": 1}, {"name_ar": "مصفوفة 2"},
-                          ["settings.manage"], None),
+                          ["settings.manage", "procedures.manage"], None),
         "procedure edit": ("PATCH", f"/api/v1/procedures/{o.own_procedure}", {"changes": {"price": 5}},
-                           {"changes": {"price": 6}}, ["settings.manage"], None),
-        "procedure remove": ("DELETE", f"/api/v1/procedures/{o.own_procedure}", {}, {"x": 1}, ["settings.manage"], None),
+                           {"changes": {"price": 6}}, ["settings.manage", "prices.edit"], None),
+        "procedure remove": ("DELETE", f"/api/v1/procedures/{o.own_procedure}", {}, {"x": 1}, ["settings.manage", "procedures.manage"],
+                             None),
         "follow-ups add": ("POST", f"/api/v1/appointments/{v}/follow-ups", {"items": [{"label": "a", "days": 7}]},
                            {"items": [{"label": "b", "days": 7}]}, ["procedures.record"], None),
         "follow-up due": ("POST", f"/api/v1/follow-ups/{o.follow}/due", {"days": 21}, {"days": 30},
@@ -120,7 +121,8 @@ def reads(o):
         "prescription": (f"/api/v1/prescriptions/{o.rx}", ["clinical.view"], "prescription"),
         "medicines": ("/api/v1/medicines", ["prescriptions.write", "settings.medicines", "clinical.view"], None),
         "templates": ("/api/v1/prescription-templates", ["prescriptions.write", "settings.medicines"], None),
-        "procedures": ("/api/v1/procedures", ["procedures.record", "settings.manage", "clinical.view"], None),
+        "procedures": ("/api/v1/procedures", ["procedures.record", "settings.manage", "clinical.view",
+                                              "procedures.manage", "prices.edit"], None),
     }
 
 

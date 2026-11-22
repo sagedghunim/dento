@@ -6,7 +6,7 @@
 // booking moves straight to the next one; "skip" passes one over. Each booking carries its follow-up's id, so the
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
+import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, wireFamilies, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
@@ -209,12 +209,14 @@ export function initBook({ onBooked, defaults } = {}) {
   when.sectionOf = sectionId;
   // The consultation chip or an item of the doctor's price list (Saged, 2026-11-22): one of the two is picked.
   const priceList = field("service_list");
+  const families = wireFamilies(form, priceList, form.querySelector("[data-price-list]"));
   const pickedService = () => form.querySelector('[name="service"]:checked') || (priceList && priceList.value ? priceList.selectedOptions[0] : null);
   const serviceId = () => { const c = pickedService(); return c ? Number(c.value) : null; };
   function setService(id) {
     const chip = form.querySelector(`[name="service"][value="${CSS.escape(String(id))}"]`);
-    const option = priceList && [...priceList.options].find((o) => o.value === String(id) && !o.disabled);
+    const option = chip ? null : families.show(id);
     if (!chip && !option) return false;
+    if (chip) families.reset();
     form.querySelectorAll('[name="service"]').forEach((input) => { input.checked = input === chip; });
     if (priceList) priceList.value = option ? option.value : "";
     showQty();
@@ -223,7 +225,7 @@ export function initBook({ onBooked, defaults } = {}) {
   // A visit that goes on with a treatment takes that treatment's service; "A new treatment" goes back to the first.
   function followCourse() {
     const id = courseService(dialog);
-    if (!(id && setService(id))) { if (priceList) priceList.value = ""; pickFirstService(); }
+    if (!(id && setService(id))) { if (priceList) priceList.value = ""; families.reset(); pickFirstService(); }
     quote();
   }
   // How many (Saged, 2026-11-19, 2026-11-22): 3 fillings are booked once, at 3 times the price; the count follows
@@ -241,8 +243,10 @@ export function initBook({ onBooked, defaults } = {}) {
     if (priceList) {
       for (const o of priceList.options) {
         if (!o.value) continue;
-        o.hidden = o.disabled = Boolean(section) && Boolean(o.dataset.section) && o.dataset.section !== section;
+        if (Boolean(section) && Boolean(o.dataset.section) && o.dataset.section !== section) o.dataset.off = "1";
+        else delete o.dataset.off;
       }
+      families.refresh();
       if (priceList.value && priceList.selectedOptions[0].disabled) priceList.value = "";
     }
     when.filterDoctors(section);
@@ -264,9 +268,10 @@ export function initBook({ onBooked, defaults } = {}) {
 
   form.addEventListener("change", (event) => {
     if (event.target.name === "section") { filterBySection(); when.loadMonth(true); when.refresh(); }
-    if (event.target.name === "service") { if (priceList) priceList.value = ""; showQty(); quote(); }
+    if (event.target.name === "service") { if (priceList) priceList.value = ""; families.reset(); showQty(); quote(); }
     if (event.target.name === "service_list") {
-      if (priceList.value) form.querySelectorAll('[name="service"]').forEach((input) => { input.checked = false; });
+      // A main service open with no kind picked yet leaves the service empty, not the consultation.
+      if (priceList.value || !form.querySelector("[data-price-list]").hidden) form.querySelectorAll('[name="service"]').forEach((input) => { input.checked = false; });
       else pickFirstService();
       showQty(); quote();
     }
@@ -440,6 +445,7 @@ export function initBook({ onBooked, defaults } = {}) {
     hideConflict(dialog);
     if (field("amount")) delete field("amount").dataset.touched;
     showCount(qtyBox, null);
+    families.reset();
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
     // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.
     try {

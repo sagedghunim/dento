@@ -3,7 +3,7 @@
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
-import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
+import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, wireFamilies, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
@@ -105,6 +105,8 @@ export function initWalkIn({ onBooked } = {}) {
   // How many (Saged, 2026-11-19, 2026-11-22): by the service's unit (teeth, quadrants, jaws); none for a cleaning.
   const qtyBox = form.querySelector("[data-qty-box]");
   const qty = () => countOf(qtyBox);
+  // The main services (Saged, 2026-11-22): the consultation always shows, a main service's kinds once it is picked.
+  const families = wireFamilies(form, field("service"));
 
   // Only the services of the chosen doctor's sections (a doctor's sections are those of their sessions today).
   function filterServices() {
@@ -112,9 +114,10 @@ export function initWalkIn({ onBooked } = {}) {
     const sections = option && option.dataset.sections ? option.dataset.sections.split(",") : [];
     for (const o of field("service").options) {
       if (!o.value) continue;
-      o.hidden = sections.length > 0 && Boolean(o.dataset.section) && !sections.includes(o.dataset.section);
-      o.disabled = o.hidden;  // Safari shows hidden options
+      if (sections.length > 0 && Boolean(o.dataset.section) && !sections.includes(o.dataset.section)) o.dataset.off = "1";
+      else delete o.dataset.off;
     }
+    families.refresh();
     pickService();
   }
 
@@ -132,6 +135,7 @@ export function initWalkIn({ onBooked } = {}) {
   // A visit that goes on with a treatment takes that treatment's service (Saged, 2026-11-22).
   function followCourse() {
     const id = courseService(dialog);
+    if (id) families.show(id); else families.reset();
     pickService(id || defaults.service_id);
     if (id && serviceId() !== id) pickService(defaults.service_id);
     quote();
@@ -239,6 +243,7 @@ export function initWalkIn({ onBooked } = {}) {
 
   // doctorId: the doctor picked at the top of Today (Saged, 2026-11-22): the walk-in is theirs, not asked again.
   function open({ opener, query = "", doctorId = "" } = {}) {
+    families.reset();
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one
     form.reset();
     submitter.reset();
