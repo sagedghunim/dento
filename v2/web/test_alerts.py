@@ -16,6 +16,16 @@ class AlertTests(M2TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         return visit, exam
 
+    def test_each_alert_says_in_whose_shift_it_happened(self):
+        # Who opened the register and who closed it around the alert (Saged, 2026-11-22).
+        r = call(self.desk, "POST", "/api/v1/register/open", {"opening_float": 0})
+        self.assertIn(r.status_code, (201, 409), r.content)  # the fixture's cash may have opened one already
+        self.remove_a_procedure()
+        page = self.owner.get("/alerts").content.decode()
+        line = page.split("data-shift")[1].split("</p>")[0]
+        self.assertIn("فتحها", line)
+        self.assertIn("لسه مفتوحة", line)
+
     def test_the_owner_only(self):
         self.assertEqual(self.owner.get("/alerts").status_code, 200)
         self.assertEqual(self.doc.get("/alerts").status_code, 403)

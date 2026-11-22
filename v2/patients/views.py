@@ -78,6 +78,8 @@ def update_view(request, ctx, data, patient_id):
     if unknown:
         raise ApiError("invalid", "Unknown fields: " + ", ".join(sorted(unknown)),
                        fields={name: "unknown" for name in unknown})
+    if set(changes) & set(services.MEDICAL):
+        ctx.require("clinical.write")
     require_patient(ctx, patient_id)  # another doctor's patient is 404 to a doctor
     today = business_day(ctx.clinic)
     patient = services.update(ctx, patient_id, services.clean_fields(changes, today, partial=True), expected, today)

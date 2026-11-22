@@ -82,6 +82,9 @@ if (patientDialog) {
       np.fill(current);
       if (!current.birth_date_estimated) field("birth_date").value = current.birth_date || "";
     }
+    // The desk fills the medical fields on a new file only; after that they are the doctor's (Saged, 2026-11-22).
+    const locked = edit && patientDialog.hasAttribute("data-medical-locked");
+    patientDialog.querySelectorAll("[data-medical]").forEach((label) => { label.hidden = locked; });
     openDialog(patientDialog, opener);
   }
 

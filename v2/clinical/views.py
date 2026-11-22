@@ -309,6 +309,41 @@ def tooth_set_view(request, ctx, data, patient_id, tooth):
                   target_id=state["id"])
 
 
+def _replay_teeth(ctx, stored):
+    return {"teeth": selectors.chart(ctx, stored["target_id"])["teeth"]}
+
+
+@api("PUT", perm="procedures.record", replay=_replay_teeth)
+def teeth_set_view(request, ctx, data, patient_id):
+    """PUT {teeth: [{tooth, condition, surfaces?, note?, expected_condition?}], appointment_id?}: every tooth the
+    doctor changed, saved with one Save (Saged, 2026-11-22). All or nothing: one stale tooth is 409 for the lot."""
+    patient_id = _id(patient_id, "patient")
+    items = data.get("teeth")
+    if not isinstance(items, list) or not 1 <= len(items) <= 52:
+        raise ApiError("invalid", _("Change at least one tooth."), fields={"teeth": "count"})
+    appointment = data.get("appointment_id")
+    appointment = validate.ident(appointment, "appointment_id") if appointment else None
+    cleaned = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ApiError("invalid", "Each tooth is an object.", fields={"teeth": "shape"})
+        tooth = item.get("tooth")
+        if not isinstance(tooth, int) or tooth not in services.TEETH:
+            raise ApiError("invalid", _("Use an FDI tooth number: 11-48 or 51-85."), fields={"teeth": "tooth"})
+        condition = validate.choice(item, "condition", services.CONDITIONS)
+        expected = item["expected_condition"] if "expected_condition" in item else False
+        if expected is not False and expected is not None and expected not in services.CONDITIONS:
+            raise ApiError("invalid", "expected_condition is not a condition", fields={"expected_condition": "choice"})
+        cleaned.append((tooth, condition, services.clean_surfaces(item.get("surfaces"), condition),
+                        validate.text(item, "note", 200, required=False), expected))
+    if len({c[0] for c in cleaned}) != len(cleaned):
+        raise ApiError("invalid", "A tooth comes once.", fields={"teeth": "duplicate"})
+    for tooth, condition, surfaces, note, expected in sorted(cleaned):  # one lock order: by tooth number
+        services.set_tooth(ctx, patient_id, tooth, condition, surfaces, note, appointment, expected)
+    # The whole chart as it now is, so a repeat answers the same.
+    return Result({"teeth": selectors.chart(ctx, patient_id)["teeth"]}, target_type="patient", target_id=patient_id)
+
+
 @api("GET", perm="clinical.view", access="history")
 def plans_view(request, ctx, data, patient_id):
     patient_id = _id(patient_id, "patient")

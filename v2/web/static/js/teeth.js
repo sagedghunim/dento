@@ -22,7 +22,10 @@ const layout = document.querySelector("[data-chart-layout]");
 let current = null;     // the open tooth number
 let opener = null;
 
-const state = (n) => teeth[n] || { condition: "healthy", surfaces: [], note: "", recorded: false };
+// A tooth as saved, and as the screen shows it: with a change not saved yet (one Save for all, Saged 2026-11-22).
+const pending = new Map();  // number -> {condition, surfaces, note}
+const saved = (n) => teeth[n] || { condition: "healthy", surfaces: [], note: "", recorded: false };
+const state = (n) => (pending.has(n) ? { ...saved(n), ...pending.get(n) } : saved(n));
 // "In progress" means the tooth is in an open plan item (design E3); the page holds every open item.
 const inProgress = (n) => planItems.some((i) => i.tooth === n);
 
@@ -43,6 +46,7 @@ function paint(n) {
     button.dataset.condition = s.condition;
     button.toggleAttribute("data-progress", inProgress(n));
     button.toggleAttribute("data-done", done.has(n));
+    button.toggleAttribute("data-pending", pending.has(n));
     button.querySelector("[data-label]").textContent = describe(n);
     button.title = describe(n);
   });
@@ -124,42 +128,96 @@ function surfacesFor(form, condition) {
 }
 const checkedSurfaces = (form) => Array.from(form.querySelectorAll('[name="surface"]:checked'), (c) => c.value);
 
-// --- findings: PUT patients/{id}/teeth/{n} ---
+// --- findings: changed on as many teeth as needed, then one Save for all (Saged, 2026-11-22) ---
+// PUT patients/{id}/teeth with each tooth and the condition the screen showed; one stale tooth refuses the lot.
 
-function findingPart(section) {
-  const form = section.querySelector("form");
-  const submitter = new Submitter(section, { label: t("finding") });
-  form.addEventListener("change", (event) => {
-    if (event.target.name === "condition") surfacesFor(form, event.target.value);
-  });
-  form.addEventListener("submit", async (event) => {
+const saveBar = document.querySelector("[data-chart-save]");
+const saveSubmitter = saveBar ? new Submitter(saveBar, { label: t("teeth_label") }) : null;
+
+function updateBar() {
+  if (!saveBar) return;
+  saveBar.hidden = pending.size === 0 && !saveSubmitter.holdsUnknown();
+  saveBar.querySelector("[data-pending-count]").textContent = t("teeth_changed", { n: localDigits(pending.size) });
+}
+
+function repaint(numbers) {
+  numbers.forEach((n) => paint(n));
+  if (current != null && numbers.includes(current)) { showState(); parts.forEach((part) => part.reset()); }
+}
+
+if (saveBar) {
+  saveBar.querySelector("form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const n = current;
-    let body = submitter.unknown ? submitter.unknown.body : null;
+    let body = saveSubmitter.unknown ? saveSubmitter.unknown.body : null;
     if (!body) {
-      const picked = form.querySelector('[name="condition"]:checked');
-      const condition = picked ? picked.value : "healthy";
-      const s = state(n);
-      body = { condition, surfaces: takesSurfaces(condition) ? checkedSurfaces(form) : [],
-               note: form.elements.namedItem("note").value.trim(), expected_condition: s.recorded ? s.condition : null };
+      if (!pending.size) return;
+      body = { teeth: [...pending].map(([n, change]) => {
+        const before = saved(n);
+        return { tooth: n, ...change, expected_condition: before.recorded ? before.condition : null };
+      }) };
       if (data.appointment_id) body.appointment_id = data.appointment_id;
     }
-    const url = submitter.unknown ? submitter.unknown.url : `/api/v1/patients/${data.patient_id}/teeth/${n}`;
-    const result = await submitter.run("PUT", url, body, `${t("finding")} · ${t("tooth_n", { n: localDigits(n) })}`);
+    const sent = body.teeth.map((item) => item.tooth);
+    const result = await saveSubmitter.run("PUT", `/api/v1/patients/${data.patient_id}/teeth`, body, t("teeth_label"));
+    updateBar();
     if (!result) return;
     const error = result.data && result.data.error;
     if (result.status === 409 && error && error.code === "stale") {
-      // Someone changed it meanwhile: show the tooth as it is now; the person decides again.
+      // Someone changed that tooth meanwhile: show it as it is now; the other changes wait for the next Save.
+      const n = error.tooth_number;
       teeth[n] = error.tooth ? { condition: error.tooth.condition, surfaces: error.tooth.surfaces || [], note: error.tooth.note || "", recorded: true }
         : { condition: "healthy", surfaces: [], note: "", recorded: false };
-      changed(n, null);
-      fill();
+      pending.delete(n);
+      repaint([n]);
+      updateBar();
+      saveSubmitter.say(t("tooth_stale", { n: localDigits(n) }));
       return;
     }
     if (!isOk(result)) return;
-    changed(n, result.data.tooth);
-    toast(t("finding_saved", { n: localDigits(n), condition: labels[result.data.tooth.condition] }));
+    for (const tooth of result.data.teeth) {
+      teeth[tooth.tooth] = { condition: tooth.condition, surfaces: tooth.surfaces || [], note: tooth.note || "", recorded: tooth.id != null };
+    }
+    sent.forEach((n) => pending.delete(n));
+    repaint(sent);
+    updateBar();
+    if (current != null && sent.includes(current)) loadHistory(false);
+    toast(t("teeth_saved", { n: localDigits(sent.length) }));
   });
+  saveBar.querySelector("[data-undo-teeth]").addEventListener("click", () => {
+    if (saveSubmitter.holdsUnknown() || saveBar.dataset.busy) return;
+    const numbers = [...pending.keys()];
+    pending.clear();
+    repaint(numbers);
+    updateBar();
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (pending.size || saveSubmitter.holdsUnknown()) { event.preventDefault(); event.returnValue = t("teeth_unsaved"); }
+  });
+}
+
+function findingPart(section) {
+  const form = section.querySelector("form");
+  function stage() {
+    const n = current;
+    if (n == null) return;
+    const picked = form.querySelector('[name="condition"]:checked');
+    const condition = picked ? picked.value : "healthy";
+    const change = { condition, surfaces: takesSurfaces(condition) ? checkedSurfaces(form) : [],
+                     note: form.elements.namedItem("note").value.trim() };
+    const before = saved(n);
+    const same = change.condition === before.condition && change.surfaces.join() === before.surfaces.join()
+      && change.note === (before.note || "");
+    if (same) pending.delete(n); else pending.set(n, change);
+    paint(n);
+    showState();
+    updateBar();
+  }
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "condition") surfacesFor(form, event.target.value);
+    stage();
+  });
+  form.addEventListener("input", (event) => { if (event.target.name === "note") stage(); });
+  form.addEventListener("submit", (event) => event.preventDefault());
   function fill() {
     const s = state(current);
     form.reset();
@@ -169,7 +227,7 @@ function findingPart(section) {
     form.elements.namedItem("note").value = s.note || "";
     surfacesFor(form, s.condition);
   }
-  return { reset() { if (!submitter.holdsUnknown()) { submitter.reset(); fill(); } } };
+  return { reset() { fill(); } };
 }
 
 // --- a procedure in this visit: POST appointments/{id}/procedures (an invoice line) ---

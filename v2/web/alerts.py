@@ -81,6 +81,7 @@ def items(ctx):
     item_ids = [r["target_id"] for r in rows if r["action"] == "item.count"]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
+    shift_of = _shifts(ctx, rows[-1]["at"], names)
     seen = ctx.membership.alerts_seen_at
     out = []
     for r in rows:
@@ -88,7 +89,7 @@ def items(ctx):
         before, after = d.get("before") or {}, d.get("after") or {}
         item = {"id": r["id"], "at": local_iso(ctx.clinic, r["at"]), "who": names.get(r["membership_id"], _("The system")),
                 "new": not seen or r["at"] > seen, "amount": None, "patient": None, "patient_id": None, "what": "",
-                "detail": "", "level": "warn"}
+                "detail": "", "level": "warn", "shift": shift_of(r["at"])}
         if action == "visit_procedure.remove":
             item["what"] = _("Removed a recorded procedure")
             item["detail"] = procedures.get(before.get("procedure_id"), "") + (f" · {before['tooth']}" if before.get("tooth") else "")
@@ -140,6 +141,23 @@ def items(ctx):
             item["detail"] = f"{stock.get(r['target_id'], '')} · {before.get('quantity')} → {after.get('quantity')}"
         out.append(item)
     return out
+
+
+def _shifts(ctx, oldest, names):
+    """In whose register shift each alert happened (Saged, 2026-11-22): who opened it and when, who closed it and when.
+    One read of the shifts that overlap the alerts (index shift_list), then a lookup per alert."""
+    rows = sql.rows(ctx, 'SELECT opened_at, opened_by_id, closed_at, closed_by_id FROM "finance_shift" '
+                         "WHERE clinic_id = %s AND (closed_at IS NULL OR closed_at >= %s) ORDER BY opened_at DESC, id DESC "
+                         "LIMIT 500", [ctx.clinic_id, oldest])
+
+    def find(at):
+        for opened_at, opened_by, closed_at, closed_by in rows:
+            if opened_at <= at and (closed_at is None or at <= closed_at):
+                return {"opened_by": names.get(opened_by, _("The system")), "opened_at": local_iso(ctx.clinic, opened_at),
+                        "closed_by": names.get(closed_by, _("The system")) if closed_at else None,
+                        "closed_at": local_iso(ctx.clinic, closed_at) if closed_at else None}
+        return None
+    return find
 
 
 @require_GET

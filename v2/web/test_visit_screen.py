@@ -22,8 +22,12 @@ class VisitScreenTests(M2TestCase):
     def test_the_screen_shows_the_patient_band_in_arabic_right_to_left(self):
         visit = self.in_room()
         p = visit["patient"]["id"]
-        r = call(self.desk, "PATCH", f"/api/v1/patients/{p}", {"changes": {"allergies": "Penicillin", "chronic_conditions": "Diabetes"},
-                                                                  "expected": {"allergies": "", "chronic_conditions": ""}})
+        medical = {"changes": {"allergies": "Penicillin", "chronic_conditions": "Diabetes"},
+                   "expected": {"allergies": "", "chronic_conditions": ""}}
+        # The desk reads the medical fields but never changes them (Saged, 2026-11-22).
+        self.assertEqual(call(self.desk, "PATCH", f"/api/v1/patients/{p}", medical).status_code, 403)
+        self.assertIn(call(self.desk, "PATCH", f"/api/v1/patients/{p}", {"changes": {"address": "Giza"}, "expected": {"address": ""}}).status_code, (200, 204))
+        r = call(self.doc, "PATCH", f"/api/v1/patients/{p}", medical)
         self.assertIn(r.status_code, (200, 204), r.content)
         before = access_count(self.a, AuditAccess.Action.NOTE)
         r = self.doc.get(f"/visits/{visit['id']}")

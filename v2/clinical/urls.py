@@ -23,7 +23,7 @@ urlpatterns = [
     path(v + "attachments/<int:attachment_id>", views.attachment_file_view),
     path(v + "patients/<int:patient_id>/prescriptions", views.patient_prescriptions_view),
     path(v + "patients/<int:patient_id>/allergy-check", views.allergy_check_view),
-    path(v + "patients/<int:patient_id>/teeth", views.chart_view),
+    path(v + "patients/<int:patient_id>/teeth", by_method(GET=views.chart_view, PUT=views.teeth_set_view)),
     path(v + "patients/<int:patient_id>/teeth/<int:tooth>", views.tooth_set_view),
     path(v + "patients/<int:patient_id>/teeth/<int:tooth>/history", views.tooth_history_view),
     path(v + "patients/<int:patient_id>/plans", by_method(GET=views.plans_view, POST=views.plan_create_view)),

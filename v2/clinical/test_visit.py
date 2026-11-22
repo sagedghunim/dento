@@ -349,6 +349,29 @@ class ChartAndPlanTests(M2TestCase):
             self.assertEqual(Tooth.objects.get(clinic_id=self.a.id, tooth=16).condition, "fractured")
 
 
+    def test_several_teeth_are_saved_together_or_not_at_all(self):
+        # One Save for every tooth changed (Saged, 2026-11-22).
+        url = f"/api/v1/patients/{self.patient}/teeth"
+        r = call(self.doc, "PUT", url, {"teeth": [
+            {"tooth": 16, "condition": "caries", "surfaces": ["O"], "expected_condition": None},
+            {"tooth": 26, "condition": "missing", "expected_condition": None},
+            {"tooth": 36, "condition": "filling", "surfaces": ["M", "O"], "note": "قديم"}]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(sorted((t["tooth"], t["condition"]) for t in r.json()["teeth"]),
+                         [(16, "caries"), (26, "missing"), (36, "filling")])
+        # One stale tooth refuses the whole save: nothing changes.
+        stale = call(self.doc, "PUT", url, {"teeth": [
+            {"tooth": 17, "condition": "caries", "surfaces": ["O"], "expected_condition": None},
+            {"tooth": 16, "condition": "fractured", "expected_condition": None}]})
+        self.assertEqual((stale.status_code, stale.json()["error"]["tooth"]["tooth"]), (409, 16))
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertFalse(Tooth.objects.filter(clinic_id=self.a.id, tooth=17).exists())
+        bad = [{"tooth": 16, "condition": "caries"}, {"tooth": 16, "condition": "missing"}]
+        self.assertEqual(call(self.doc, "PUT", url, {"teeth": bad}).status_code, 400)  # the same tooth twice
+        self.assertEqual(call(self.doc, "PUT", url, {"teeth": []}).status_code, 400)
+        self.assertEqual(call(self.a.client("assistant"), "PUT", url, {"teeth": bad[:1]}).status_code, 403)
+
+
 class TimelineAndBalanceTests(M2TestCase):
     def test_the_timeline_is_newest_first_across_kinds_and_pages_without_gaps(self):
         self.sees_money()  # the timeline's payments

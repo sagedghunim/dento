@@ -1125,6 +1125,13 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .dated-card { margin-block-end: 14px; }
 .dated-visit { margin-block-start: 12px; border-block-start: 1px solid var(--line); padding-block-start: 10px; }
 .tooth.lit { background: var(--amber-tint); border-color: var(--amber); }
+/* A tooth changed but not saved yet, and the one Save under the chart (Saged, 2026-11-22). */
+.tooth[data-pending] { outline: 2px dashed var(--amber); outline-offset: 2px; }
+.chart-save { position: sticky; bottom: 0; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--amber);
+  border-radius: 12px; background: var(--amber-tint); }
+.chart-save form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chart-save strong { flex: 1; }
+.chart-save .form-error { flex-basis: 100%; margin: 0; }
 /* The owner's alerts (Saged, 2026-11-19) */
 .nav-count { display: inline-block; min-width: 1.6em; padding: 0 6px; margin-inline-start: 6px; border-radius: 999px; background: var(--amber); color: #111; font-size: .8rem; text-align: center; }
 .alert-list { list-style: none; margin: 0; padding: 0; }

@@ -49,6 +49,7 @@ def _perms(ctx):
         "collect": ctx.can("billing.collect"), "discount": ctx.can("billing.discount"),
         "refund": ctx.can("billing.refund"), "finances": ctx.can("finances.view"),
         "chart": ctx.can("clinical.view"), "record": ctx.can("procedures.record"),
+        "write_medical": ctx.can("clinical.write"),  # notes, allergies, chronic conditions (Saged, 2026-11-22)
         # Any amount at all, and the doctor's discount suggestion (Saged, 2026-11-16).
         "money": ctx.can("money.view"), "suggest": ctx.can("discounts.suggest"),
     }

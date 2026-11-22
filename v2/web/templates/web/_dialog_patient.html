@@ -1,5 +1,5 @@
 {% load i18n hamada %}
-<dialog class="sheet" id="patient-dialog" aria-labelledby="patient-title">
+<dialog class="sheet" id="patient-dialog" aria-labelledby="patient-title"{% if not perms.write_medical %} data-medical-locked{% endif %}>
 <form id="patient-form" novalidate>
   <header class="dialog-head">
     <h2 id="patient-title" data-title-new>{% translate "New patient" %}</h2>
@@ -12,9 +12,9 @@
       <label class="field">{% translate "Or the date of birth" %}<input name="birth_date" type="date" max="{{ config.today }}" min="1900-01-01"></label>
       <label class="field">{% translate "Address" %}<input name="address" maxlength="200" dir="auto" autocomplete="off"></label>
     </div>
-    <label class="field">{% translate "Allergies" %}<textarea name="allergies" maxlength="1000" dir="auto"></textarea></label>
-    <label class="field">{% translate "Chronic conditions" %}<textarea name="chronic_conditions" maxlength="1000" dir="auto"></textarea></label>
-    <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="2000" dir="auto"></textarea></label>
+    <label class="field" data-medical>{% translate "Allergies" %}<textarea name="allergies" maxlength="1000" dir="auto"></textarea></label>
+    <label class="field" data-medical>{% translate "Chronic conditions" %}<textarea name="chronic_conditions" maxlength="1000" dir="auto"></textarea></label>
+    <label class="field" data-medical>{% translate "Notes" %}<textarea name="notes" maxlength="2000" dir="auto"></textarea></label>
   </div>
   <footer class="dialog-foot">
     <p class="form-error" data-error role="alert"></p>

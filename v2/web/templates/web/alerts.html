@@ -17,6 +17,8 @@
           {% if a.patient %} · {% if a.patient_id %}<a href="/patients/{{ a.patient_id }}"><bdi dir="auto">{{ a.patient }}</bdi></a>{% else %}<bdi dir="auto">{{ a.patient }}</bdi>{% endif %}{% endif %}
           {% if a.detail %} · <bdi dir="auto">{{ a.detail }}</bdi>{% endif %}
         </p>
+        {% if a.shift %}<p class="muted alert-shift" data-shift>{% translate "Shift" %}: {% translate "opened by" %} <bdi dir="auto">{{ a.shift.opened_by }}</bdi> {{ a.shift.opened_at|shortday }} {{ a.shift.opened_at|clock }}{% if a.shift.closed_at %} · {% translate "closed by" %} <bdi dir="auto">{{ a.shift.closed_by }}</bdi> {{ a.shift.closed_at|shortday }} {{ a.shift.closed_at|clock }}{% else %} · {% translate "still open" %}{% endif %}</p>
+        {% else %}<p class="muted alert-shift">{% translate "No register shift was open." %}</p>{% endif %}
       </div>
       {% if a.amount is not None %}<p class="alert-amount num">{% if a.before_amount is not None %}{{ a.before_amount|money }} → {% endif %}{{ a.amount|money }}</p>{% endif %}
     </li>

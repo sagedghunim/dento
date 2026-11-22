@@ -22,6 +22,9 @@ from summaries.services import bump
 
 from .models import Patient
 
+# The doctor's fields: only someone who writes clinical notes changes them once the file exists; the desk may fill
+# them when it opens a new file, and reads them after (Saged, 2026-11-22).
+MEDICAL = ("notes", "allergies", "chronic_conditions")
 FIELDS = ("full_name", "phone", "phone_owner", "guardian_relation", "sex", "birth_date", "address", "notes",
           "allergies", "chronic_conditions")
 # Identity edits go to the change log with before and after (design 8).

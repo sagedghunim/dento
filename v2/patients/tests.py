@@ -133,20 +133,24 @@ class PatientTests(M1TestCase):
         url = f"/api/v1/patients/{patient['id']}"
         r = call(self.desk, "PATCH", url, {"changes": {"full_name": "Ahmed M. Ali"}, "expected": {"full_name": "wrong"}})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "stale"))
-        r = call(self.desk, "PATCH", url, {"changes": {"full_name": "Ahmed M. Ali", "notes": "Prefers mornings"},
-                                           "expected": {"full_name": patient["full_name"], "notes": ""}})
+        r = call(self.desk, "PATCH", url, {"changes": {"full_name": "Ahmed M. Ali", "address": "Giza"},
+                                           "expected": {"full_name": patient["full_name"], "address": ""}})
         self.assertEqual((r.status_code, r.json()["patient"]["full_name"]), (200, "Ahmed M. Ali"))
         with clinic_transaction(self.a.id, self.a.shard):
             change = AuditChange.objects.get(clinic_id=self.a.id, action="patient.identity")
         self.assertEqual(change.details, {"before": {"full_name": patient["full_name"]}, "after": {"full_name": "Ahmed M. Ali"}})
         self.assertEqual(call(self.desk, "PATCH", url, {"changes": {"made_up": 1}}).status_code, 400)
+        # Notes, allergies and chronic conditions are the doctor's once the file exists (Saged, 2026-11-22).
+        for name in ("notes", "allergies", "chronic_conditions"):
+            self.assertEqual(call(self.desk, "PATCH", url, {"changes": {name: "x"}, "expected": {name: ""}}).status_code,
+                             403, name)
         self.assertEqual(call(self.desk, "GET", "/api/v1/patients?q=ahmed").json()["items"][0]["name"], "Ahmed M. Ali")
 
     def test_another_clinics_file_is_404_everywhere(self):
         foreign = self.book(fixture=self.b).json()["appointment"]["patient"]["id"]
         for method, path in (("GET", ""), ("GET", "/visits"), ("GET", "/payments"), ("PATCH", "")):
             r = call(self.desk, method, f"/api/v1/patients/{foreign}{path}",
-                     {"changes": {"notes": "x"}} if method == "PATCH" else None)
+                     {"changes": {"address": "x"}} if method == "PATCH" else None)
             self.assertEqual(r.status_code, 404, (method, path))
         self.assertEqual(access_events(self.a), [])
         self.assertEqual(call(self.desk, "GET", f"/api/v1/patients/{2**64}").status_code, 404)

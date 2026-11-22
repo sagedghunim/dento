@@ -27,6 +27,18 @@
       <li><span class="key key-ring" aria-hidden="true"></span>{% translate "In progress" %}</li>
       <li><span class="key-rct" aria-hidden="true">RCT</span>{% translate "Open root canal" %}</li>
     </ul>
+    {% if perms.record %}
+    {# Every tooth changed, saved with one Save (Saged, 2026-11-22). #}
+    <div class="chart-save" data-chart-save hidden>
+      <form novalidate>
+        <strong data-pending-count></strong>
+        <p class="form-error" data-error role="alert"></p>
+        <button type="button" class="btn ghost" data-undo-teeth>{% translate "Undo the changes" %}</button>
+        <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+        <button type="submit" class="btn" data-submit>{% translate "Save the changes" %}</button>
+      </form>
+    </div>
+    {% endif %}
   </section>
 
   <aside class="tooth-panel card" data-panel hidden aria-labelledby="panel-title">
@@ -48,11 +60,7 @@
           </fieldset>
           {% include "web/_surfaces.html" %}
           <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" autocomplete="off" dir="auto"></label>
-          <p class="form-error" data-error role="alert"></p>
-          <div class="panel-actions">
-            <button type="submit" class="btn" data-submit>{% translate "Save the finding" %}</button>
-            <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
-          </div>
+          <p class="muted">{% translate "Change as many teeth as you need, then save them all at once under the chart." %}</p>
         </form>
       </section>
       {% if can_record %}

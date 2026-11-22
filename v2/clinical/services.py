@@ -863,7 +863,7 @@ def set_tooth(ctx, patient_id, tooth, condition, surfaces, note, appointment_id=
     if expected is not False and (current[2] if current else None) != expected:
         raise ApiError("stale", _("Someone changed this tooth meanwhile. Reload and try again."), 409,
                        fields={"condition": current[2] if current else None},
-                       extra={"tooth": tooth_row(current) if current else None})
+                       extra={"tooth": tooth_row(current) if current else None, "tooth_number": tooth})
     return _set_tooth(ctx, patient["id"], tooth, condition, surfaces, note, appointment_id), True
 
 

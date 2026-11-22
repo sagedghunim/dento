@@ -61,6 +61,8 @@ def mutating(o):
                              ["procedures.record"], None),
         "tooth": ("PUT", f"/api/v1/patients/{p}/teeth/16", {"condition": "caries", "surfaces": ["O"]},
                   {"condition": "caries", "surfaces": ["D"]}, ["procedures.record"], None),
+        "teeth": ("PUT", f"/api/v1/patients/{p}/teeth", {"teeth": [{"tooth": 17, "condition": "caries", "surfaces": ["O"]}]},
+                  {"teeth": [{"tooth": 17, "condition": "caries", "surfaces": ["D"]}]}, ["procedures.record"], None),
         "plan": ("POST", f"/api/v1/patients/{p}/plans", {"items": [{"procedure_id": o.crown, "tooth": 12}]},
                  {"items": [{"procedure_id": o.crown, "tooth": 13}]}, ["procedures.record"], None),
         "plan items": ("POST", f"/api/v1/plans/{o.plan}/items", {"items": [{"procedure_id": o.crown, "tooth": 14}]},

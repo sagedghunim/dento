@@ -1584,12 +1584,6 @@ msgstr "قيد العلاج"
 msgid "Has procedures"
 msgstr "عليه إجراءات"
 
-msgid "Finding"
-msgstr "تسجيل فحص"
-
-msgid "Saved: tooth {n}, {condition}"
-msgstr "تم الحفظ: سن {n}، {condition}"
-
 msgid "Record a procedure"
 msgstr "تسجيل إجراء"
 
@@ -1664,9 +1658,6 @@ msgstr "الحالة"
 
 msgid "Note (optional)"
 msgstr "ملاحظة (اختياري)"
-
-msgid "Save the finding"
-msgstr "حفظ الفحص"
 
 msgid "It is added to this visit's bill."
 msgstr "يضاف إلى فاتورة هذه الزيارة."
@@ -4258,3 +4249,49 @@ msgstr "الكل"
 
 msgid "No patient has this tag yet. Open a patient's file to add it."
 msgstr "مفيش عيان عليه العلامة دي لسه. افتح ملف العيان وضيفها."
+
+msgid ""
+"Change as many teeth as you need, then save them all at once under the "
+"chart."
+msgstr ""
+"عدّل في السنان اللي محتاجها، وبعدين احفظها كلها مرة واحدة من تحت الخريطة."
+
+msgid "Change at least one tooth."
+msgstr "عدّل سنة واحدة على الأقل."
+
+msgid "Save the changes"
+msgstr "حفظ التعديلات"
+
+msgid "Saved the changes to {n} teeth"
+msgstr "اتحفظت تعديلات {n} سنة"
+
+msgid "Some teeth aren't saved yet."
+msgstr "فيه سنان لسه ما اتحفظتش."
+
+msgid ""
+"Someone changed tooth {n} meanwhile. Look at it again; the other changes are"
+" still waiting."
+msgstr ""
+"حد عدّل السنة {n} في نفس الوقت. بص عليها تاني، وباقي التعديلات لسه مستنية "
+"الحفظ."
+
+msgid "Teeth changed: {n}"
+msgstr "سنان اتعدّلت: {n}"
+
+msgid "Undo the changes"
+msgstr "إلغاء التعديلات"
+
+msgid "Shift"
+msgstr "الوردية"
+
+msgid "opened by"
+msgstr "فتحها"
+
+msgid "closed by"
+msgstr "قفلها"
+
+msgid "still open"
+msgstr "لسه مفتوحة"
+
+msgid "No register shift was open."
+msgstr "ما كانش فيه وردية خزنة مفتوحة."
