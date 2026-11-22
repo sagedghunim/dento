@@ -95,7 +95,7 @@ export function initPay({ onChanged } = {}) {
     dialog.querySelector("[data-payments]").replaceChildren(...payments.map((p) => {
       const li = el("li");
       const what = el("span");
-      what.append(p.kind === "refund" ? t("refund_row") : paymentName(p), " · ");
+      what.append(p.kind === "refund" ? t("given_back_row") : paymentName(p), " · ");  // done, not an order
       if (p.day && p.day !== config.today) what.append(dayShort(p.day), " ");
       what.append(clockNode(p.received_at));
       if (p.refunded) what.append(" · ", t("refunded_part"), " ", money(p.refunded));
