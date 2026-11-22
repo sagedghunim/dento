@@ -195,14 +195,17 @@ class AddPlaceTests(ShardTestCase):
                               headers={"Idempotency-Key": str(key or uuid.uuid4())}, REMOTE_ADDR=ip)
 
     def test_a_signed_in_account_adds_a_place_and_owns_it(self):
-        client = self.a.client("doctor")
+        # Someone signed in with no clinic yet (an owner is checked below); the desk and employed doctors can't
+        # (Saged, 2026-11-22).
+        doctor = self.user("newcomer")
+        client = Client()
+        client.force_login(doctor)
         data = body(kind="center", sections=[{"specialty": "internal"}, {"specialty": "ophthalmology"}])
         del data["owner"]
         key = uuid.uuid4()
         r = self.post(client, data, key)
         self.assertEqual(r.status_code, 201, r.content)
         answer = r.json()
-        doctor = self.a.user("doctor")
         entry = DirectoryClinic.objects.get(id=answer["clinic"]["id"])
         self.assertEqual((answer["clinic"]["kind"], answer["next"]), ("center", "security"))
         link = UserClinic.objects.get(user=doctor, clinic=entry)
@@ -213,7 +216,7 @@ class AddPlaceTests(ShardTestCase):
             self.assertEqual(Schedule.objects.filter(clinic_id=entry.id).count(), 6)
         me = client.get("/api/v1/me").json()
         self.assertEqual(me["active"]["clinic_id"], entry.id)  # the new place is now the active one
-        self.assertEqual(sorted(c["kind"] for c in me["clinics"]), ["center", "clinic"])
+        self.assertEqual(sorted(c["kind"] for c in me["clinics"]), ["center"])
         self.assertTrue(AccountEvent.objects.filter(user_id=doctor.id, kind="place_added").exists())
         again = self.post(client, data, key)
         self.assertEqual((again.status_code, again.json()), (201, answer))
@@ -233,7 +236,9 @@ class AddPlaceTests(ShardTestCase):
         session[SESSION_MFA] = True
         session.save()
         self.assertEqual(self.post(client, data).status_code, 403)
-        doctor = self.a.client("doctor")
+        for role in ("doctor", "assistant"):
+            self.assertEqual(self.post(self.a.client(role), data).status_code, 403, role)
+        doctor = self.a.client("owner")
         r = self.post(doctor, {**data, "sections": [{"specialty": "dental"}, {"specialty": "internal"}]})
         self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"sections": "count"}))
         for i in range(3):

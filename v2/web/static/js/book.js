@@ -123,7 +123,7 @@ export function initBook({ onBooked, defaults } = {}) {
   function nextSession() {
     plan.index += 1;
     stepAt = Date.now();
-    start({ patient, doctorId: when.doctor(), sectionId: sectionId() });
+    start({ patient, doctorId: when.doctor(), sectionId: sectionId(), fixedDoctor: fixed });
   }
 
   dialog.addEventListener("click", (event) => {
@@ -387,6 +387,7 @@ export function initBook({ onBooked, defaults } = {}) {
 
   // --- opening ---
 
+  let fixed = null;  // the doctor picked at the top of Today, kept for the plan's next sessions
   function open({ plan: sessions = null, opener, ...rest } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one (R7)
     plan = sessions && sessions.length && rest.patient ? { items: sessions, index: 0 } : null;
@@ -395,7 +396,8 @@ export function initBook({ onBooked, defaults } = {}) {
   }
 
   // The dialog afresh, for a new booking or for the plan's next session (the dialog then stays open).
-  function start({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener } = {}) {
+  // fixedDoctor: the doctor picked at the top of Today (Saged, 2026-11-22): the booking is theirs, not asked again.
+  function start({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener, fixedDoctor = null } = {}) {
     form.reset();
     submitter.reset();
     results.replaceChildren();
@@ -419,8 +421,12 @@ export function initBook({ onBooked, defaults } = {}) {
     section = section || d.sectionId || "";
     if (section) { const s = form.querySelector(`[name="section"][value="${CSS.escape(String(section))}"]`); if (s) s.checked = true; }
     filterBySection();
-    when.setDoctor(doctorId || d.doctorId || "");
+    const doctorBox = form.querySelector("[data-doctor-box]");
+    doctorBox.hidden = false;  // setDoctor skips hidden choices
+    when.setDoctor(fixedDoctor || doctorId || d.doctorId || "");
     if (!when.doctor()) pickOnlyDoctor();
+    fixed = fixedDoctor && when.doctor() === Number(fixedDoctor) ? Number(fixedDoctor) : null;
+    doctorBox.hidden = Boolean(fixed);
     if (given) showPicked(given);
     else { patient = null; picked.hidden = true; finder.hidden = false; if (newBox) newBox.hidden = true; field("q").value = query; }
     openDialog(dialog, opener || dialog._opener);

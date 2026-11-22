@@ -79,8 +79,8 @@
 {% endif %}
 {% endif %}
 
-{% if perms.expenses %}{% if tab == "register" or tab == "expenses" %}
-<dialog class="sheet small" id="expense-dialog" aria-labelledby="expense-title">
+{% if perms.expenses and tab == "register" or perms.expenses and tab == "expenses" or perms.drawer_expense and tab == "register" %}
+<dialog class="sheet small" id="expense-dialog" aria-labelledby="expense-title"{% if not perms.expenses %} data-drawer-only{% endif %}>
 <form novalidate>
   <header class="dialog-head">
     <h2 id="expense-title">{% translate "Pay an expense" %}</h2>
@@ -91,9 +91,9 @@
       {% for c in pay_categories %}<label class="chip"><input type="radio" name="category_id" value="{{ c.id }}" data-code="{{ c.code }}"><span><bdi dir="auto">{{ c.name }}</bdi></span></label>{% endfor %}
     </div></fieldset>
     <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
-    {% if perms.collect %}<label class="check"><input type="checkbox" name="from_shift"> <span>{% translate "Paid from the register's cash" %}</span></label>{% endif %}
+    {% if perms.collect and perms.expenses %}<label class="check"><input type="checkbox" name="from_shift"> <span>{% translate "Paid from the register's cash" %}</span></label>{% endif %}
     <label class="field"><span data-note-optional>{% translate "Note (optional)" %}</span><span data-note-required hidden>{% translate "What was it for? (required for Other)" %}</span><input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
-    <label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr" max="{{ today }}" value="{{ today }}" data-today="{{ today }}"></label>
+    {% if perms.expenses %}<label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr" max="{{ today }}" value="{{ today }}" data-today="{{ today }}"></label>{% endif %}
   </div>
   <footer class="dialog-foot">
     <p class="form-error" data-error role="alert"></p>
@@ -103,7 +103,7 @@
   </footer>
 </form>
 </dialog>
-{% endif %}{% endif %}
+{% endif %}
 
 {% if tab == "expenses" and perms.expenses %}
 

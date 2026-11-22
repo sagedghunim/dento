@@ -173,6 +173,17 @@ def add_expense_view(request, ctx, data):
                   target_id=expense["id"])
 
 
+@api("POST", perm="cash.shift", replay=_replay_expense)
+def drawer_expense_view(request, ctx, data):
+    """POST {category_id, amount, note?}: the desk pays rent, a salary… out of today's drawer (Saged, 2026-11-22).
+    Other days, expenses not from the drawer and voiding stay with expenses.manage."""
+    expense = services.add_expense(ctx, validate.ident(data.get("category_id"), "category_id"),
+                                   parse_money(data.get("amount"), "amount", low=1), business_day(ctx.clinic),
+                                   validate.text(data, "note", 200, required=False), True)
+    return Result({"expense": _expense_payload(ctx, expense)}, status=201, target_type="expense",
+                  target_id=expense["id"])
+
+
 @api("POST", perm="expenses.manage", replay=_replay_expense)
 def void_expense_view(request, ctx, data, expense_id):
     expense_id = validate.path_id(expense_id, services.not_found("expense"))

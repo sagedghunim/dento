@@ -1,5 +1,5 @@
 {% load i18n hamada %}
-<fieldset class="group">
+<fieldset class="group" data-doctor-box>
   <legend>{% translate "Doctor" %}</legend>
   <div class="chips" data-doctors>{% for d in config.doctors %}<label class="chip" data-sections="{{ d.sections|join:',' }}"><input type="radio" name="doctor" value="{{ d.id }}"><span><bdi dir="auto">{{ d.name }}</bdi></span></label>{% endfor %}</div>
 </fieldset>

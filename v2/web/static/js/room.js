@@ -692,3 +692,19 @@ if (finishButton) {
     }
   });
 }
+
+// --- the patient file in a window over the visit, not a new tab (Saged, 2026-11-22) ---
+const fileDialog = document.getElementById("file-dialog");
+if (fileDialog) {
+  const frame = fileDialog.querySelector("[data-file-frame]");
+  wireClose(fileDialog);
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-open-file]");
+    if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;  // a new tab if asked for
+    event.preventDefault();
+    const url = `${link.getAttribute("href")}?embed=1`;
+    if (frame.dataset.src !== url) { frame.dataset.src = url; frame.src = url; }
+    else frame.contentWindow.location.reload();  // fresh each time it opens
+    openDialog(fileDialog, link);
+  });
+}

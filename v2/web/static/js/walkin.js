@@ -98,7 +98,7 @@ export function initWalkIn({ onBooked } = {}) {
   // --- doctor and service: the server's choice first, both changeable ---
 
   const doctorId = () => Number(field("doctor").value) || defaults.doctor_id || null;
-  const serviceId = () => Number(field("service").value) || (field("doctor").value && Number(field("doctor").value) !== defaults.doctor_id ? null : defaults.service_id) || null;
+  const serviceId = () => Number(field("service").value) || null;
 
   // How many of a procedure (Saged, 2026-11-19): shown for a procedure service only.
   const qtyBox = form.querySelector("[data-qty-box]");
@@ -117,13 +117,24 @@ export function initWalkIn({ onBooked } = {}) {
       if (!o.value) continue;
       o.hidden = sections.length > 0 && Boolean(o.dataset.section) && !sections.includes(o.dataset.section);
       o.disabled = o.hidden;  // Safari shows hidden options
-      if (o.hidden && o.selected) field("service").value = "";
     }
+    pickService();
+  }
+
+  // No "usual consultation" choice (Saged, 2026-11-22): a real service is always picked, the clinic's default for this
+  // doctor when it is offered, else the first one offered.
+  function pickService(preferred) {
+    const select = field("service");
+    const usable = [...select.options].filter((o) => o.value && !o.disabled);
+    const want = preferred && usable.find((o) => o.value === String(preferred));
+    const current = usable.find((o) => o.value === select.value);
+    const choice = want || current || usable.find((o) => o.value === String(defaults.service_id || "")) || usable[0];
+    select.value = choice ? choice.value : "";
   }
 
   form.addEventListener("change", (event) => {
     const name = event.target.name;
-    if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }
+    if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }  // filterServices picks one
     if (name === "service") quote();
     if (name === "qty") quote();
     if (name === "amount") field("amount").dataset.touched = "1";
@@ -142,10 +153,10 @@ export function initWalkIn({ onBooked } = {}) {
     if (!field("doctor").value && defaults.doctor_id) {
       field("doctor").value = String(defaults.doctor_id);
       if (field("doctor").value !== String(defaults.doctor_id)) field("doctor").value = "";  // not in the list
+      field("service").value = "";
       filterServices();
-      if (defaults.service_id) field("service").value = String(defaults.service_id);
-      if (field("service").value !== String(defaults.service_id || "")) field("service").value = "";
     }
+    pickService(field("doctor").value && Number(field("doctor").value) === defaults.doctor_id ? defaults.service_id : null);
     quote();
   }
 
@@ -218,7 +229,8 @@ export function initWalkIn({ onBooked } = {}) {
 
   // --- opening ---
 
-  function open({ opener, query = "" } = {}) {
+  // doctorId: the doctor picked at the top of Today (Saged, 2026-11-22): the walk-in is theirs, not asked again.
+  function open({ opener, query = "", doctorId = "" } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one
     form.reset();
     submitter.reset();
@@ -236,6 +248,10 @@ export function initWalkIn({ onBooked } = {}) {
     finder.hidden = false;
     if (newBox) newBox.hidden = true;
     defaults = { doctor_id: null, service_id: null };
+    field("doctor").value = doctorId ? String(doctorId) : "";
+    if (field("doctor").value !== String(doctorId || "")) field("doctor").value = "";  // not working today
+    form.querySelector("[data-doctor-box]").hidden = Boolean(field("doctor").value);
+    field("service").value = "";
     filterServices();
     openDialog(dialog, opener);
     field("q").value = query;

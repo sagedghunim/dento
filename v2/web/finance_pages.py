@@ -50,7 +50,9 @@ def _method_labels():
 def _perms(ctx):
     return {"view": ctx.can("finances.view"), "pay": ctx.can("finances.view") and ctx.can("finances.pay"),
             "expenses": ctx.can("expenses.manage"), "collect": ctx.can("cash.collect"),
-            "shift": ctx.can("cash.shift"), "cash_moves": ctx.can("cash.shift") and ctx.can("cash.collect"),
+            "shift": ctx.can("cash.shift"),
+            "drawer_expense": ctx.can("cash.shift") and not ctx.can("expenses.manage"),  # by category, today only
+            "cash_moves": ctx.can("cash.shift") and ctx.can("cash.collect"),
             "patients": ctx.can("patients.view")}
 
 
@@ -211,7 +213,7 @@ def _register_context(ctx, perms):
 
     shift = services.current_shift(ctx)
     context = {"current": _shift_report(ctx, shift) if shift else None}
-    if perms["expenses"]:
+    if perms["expenses"] or perms["drawer_expense"]:
         context.update(_pay_choices(ctx, _categories(ctx)))
     if perms["shift"]:
         context["shifts"], context["shifts_next"] = _shift_page(ctx)

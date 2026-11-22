@@ -620,9 +620,9 @@ if (strip) {
 
 document.addEventListener("click", (event) => {
   const opener = event.target.closest("[data-open-book]");
-  if (opener && book) book.open({ opener });
+  if (opener && book) book.open({ opener, fixedDoctor: filter.doctor || null });
   const walkOpener = event.target.closest("[data-open-walkin]");
-  if (walkOpener && walkIn) walkIn.open({ opener: walkOpener });
+  if (walkOpener && walkIn) walkIn.open({ opener: walkOpener, doctorId: filter.doctor || "" });
 });
 
 const walkIn = initWalkIn({ onBooked: changed });

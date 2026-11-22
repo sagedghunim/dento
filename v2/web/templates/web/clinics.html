@@ -18,7 +18,7 @@
   <p class="muted">{% translate "Your account isn't a member of any clinic yet. Ask the clinic's owner to add you." %}</p>
   {% endif %}
   <p class="form-error" data-error></p>
-  {% if not request.user.is_platform_admin %}<a class="btn ghost wide" href="/places/new"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a place" %}</a>{% endif %}
+  {% if may_add_place %}<a class="btn ghost wide" href="/places/new"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add a place" %}</a>{% endif %}
 </section>
 {% endblock %}
 {% block scripts %}<script type="module" src="{% static 'js/clinics.js' %}"></script>{% endblock %}

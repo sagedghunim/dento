@@ -105,14 +105,32 @@ class FinancesPageTests(FinancesCase):
         self.assertEqual(chips.count('name="category_id"'), 5)
         self.assertIn('data-code="other"', chips.split('name="category_id"')[-1])
 
+    def test_the_desk_pays_an_expense_out_of_the_drawer_only(self):
+        categories = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
+        r = call(self.desk, "POST", "/api/v1/drawer-expenses", {"category_id": categories["rent"]["id"], "amount": 5000})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertIsNotNone(r.json()["expense"]["shift_id"])
+        register = fragment(self.desk, "/finances/part?tab=register").content.decode()
+        self.assertIn(categories["rent"]["name"], register.split("حركة الخزنة في هذه الوردية")[1])
+        # Voiding, other days and the expenses list stay the owner's.
+        self.assertEqual(call(self.desk, "POST", "/api/v1/expenses", {"category_id": categories["rent"]["id"],
+                                                                      "amount": 100}).status_code, 403)
+        expense_id = r.json()["expense"]["id"]
+        self.assertEqual(call(self.desk, "POST", f"/api/v1/expenses/{expense_id}/void", {}).status_code, 403)
+        r = call(self.desk, "POST", "/api/v1/drawer-expenses", {"category_id": categories["other"]["id"], "amount": 100})
+        self.assertEqual(r.status_code, 400)  # "Other" needs a note
+
     def test_the_front_desk_sees_the_register_only(self):
         r = self.desk.get("/finances")
         html = r.content.decode()
         self.assertEqual(r.status_code, 200)
         self.assertIn('data-tab="register"', html)
         self.assertIn('data-cash="in"', html)  # the quiet "other drawer movement"
-        for marker in MONEY_MARKERS + ("?tab=expenses", "data-new-expense", 'id="expense-dialog"'):
+        for marker in MONEY_MARKERS + ("?tab=expenses",):
             self.assertNotIn(marker, html, marker)
+        # The desk pays rent, electricity, salaries… out of the drawer, by category (Saged, 2026-11-22).
+        self.assertIn("data-new-expense", html)
+        self.assertIn('data-drawer-only', html)
         self.assertIn('data-tab="register"', self.desk.get("/finances?tab=month").content.decode())  # no way in
         self.assertIn('href="/finances"', self.desk.get("/patients").content.decode())
         for url in ("/finances/part?tab=month", "/finances/part?tab=pay", "/finances/part?tab=expenses", "/finances/owed",

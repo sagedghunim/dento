@@ -2486,9 +2486,6 @@ msgstr ""
 msgid "The team"
 msgstr "الفريق"
 
-msgid "The usual consultation"
-msgstr "الكشف المعتاد"
-
 msgid "They already have an account"
 msgstr "عنده حساب بالفعل"
 

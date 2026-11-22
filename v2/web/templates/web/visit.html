@@ -18,7 +18,7 @@
     </div>
     <div class="band-links">
       {# No phone here (Saged, 2026-11-19): a tap on it left the visit. The file opens in a new tab, the visit stays. #}
-      {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>{% translate "Patient file" %}</a>{% endif %}
+      {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" data-open-file><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>{% translate "Patient file" %}</a>{% endif %}
     </div>
     {% if patient.allergies or patient.chronic_conditions %}
     <ul class="health-flags">
@@ -191,6 +191,16 @@
     <button type="submit" class="btn" data-submit>{% translate "Save the prescription" %}</button>
   </footer>
 </form>
+</dialog>
+{% endif %}
+{% if perms.view_patients %}
+{# The patient file in a window over the visit, not a new tab (Saged, 2026-11-22). #}
+<dialog class="sheet file-sheet" id="file-dialog" aria-labelledby="file-dialog-title">
+  <header class="dialog-head">
+    <h2 id="file-dialog-title">{% translate "Patient file" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <iframe class="file-frame" title="{% translate "Patient file" %}" data-file-frame></iframe>
 </dialog>
 {% endif %}
 {{ config|json_script:"visit-data" }}

@@ -49,6 +49,15 @@ def clinics_for_user(user_id):
     ]
 
 
+def may_add_place(user):
+    """Only an owner adds a place, or someone with no clinic yet (a sign-up while signed in). The desk and employed
+    doctors don't (Saged, 2026-11-22)."""
+    if user.is_platform_admin:
+        return False
+    roles = set(UserClinic.objects.filter(user_id=user.id, is_active=True).values_list("role", flat=True))
+    return not roles or "owner" in roles
+
+
 def record_facts(clinic_id, *, kind, timezone, day_ends_at, name=None):
     """Bring the directory's copy of a place's kind, time zone and day end in line with its shard (I6).
 

@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/v1/expense-categories/<int:category_id>", views.update_category_view),
     path("api/v1/expenses", by_method(GET=views.expenses_view, POST=views.add_expense_view)),
     path("api/v1/expenses/<int:expense_id>/void", views.void_expense_view),
+    path("api/v1/drawer-expenses", views.drawer_expense_view),
     # Staff pay (F4)
     path("api/v1/finances/pay", views.pay_rules_view),
     path("api/v1/finances/pay/<int:membership_id>", views.set_pay_rule_view),

@@ -10,7 +10,7 @@ from clinics.models import Clinic, Membership
 from clinics.specialties import SPECIALTIES
 from core.i18n import catalogue_path, extract_msgids
 from core.routing import clinic_transaction
-from core.testing import ShardTestCase, new_patient
+from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import M1TestCase
 from web import format as fmt
 from web.http import route_exists
@@ -47,6 +47,15 @@ class PageTests(ShardTestCase):
         r = self.a.client("doctor").get("/")
         self.assertIn('lang="en" dir="ltr"', r.content.decode())
 
+    def test_the_browsers_language_wins_when_people_switch_accounts(self):
+        # One desk PC, two accounts with different saved languages: the page keeps the language
+        # last picked on this browser instead of flipping with each account (Saged, 2026-11-22).
+        doctor = self.a.user("doctor")
+        User.objects.filter(pk=doctor.pk).update(language="en")
+        client = self.a.client("doctor")
+        client.cookies["hamada_language"] = "ar"
+        self.assertIn('lang="ar" dir="rtl"', client.get("/").content.decode())
+
     def test_pages_need_a_signed_in_member(self):
         r = Client().get("/")
         self.assertEqual((r.status_code, r["Location"]), (302, "/login?next=/"))
@@ -77,7 +86,13 @@ class PageTests(ShardTestCase):
         html = r.content.decode()
         self.assertIn("a clinic", html)
         self.assertIn("b clinic", html)
-        self.assertIn('href="/places/new"', html)  # "add a place" (design D3)
+        # Only an owner adds a place; the desk and employed doctors don't (Saged, 2026-11-22).
+        self.assertNotIn('href="/places/new"', html)
+        self.assertEqual(client.get("/places/new").status_code, 403)
+        self.assertEqual(call(client, "POST", "/api/v1/me/places", {}).status_code, 403)
+        owner = Client()
+        owner.force_login(self.a.user("owner"))
+        self.assertIn('href="/places/new"', owner.get("/clinics").content.decode())
 
 
 # --- M1 screens (design 7, 10 T15) -------------------------------------------------------------------------------

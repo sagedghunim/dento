@@ -193,7 +193,9 @@ def add_place(request, user, data):
 
     The same body as sign-up without `owner`. The new place becomes the session's active one.
     """
-    if user.is_platform_admin:
+    from directory.services import may_add_place
+
+    if not may_add_place(user):
         raise ApiError("forbidden", _("You don't have permission to do this."), 403)
     place = clean_place(data, user.language)
     ip = client_ip(request) or "-"

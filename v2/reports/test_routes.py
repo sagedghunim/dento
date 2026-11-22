@@ -20,6 +20,7 @@ EXPECTED = {
     ("GET", "api/v1/expenses"): ("expenses.manage",),
     ("POST", "api/v1/expenses"): ("expenses.manage",),
     ("POST", "api/v1/expenses/<int:expense_id>/void"): ("expenses.manage",),
+    ("POST", "api/v1/drawer-expenses"): ("cash.shift",),  # the desk pays from the drawer (Saged, 2026-11-22)
     # F4 staff pay, F5 reports
     ("GET", "api/v1/finances/pay"): ("finances.view",),
     ("PUT", "api/v1/finances/pay/<int:membership_id>"): ("finances.pay",),

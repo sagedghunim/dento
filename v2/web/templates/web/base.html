@@ -11,19 +11,20 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="modulepreload" href="{% static 'js/api.js' %}">
   <link rel="modulepreload" href="{% static 'js/shell.js' %}">
+  {% if embed %}<base target="_top">{% endif %}{# inside the visit screen's window: a link leaves it for the full page #}
   {% block head %}{% endblock %}
   <meta name="hamada" data-membership="{{ ctx.membership_id|default:'' }}" data-user="{{ request.user.id|default:'' }}"
         data-csrf-cookie="hamada_csrftoken" data-app-version="{% app_version %}" data-digits="{% digit_setting %}">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if embed %} embedded{% endif %}">
   {% include "web/_icons.html" %}
   <a class="skip btn" href="#main">{% translate "Skip to content" %}</a>
   {% if ctx %}
   <div class="app">
-    {% include "web/_side.html" %}
+    {% if not embed %}{% include "web/_side.html" %}{% endif %}
     <main class="main" id="main" tabindex="-1">
       <div class="wrap">
-        {% include "web/_topbar.html" %}
+        {% if not embed %}{% include "web/_topbar.html" %}{% endif %}
   {% else %}
     {% block plainbar %}
     <header class="plainbar">

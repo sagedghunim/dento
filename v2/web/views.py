@@ -30,8 +30,11 @@ def login_page(request):
 @ensure_csrf_cookie
 @page(member=False)
 def clinics_page(request, ctx):
+    from directory.services import may_add_place
+
     return render(request, "web/clinics.html", {"clinics": clinics_for_user(request.user.id),
-                                                "active": request.session.get(SESSION_ACTIVE)})
+                                                "active": request.session.get(SESSION_ACTIVE),
+                                                "may_add_place": may_add_place(request.user)})
 
 
 @require_GET

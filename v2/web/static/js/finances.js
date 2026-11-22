@@ -161,7 +161,7 @@ const expenseDialog = setup("expense-dialog", ({ dialog, field, submitter }) => 
   return {
     fill(item) {
       const day = field("day");
-      day.value = day.dataset.today;
+      if (day) day.value = day.dataset.today;
       // On the expenses tab the choices follow the categories listed there, so one added a minute ago is offered.
       const listed = Array.from(body.querySelectorAll(".cat-list [data-category]"), (row) => JSON.parse(row.dataset.category));
       if (listed.length) {
@@ -192,10 +192,14 @@ const expenseDialog = setup("expense-dialog", ({ dialog, field, submitter }) => 
       if (amount === null) return null;
       const note = field("note").value.trim();
       if (isOther() && !note) { submitter.say(t("need_reason")); field("note").focus(); return null; }
-      const day = asciiDigits(field("day").value);
+      const day = field("day") ? asciiDigits(field("day").value) : "";
       if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) { submitter.say(t("fin_bad_day")); return null; }
       const fromShift = field("from_shift");
       const name = chosen.closest(".chip").textContent.trim();
+      if (dialog.hasAttribute("data-drawer-only")) {  // the desk: today, out of the drawer (Saged, 2026-11-22)
+        return { method: "POST", url: "/api/v1/drawer-expenses", body: { category_id: Number(chosen.value), amount, note },
+                 label: t("fin_expense_added", { name, amount: moneyText(amount) }) };
+      }
       return { method: "POST", url: "/api/v1/expenses",
                body: { category_id: Number(chosen.value), amount, day: day || undefined, note, from_shift: Boolean(fromShift && fromShift.checked) },
                label: t("fin_expense_added", { name, amount: moneyText(amount) }) };

@@ -14,6 +14,9 @@ from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone, translation
 from django.utils.translation import gettext as _
+from django.utils.csp import CSP
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.csp import csp_override
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
@@ -417,6 +420,8 @@ def _doctor_names(ctx):
 
 @require_GET
 @ensure_csrf_cookie
+@xframe_options_sameorigin
+@csp_override({**settings.SECURE_CSP, "frame-ancestors": [CSP.SELF]})
 @page(perm="patients.view")
 @clinic_page
 def patient_page(request, ctx, patient_id):
@@ -449,7 +454,9 @@ def patient_page(request, ctx, patient_id):
         "installments": _installments(ctx, patient.id),
         "patient_tags": _patient_tags(ctx, patient.id),
         "method_names": dict(_labels()["methods"]),
-        "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today)})
+        "features": _features(), "dental": teeth.has_chart(ctx), **_dialog_context(ctx, today),
+        # ?embed=1: inside the visit screen's window, without the side menu and top bar (Saged, 2026-11-22).
+        "embed": request.GET.get("embed") == "1"})
 
 
 FILES_PAGE = 24
@@ -639,6 +646,8 @@ def signup_page(request):
 @page(member=False)
 def place_new_page(request, ctx):
     """Signed in: add a place and become its owner (from the clinic picker)."""
-    if request.user.is_platform_admin:
+    from directory.services import may_add_place
+
+    if not may_add_place(request.user):
         return render(request, "web/forbidden.html", status=403)
     return render(request, "web/signup.html", _signup_context(request, "place"))

@@ -113,3 +113,34 @@ class PasswordTests(ShardTestCase):
     def test_weak_password_is_refused(self):
         r = call(self.a.client("doctor"), "POST", "/api/v1/me/password", {"current": "pass-word-123", "new": "1234567890"})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (400, "weak_password"))
+
+
+class SessionRenewalTests(ShardTestCase):
+    """A sign-in lasts while it is used: each use pushes the end back (Saged, 2026-11-22)."""
+
+    def setUp(self):
+        super().setUp()
+        self.a = self.clinic("a")
+
+    def test_using_the_site_pushes_the_sign_in_end_back(self):
+        import datetime as dt
+
+        from django.conf import settings
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+
+        from core.middleware import SESSION_RENEWED
+
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_doctor", "password": "pass-word-123"})
+        key = client.cookies[settings.SESSION_COOKIE_NAME].value
+        stale = timezone.now() - dt.timedelta(days=3)
+        session = client.session
+        session[SESSION_RENEWED] = stale.timestamp()
+        session.save()
+        Session.objects.filter(session_key=key).update(expire_date=timezone.now() + dt.timedelta(hours=1))
+
+        self.assertEqual(client.get("/api/v1/me").status_code, 200)
+        expires = Session.objects.get(session_key=key).expire_date
+        self.assertGreater(expires, timezone.now() + dt.timedelta(seconds=settings.SESSION_COOKIE_AGE - 60))
+        self.assertGreater(settings.SESSION_COOKIE_AGE, 7 * 24 * 3600)

@@ -94,6 +94,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.SessionRenewMiddleware",
     "core.middleware.UserLanguageMiddleware",
     "core.middleware.AppHeadersMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -211,7 +212,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 256 * 1024  # larger uploads spool to a temporary 
 SESSION_COOKIE_NAME = "hamada_session"
 CSRF_COOKIE_NAME = "hamada_csrftoken"
 LANGUAGE_COOKIE_NAME = "hamada_language"
-SESSION_COOKIE_AGE = 12 * 3600  # design 5.9
+SESSION_COOKIE_AGE = 30 * 24 * 3600  # 30 days from the last use (core.middleware.SessionRenewMiddleware)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
