@@ -381,3 +381,10 @@ document.addEventListener("click", (event) => {
     payoutDialog.open({ ...statementMember, balance }, button);
   } else if ((button = on("[data-more]"))) loadMore(button);
 });
+
+// "Close the drawer" on Today lands here with ?close=1 (Saged, 2026-11-22): the count opens at once.
+if (new URLSearchParams(window.location.search).get("close") === "1") {
+  const closer = document.querySelector("[data-close-shift]");
+  if (closer) closer.click();
+  history.replaceState(null, "", window.location.pathname);
+}

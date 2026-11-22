@@ -4319,3 +4319,9 @@ msgstr "مستني رد الدكتور"
 
 msgid "{name}: told to wait"
 msgstr "{name}: يستنى شوية"
+
+msgid "Close the drawer"
+msgstr "قفل الخزنة"
+
+msgid "Closing the drawer ends the day: the next day starts now."
+msgstr "قفل الخزنة بيقفل اليوم، واليوم الجديد بيبدأ من دلوقتي."

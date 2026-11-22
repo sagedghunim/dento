@@ -126,3 +126,45 @@ class ProcrastinateTests(M1TestCase):
             self.assertEqual(jobs.recompute_shard(timestamp=0, alias="shard_1"), {"differences": 0})
         self.assertEqual(DirectoryClinic.objects.get(id=self.a.id).recomputed_through, dt.date(2026, 11, 10))
         self.assertIsNone(DirectoryClinic.objects.get(id=self.b.id).recomputed_through)
+
+
+class DrawerDayTests(M1TestCase):
+    """The day ends when the drawer is closed (Saged, 2026-11-22), not at a clock time: an open register keeps its
+    day past midnight and past 04:00; closing it starts the next day. A register forgotten open for days doesn't
+    hold the day back more than one day."""
+
+    def open_register(self, at):
+        from core.testing import call
+        from finance.models import Shift
+
+        with clinic_transaction(self.a.id, self.a.shard):  # the fixture's cash may have opened one: it opened at `at`
+            found = Shift.objects.filter(clinic_id=self.a.id, status="open").first()
+            if found:
+                Shift.objects.filter(clinic_id=self.a.id, id=found.id).update(opened_at=at)
+                return found.id
+        with frozen(at):
+            r = call(self.desk, "POST", "/api/v1/register/open", {"opening_float": 0})
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["shift"]["id"]
+
+    def test_an_open_drawer_keeps_its_day_until_it_is_closed(self):
+        from core.testing import call
+        from scheduling.testing import today
+
+        shift = self.open_register(cairo("2026-11-19T10:00"))
+        with frozen(cairo("2026-11-20T05:30")):
+            self.assertEqual(today(self.a), dt.date(2026, 11, 19))  # Thursday's register is still open
+            page = self.desk.get("/").content.decode()
+            r = call(self.desk, "POST", f"/api/v1/register/shifts/{shift}/close", {"counted": 0})
+            self.assertEqual(r.status_code, 200, r.content)
+            self.assertEqual(today(self.a), dt.date(2026, 11, 20))  # closed: Friday starts
+        self.assertIn("19", page.split('class="today-date"')[1].split("</p>")[0])
+        # The past keeps the day of the drawer it happened in.
+        self.assertEqual(today(self.a, cairo("2026-11-20T03:00")), dt.date(2026, 11, 19))
+
+    def test_a_drawer_forgotten_open_holds_the_day_back_one_day_at_most(self):
+        from scheduling.testing import today
+
+        self.open_register(cairo("2026-11-16T10:00"))
+        with frozen(cairo("2026-11-20T12:00")):
+            self.assertEqual(today(self.a), dt.date(2026, 11, 20))

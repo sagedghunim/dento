@@ -14,6 +14,7 @@
     <a class="icon-btn" href="?day={{ next_day.isoformat }}" aria-label="{% translate "Next day" %}" title="{% translate "Next day" %}"><svg class="icon chev-end"><use href="#i-chev"/></svg></a>
   </nav>
   {% if perms.book %}<span class="tool-buttons">{% if is_today and perms.queue %}<button type="button" class="btn" data-open-walkin>{% translate "Walk-in now" %}</button>{% endif %}<button type="button" class="btn ghost" data-open-book><svg class="icon"><use href="#i-plus"/></svg>{% translate "Book" %}</button></span>{% endif %}
+  {% if is_today and perms.shift %}<a class="btn ghost" href="/finances?close=1" data-close-drawer>{% translate "Close the drawer" %}</a>{% endif %}
   <p class="freshness" data-freshness>
     <span class="dot" aria-hidden="true"></span>
     <span data-fresh-text>{% translate "Updated" %} {{ server_time|clock }}</span>
