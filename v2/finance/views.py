@@ -76,7 +76,7 @@ def cash_movement_view(request, ctx, data):
     return Result(_report(ctx, services.get_shift(ctx, shift_id)), status=201, target_type="shift", target_id=shift_id)
 
 
-@api("GET", perm="cash.shift")
+@api("GET", perm="finances.view")  # past shifts: the owner's (Saged, 2026-11-22)
 def shifts_view(request, ctx, data):
     size = paging.limit(request)
     items = services.shifts(ctx, size, paging.time_cursor(request))
@@ -85,7 +85,7 @@ def shifts_view(request, ctx, data):
     return result
 
 
-@api("GET", perm="cash.shift")
+@api("GET", perm="finances.view")
 def shift_view(request, ctx, data, shift_id):
     """The shift report: totals by method and the movements (F1)."""
     return _report(ctx, services.get_shift(ctx, _shift_id(shift_id)))

@@ -132,6 +132,8 @@ def book(ctx, request, deltas=None):
         fields = patients.clean_fields(request["new_patient"], today)
         eligible, has_arrived = False, False
     continues_id, course_no = _course(ctx, patient["id"], request.get("continues_id")) if fields is None else (None, 1)
+    if continues_id is not None:
+        eligible = False  # a visit of a treatment that goes on is charged in full, no follow-up price (Saged, 2026-11-22)
     visit_price = ""
     if request.get("follow_up_id") is not None:
         # The plan session's own visit fee (set on the follow-up when the doctor added it; it never changes after),
@@ -329,7 +331,7 @@ def courses(ctx, patient_id):
         raise rules.not_found("patient")
     own, own_params = rules.visit_sql(ctx, "a.doctor_id")
     rows = sql.rows(ctx, f"""
-        SELECT c.root, c.last_no, c.last_day, r.day, s.name, s.name_en FROM (
+        SELECT c.root, c.last_no, c.last_day, r.day, s.name, s.name_en, s.id FROM (
             SELECT coalesce(a.continues_id, a.id) AS root, max(a.course_no) AS last_no, max(a.day) AS last_day
               FROM "scheduling_appointment" a
              WHERE a.clinic_id = %s AND a.patient_id = %s AND a.status NOT IN ('cancelled', 'no_show')
@@ -342,8 +344,9 @@ def courses(ctx, patient_id):
                      ctx.clinic_id])
     from core.i18n import pick
 
+    # service_id: the visit that goes on with it is booked on the same service (Saged, 2026-11-22).
     return [{"id": r[0], "last_no": r[1], "last_day": r[2].isoformat(), "started": r[3].isoformat(),
-             "service": pick(r[4], r[5])} for r in rows]
+             "service": pick(r[4], r[5]), "service_id": r[6]} for r in rows]
 
 
 def _not_today():
@@ -610,14 +613,17 @@ def _recheck_follow_up(ctx, appointment):
     then the visit's line changes with it (billing.set_visit_line), or neither does."""
     found = sql.row(ctx, f"""
         SELECT s.kind, s.price, fu.price, fu.is_active, {rules.history_sql("%s")},
-               EXISTS (SELECT 1 FROM "billing_invoice" i WHERE i.clinic_id = %s AND i.appointment_id = %s AND i.status = 'open')
+               EXISTS (SELECT 1 FROM "billing_invoice" i WHERE i.clinic_id = %s AND i.appointment_id = %s AND i.status = 'open'),
+               EXISTS (SELECT 1 FROM "scheduling_appointment" c WHERE c.clinic_id = %s AND c.id = %s
+                          AND c.continues_id IS NOT NULL)
           FROM "clinics_service" s
           LEFT JOIN "clinics_service" fu ON fu.clinic_id = s.clinic_id AND fu.id = s.follow_up_service_id
          WHERE s.clinic_id = %s AND s.id = %s""", [
         *_with_patient(rules.history_params(ctx, appointment["doctor_id"], appointment["day"],
                                             rules.follow_up_window(ctx.clinic), appointment["id"]), appointment["patient_id"]),
-        ctx.clinic_id, appointment["id"], ctx.clinic_id, appointment["service_id"]])
-    kind, price, follow_price, follow_active, eligible, _arrived, has_invoice = found
+        ctx.clinic_id, appointment["id"], ctx.clinic_id, appointment["id"], ctx.clinic_id, appointment["service_id"]])
+    kind, price, follow_price, follow_active, eligible, _arrived, has_invoice, goes_on = found
+    eligible = eligible and not goes_on  # a visit of a treatment that goes on is charged in full (Saged, 2026-11-22)
     service = rules.ServiceInfo(appointment["service_id"], "", kind, price, follow_price if follow_active else None)
     fee, is_follow_up = rules.fee_for(service, eligible, appointment.get("visit_price") or "")
     fee *= appointment.get("qty") or 1

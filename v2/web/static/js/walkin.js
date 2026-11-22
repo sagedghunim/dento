@@ -3,7 +3,7 @@
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
-import { courseOf, loadCourses, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
+import { courseOf, courseService, loadCourses, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
@@ -48,7 +48,7 @@ export function initWalkIn({ onBooked } = {}) {
     who.dir = "auto";
     name.replaceChildren(who);
     dialog.querySelector("[data-picked-meta]").replaceChildren(...patientMeta(p));
-    loadCourses(dialog, p.id);
+    loadCourses(dialog, p.id).then(() => { if (patient === p && courseOf(dialog)) followCourse(); });
     quote();
   }
 
@@ -134,11 +134,20 @@ export function initWalkIn({ onBooked } = {}) {
     select.value = choice ? choice.value : "";
   }
 
+  // A visit that goes on with a treatment takes that treatment's service (Saged, 2026-11-22).
+  function followCourse() {
+    const id = courseService(dialog);
+    pickService(id || defaults.service_id);
+    if (id && serviceId() !== id) pickService(defaults.service_id);
+    quote();
+  }
+
   form.addEventListener("change", (event) => {
     const name = event.target.name;
     if (name === "doctor") { field("service").value = ""; filterServices(); quote(); }  // filterServices picks one
     if (name === "service") quote();
     if (name === "qty") quote();
+    if (name === "continues_id") followCourse();
     if (name === "amount") field("amount").dataset.touched = "1";
     if (name === "collect") { collectFields.hidden = !field("collect").checked; if (field("collect").checked) field("amount").focus(); }
   });
@@ -171,6 +180,7 @@ export function initWalkIn({ onBooked } = {}) {
     if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;
     if (patient) url += `&patient=${patient.id}`;
+    if (patient && courseOf(dialog)) url += "&continues=1";
     const result = await get(url);
     if (seq !== quoteSeq) return;
     if (!isOk(result)) { fee.textContent = ""; return; }

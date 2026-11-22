@@ -88,6 +88,38 @@ def _treats(ctx):
     return ctx.can("visits.notes") and treats(ctx)
 
 
+def _booking_groups(ctx, services):
+    """Book and walk-in offer the consultation and the doctor's price list (Saged, 2026-11-22): `booking` marks
+    those, `group` names a price-list item's section of the list. No "Follow-up": a visit that goes on with a
+    treatment takes that treatment's service and its next number. The price list leaves out what the visit fee
+    covers (an examination), as on the visit screen."""
+    from clinical.followups import VISIT_FEE_CATEGORIES
+    from clinical.models import Procedure
+
+    from .visit_pages import CATEGORY_WORDS
+
+    ids = [s["procedure_id"] for s in services if s["procedure_id"]]
+    found = {p_id: (category, sort) for p_id, category, sort in Procedure.objects.filter(
+        clinic_id=ctx.clinic_id, id__in=ids, is_active=True).values_list("id", "category", "sort")} if ids else {}
+    for s in services:
+        category = found.get(s["procedure_id"], (None,))[0]
+        s["booking"] = s["kind"] == "consultation" or (category is not None and category not in VISIT_FEE_CATEGORIES)
+        if category is None or not s["booking"]:
+            s["group"] = ""
+        else:
+            words = CATEGORY_WORDS.get(category, ())
+            s["group"] = pick(words[0], category.replace("_", " ").capitalize()) if words else _("Other")
+    first = {}  # each section of the list where its first item is, so a group comes once
+    for category, sort in found.values():
+        first[category] = min(first.get(category, sort), sort)
+
+    def order(s):
+        category, sort = found.get(s["procedure_id"], (None, 0))
+        return (s["kind"] != "consultation", first.get(category, 0), sort)
+
+    services.sort(key=order)
+
+
 def clinic_config(ctx, today):
     """What the dialogs need, embedded in the page with json_script (no patient data)."""
     from clinics.models import Membership, Schedule, Service
@@ -95,8 +127,10 @@ def clinic_config(ctx, today):
     with_section = _has_field(Service, "section")
     seen = ctx.can("money.view")  # no price without money.view (Saged, 2026-11-16)
     services = [{"id": s.id, "name": pick(s.name, s.name_en), "kind": s.kind, "price": s.price if seen else None,
-                 "section_id": getattr(s, "section_id", None) if with_section else None}
+                 "section_id": getattr(s, "section_id", None) if with_section else None,
+                 "procedure_id": getattr(s, "procedure_id", None)}
                 for s in Service.objects.filter(clinic_id=ctx.clinic_id, is_active=True).order_by("sort", "id")]
+    _booking_groups(ctx, services)
     doctor_sections = {}
     if _has_field(Schedule, "section"):
         for doctor_id, section_id in (Schedule.objects.filter(clinic_id=ctx.clinic_id)
@@ -443,6 +477,10 @@ def patient_page(request, ctx, patient_id):
     for v in visits["items"]:
         v["in_course"] = v["id"] in started
     payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None) if ctx.can("money.view") else None
+    # Money paid over a bill, given back from the drawer (Saged, 2026-11-22): a link to the drawer's question.
+    from billing.selectors import patient_credits
+
+    credits = patient_credits(ctx, patient.id) if payments is not None and ctx.can("billing.collect") else []
     clinical_view = ctx.can("clinical.view")
     if clinical_view:
         from clinical import selectors as clinical
@@ -453,7 +491,7 @@ def patient_page(request, ctx, patient_id):
         plans, files = [], []
     return render(request, "web/patient.html", {
         "ctx": ctx, "nav_active": "patients", "patient": selectors.file_payload(patient, today),
-        "visits": visits, "payments": payments, "names": _doctor_names(ctx), "perms": _perms(ctx),
+        "visits": visits, "payments": payments, "credits": credits, "names": _doctor_names(ctx), "perms": _perms(ctx),
         "summary": _visit_summary(ctx, patient.id), "plans": plans, "files": files,
         "statement": _statement(ctx, patient.id) if ctx.can("money.view") else None,
         "installments": _installments(ctx, patient.id),

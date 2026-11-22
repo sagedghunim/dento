@@ -3,7 +3,7 @@
   <div class="group-head" data-head>
     <h3 id="doctor-{{ g.id }}"><bdi dir="auto">{{ g.name }}</bdi></h3>
     <span class="muted">{% for s in g.sessions %}{{ s.starts|clock }} – {{ s.ends|clock }} · {% if s.mode == "slots" %}{% translate "appointments" %}{% else %}{% translate "queue" %}{% endif %}{% if not forloop.last %} | {% endif %}{% empty %}{% translate "Not working this day" %}{% endfor %}</span>
-    <span class="muted">{% translate "Booked:" %} {{ g.booked|length|digits }} · {% translate "Waiting:" %} {{ g.counts.waiting|digits }} · {% translate "With the doctor:" %} {{ g.counts.in_room|digits }} · {% translate "Done:" %} {{ g.counts.done|digits }}</span>
+    {# No counts line under the doctor (Saged, 2026-11-22): the same counts are at the top of Today. #}
   </div>
   <ol class="rows" data-rows="open">{% for a in g.rows %}{% include "web/_row.html" %}{% endfor %}</ol>
   {# Booked and not arrived: their own list, by time, never among the waiting (Saged, 2026-11-13). #}

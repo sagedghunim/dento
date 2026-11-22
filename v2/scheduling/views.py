@@ -134,7 +134,8 @@ def quote_view(request, ctx, data):
     return selectors.quote(ctx, validate.ident(params.get("doctor"), "doctor"),
                            validate.ident(params.get("service"), "service"), day,
                            validate.ident(patient, "patient") if patient else None,
-                           validate.ident(follow_up, "follow_up") if follow_up else None)
+                           validate.ident(follow_up, "follow_up") if follow_up else None,
+                           params.get("continues") == "1")  # a visit of a treatment that goes on
 
 
 @api("GET")
@@ -343,4 +344,5 @@ def walk_in_view(request, ctx, data):
 @api("GET", perm="appointments.book")
 def courses_view(request, ctx, data, patient_id):
     """The patient's treatments a new visit can continue (Saged, 2026-11-22)."""
-    return {"items": services.courses(ctx, validate.path_id(patient_id, rules.not_found("patient")))}
+    return {"items": services.courses(ctx, validate.path_id(patient_id, rules.not_found("patient"))),
+            "today": business_day(ctx.clinic).isoformat()}

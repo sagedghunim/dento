@@ -828,6 +828,38 @@ def void_packages(ctx, invoice_id, line_id=None):
     return len(rows)
 
 
+# --- A visit booked on a price-list item that the doctor then records (Saged, 2026-11-22) ------------------------------
+
+
+def booked_procedure_rule(ctx, appointment, invoice, procedure_id, recorded):
+    """Under the appointment's and the invoice's locks, after the doctor recorded or removed `procedure_id`. A visit
+    booked on that price-list item has its booking line on the bill; while the doctor's record of the same procedure
+    is there (`recorded`), the booking line costs 0, so it is never charged twice, and its price comes back when the
+    last such record goes. Nothing changes when it would leave more paid than the total. Returns the invoice."""
+    if invoice is None or invoice["status"] != "open" or appointment["service_id"] is None:
+        return invoice
+    found = sql.row(ctx, """
+        SELECT l.id, l.unit_price, l.qty, s.price FROM "billing_invoice_line" l
+          JOIN "clinics_service" s ON s.clinic_id = l.clinic_id AND s.id = l.service_id
+         WHERE l.clinic_id = %s AND l.invoice_id = %s AND l.kind = 'service' AND l.service_id = %s
+           AND s.procedure_id = %s ORDER BY l.id LIMIT 1""", [ctx.clinic_id, invoice["id"], appointment["service_id"], procedure_id])
+    if found is None:
+        return invoice
+    line_id, unit_price, qty, list_price = found
+    new_price = 0 if recorded else list_price
+    if new_price == unit_price:
+        return invoice
+    change = qty * (new_price - unit_price)
+    if change < 0 and not fits(invoice, invoice["total"] + change):
+        return invoice
+    sql.run(ctx, 'UPDATE "billing_invoice_line" SET unit_price = %s, amount = %s WHERE clinic_id = %s AND id = %s',
+            [new_price, qty * new_price, ctx.clinic_id, line_id])
+    after = move_subtotal(ctx, invoice["id"], change)
+    record_change(ctx, "invoice_line.booked_recorded" if new_price == 0 else "invoice_line.booked_charged",
+                  "invoice_line", line_id, before={"unit_price": unit_price}, after={"unit_price": new_price})
+    return after
+
+
 # --- A free consultation when a procedure is done in the same visit (Saged, 2026-11-19) ------------------------------
 
 

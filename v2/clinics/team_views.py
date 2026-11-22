@@ -1,5 +1,6 @@
 """Team endpoints (design 6.2, G1, G2): validate, check the declared code, call one service."""
 
+import datetime as dt
 import uuid
 
 from django.utils.translation import gettext as _
@@ -96,6 +97,37 @@ def member_update_view(request, ctx, data, member_id):
     if "sections" in data:
         changes["sections"] = data["sections"]
     member = team.update_member(ctx, member_id, _version(data), changes)
+    return Result({"member": member}, target_type="membership", target_id=member_id)
+
+
+def _clock(data, name):
+    value = data.get(name)
+    if value in (None, ""):
+        return None
+    try:
+        return dt.time.fromisoformat(value) if isinstance(value, str) and len(value) == 5 else None
+    except ValueError:
+        return None
+
+
+@api("PUT", perm="team.manage", replay=_replay_member)
+def hours_view(request, ctx, data, member_id):
+    """{version, days: [0-6], starts: "08:00", ends: "16:00"}: working hours, for the record only (Saged, 2026-11-22).
+    Weekdays as Python's (0 = Monday). Empty days and times clear them."""
+    member_id = _member_id(member_id)
+    days = data.get("days") or []
+    if not isinstance(days, list) or len(days) > 7 or not all(isinstance(d, int) and not isinstance(d, bool)
+                                                               and 0 <= d <= 6 for d in days):
+        raise ApiError("invalid", "days are weekdays 0-6", fields={"days": "invalid"})
+    starts, ends = _clock(data, "starts"), _clock(data, "ends")
+    for name, value in (("starts", starts), ("ends", ends)):
+        if value is None and data.get(name) not in (None, ""):
+            raise ApiError("invalid", _("Write the time as HH:MM."), fields={name: "invalid"})
+    if (starts is None) != (ends is None):
+        raise ApiError("invalid", _("Write both times, from and to."), fields={"ends" if starts else "starts": "required"})
+    if starts is not None and starts == ends:
+        raise ApiError("invalid", _("The end time must differ from the start."), fields={"ends": "invalid"})
+    member = team.set_hours(ctx, member_id, _version(data), sorted(set(days)), starts, ends)
     return Result({"member": member}, target_type="membership", target_id=member_id)
 
 

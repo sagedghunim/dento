@@ -331,13 +331,27 @@ function initTeam() {
         line.push(m.sections.length ? m.sections.map((id) => sectionName.get(id) || "").filter(Boolean).join("، ") : t("team_every_section"));
       }
       if (line.length) { const p = el("p", "muted"); p.append(bdi(line.join(" · "))); main.append(p); }
+      // Working hours, for the record (Saged, 2026-11-22).
+      if (m.hours_text) { const p = el("p", "muted hours-line"); p.append(bdi(`${t("team_hours")}: ${m.hours_text}`)); main.append(p); }
       li.append(main);
-      if (m.editable || m.is_me) {
+      const hours = team.is_owner && m.role !== "owner" && m.is_active;
+      if (m.editable || m.is_me || hours) {
         const actions = el("div", "row-actions");
-        const edit = el("button", "btn ghost", t("edit"));
-        edit.type = "button";
-        edit.dataset.editMember = m.id;
-        actions.append(edit);
+        if (hours) {
+          const button = el("button", "btn ghost");
+          button.type = "button";
+          button.dataset.hoursMember = m.id;
+          button.setAttribute("aria-label", `${t("team_hours")} · ${m.name}`);
+          button.innerHTML = '<svg class="icon"><use href="#i-clock"/></svg>';
+          button.append(t("team_hours"));
+          actions.append(button);
+        }
+        if (m.editable || m.is_me) {
+          const edit = el("button", "btn ghost", t("edit"));
+          edit.type = "button";
+          edit.dataset.editMember = m.id;
+          actions.append(edit);
+        }
         li.append(actions);
       }
       return li;
@@ -346,6 +360,59 @@ function initTeam() {
   membersList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-edit-member]");
     if (button) openMember(byId(Number(button.dataset.editMember)), button);
+    const hoursButton = event.target.closest("[data-hours-member]");
+    if (hoursButton) openHours(byId(Number(hoursButton.dataset.hoursMember)), hoursButton);
+  });
+
+  // --- working hours (Saged, 2026-11-22): days and from-to, for the record; never limit signing in ---
+
+  const hoursDialog = document.getElementById("hours-dialog");
+  const hoursForm = hoursDialog.querySelector("form");
+  const hoursSub = new Submitter(hoursDialog);
+  let hoursOf = null;
+  wireClose(hoursDialog);
+
+  function openHours(member, opener) {
+    if (hoursSub.holdsUnknown()) { openDialog(hoursDialog, opener); return; }
+    if (!member) return;
+    hoursOf = member;
+    hoursForm.reset();
+    hoursSub.reset();
+    hoursDialog.querySelector("[data-member-name]").textContent = member.name;
+    const days = (member.hours && member.hours.days) || [];
+    hoursForm.querySelectorAll('[name="day"]').forEach((input) => { input.checked = days.includes(Number(input.value)); });
+    hoursForm.elements.namedItem("starts").value = (member.hours && member.hours.starts) || "";
+    hoursForm.elements.namedItem("ends").value = (member.hours && member.hours.ends) || "";
+    openDialog(hoursDialog, opener);
+  }
+
+  hoursDialog.querySelector("[data-clear-hours]").addEventListener("click", () => {
+    hoursForm.querySelectorAll('[name="day"]').forEach((input) => { input.checked = false; });
+    hoursForm.elements.namedItem("starts").value = "";
+    hoursForm.elements.namedItem("ends").value = "";
+  });
+
+  hoursForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (hoursDialog.dataset.busy) return;
+    let request = hoursSub.unknown;
+    if (!request) {
+      const starts = hoursForm.elements.namedItem("starts").value;
+      const ends = hoursForm.elements.namedItem("ends").value;
+      if (Boolean(starts) !== Boolean(ends)) { hoursSub.say(t("team_hours_both")); return; }
+      const days = [...hoursForm.querySelectorAll('[name="day"]:checked')].map((input) => Number(input.value));
+      request = { method: "PUT", url: `/api/v1/team/members/${hoursOf.id}/hours`,
+                  body: { version: hoursOf.version, days, starts: starts.slice(0, 5), ends: ends.slice(0, 5) } };
+    }
+    const result = await hoursSub.run(request.method, request.url, request.body, t("team_saved", { name: hoursOf.name }));
+    if (!result) return;
+    if (isOk(result)) {
+      hoursDialog.close();
+      toast(t("team_saved", { name: result.data.member.name }));
+      await reload();
+      return;
+    }
+    if (isStale(result)) { hoursDialog.close(); await reload(errorMessage(result, t("failed"))); }
   });
 
   // Section checkboxes for an assistant in a center: none ticked means every section.

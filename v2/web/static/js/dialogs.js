@@ -433,7 +433,11 @@ export function rememberPaper(paper) { try { localStorage.setItem("hamada.paper"
 
 // "This visit": a new treatment, or the next visit of one already started (Saged, 2026-11-22). Fills the select with
 // the patient's treatments; `preferred` (a visit id) is chosen when it belongs to one of them.
-export async function loadCourses(dialog, patientId, preferred = null) {
+// The treatment a new visit goes on with (Saged, 2026-11-22). The latest one seen in the last 60 days is proposed;
+// the visit then takes that treatment's service (its next number shows it goes on), "A new treatment" starts at 1.
+const PROPOSE_DAYS = 60;
+
+export async function loadCourses(dialog, patientId, preferred = null, { propose = true } = {}) {
   const box = dialog.querySelector("[data-course-box]");
   if (!box) return;
   const select = box.querySelector("select");
@@ -446,11 +450,24 @@ export async function loadCourses(dialog, patientId, preferred = null) {
   for (const c of result.data.items) {
     const option = document.createElement("option");
     option.value = String(c.id);
+    option.dataset.service = String(c.service_id || "");
     option.textContent = t("course_option", { service: c.service, started: c.started, n: localDigits(c.last_no + 1) });
     select.append(option);
   }
   if (preferred && [...select.options].some((o) => o.value === String(preferred))) select.value = String(preferred);
+  else if (!preferred && propose) {
+    const latest = result.data.items[0];
+    const since = (Date.parse(`${result.data.today}T00:00:00Z`) - Date.parse(`${latest.last_day}T00:00:00Z`)) / 86400000;
+    if (since >= 0 && since <= PROPOSE_DAYS) select.value = String(latest.id);
+  }
   box.hidden = false;
+}
+
+// The service of the chosen treatment, or null for "A new treatment".
+export function courseService(dialog) {
+  const select = dialog.querySelector('[name="continues_id"]');
+  const option = select && select.value ? select.selectedOptions[0] : null;
+  return option && option.dataset.service ? Number(option.dataset.service) : null;
 }
 
 export function courseOf(dialog) {

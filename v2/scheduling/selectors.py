@@ -390,7 +390,7 @@ def month(ctx, doctor_id, first, section_id=None):
             "today": today.isoformat(), "days": days}
 
 
-def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None):
+def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None, goes_on=False):
     """The fee and follow-up flag the booking would use (design 5.1). With `follow_up_id` (a plan session being
     booked) the session's own visit fee rule decides, as in booking; `visit_price` says which rule applied."""
     doctor, service = rules.doctor_day_and_service(ctx, doctor_id, service_id, day)
@@ -402,7 +402,7 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None):
                          ctx.clinic_id, patient_id])
         if found is None:
             raise rules.not_found("patient")
-        eligible = found[1]
+        eligible = found[1] and not goes_on  # a treatment that goes on is charged in full (Saged, 2026-11-22)
     visit_price = ""
     if follow_up_id is not None:
         from clinical.followups import visit_price_of

@@ -533,6 +533,7 @@ class RouteTests(TeamCase):
         ("POST", "api/v1/team/members"): ("team.manage",),
         ("PATCH", "api/v1/team/members/<int:member_id>"): ("team.manage",),
         ("PUT", "api/v1/team/members/<int:member_id>/permissions"): ("team.manage",),
+        ("PUT", "api/v1/team/members/<int:member_id>/hours"): ("team.manage",),
         ("POST", "api/v1/team/members/<int:member_id>/temporary-password"): ("team.manage",),
         ("GET", "api/v1/team/members/<int:member_id>/places"): ("team.manage",),
         ("PUT", "api/v1/team/members/<int:member_id>/places"): ("team.manage",),

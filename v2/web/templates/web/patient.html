@@ -67,6 +67,8 @@
     {% if perms.money %}
     <section class="card" aria-labelledby="payments-title">
       <h2 id="payments-title">{% translate "Payments" %}</h2>
+      {# Paid over a bill and not given back yet: to the drawer, which asks once and gives it back (Saged, 2026-11-22). #}
+      {% for c in credits %}<p class="notice credit-note">{% translate "Paid over the bill:" %} <strong>{{ c.credit|money }}</strong> · {% translate "Bill" %} {{ c.number|num }} <a class="btn" href="/finances?tab=register&amp;give_back={{ c.id }}">{% translate "Give the money back from the drawer" %}</a></p>{% endfor %}
       <div class="table-scroll">
         <table class="table">
           <thead><tr><th>{% translate "When" %}</th><th>{% translate "Method" %}</th><th class="num">{% translate "Amount" %}</th></tr></thead>

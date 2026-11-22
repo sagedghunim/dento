@@ -756,6 +756,7 @@ def create_procedure(ctx, section, values):
         {"procedure_active_name_uniq": _duplicate_procedure(),
          "procedure_typical_range_valid": ApiError("invalid", _("The typical range is upside down."),
                                                    fields={"typical_max": "range"})})
+    _sync_booking(ctx, found[0])
     return procedure_row(found)
 
 
@@ -779,11 +780,19 @@ def update_procedure(ctx, procedure_id, values):
     if found is None:
         raise not_found("procedure")
     row = procedure_row(found)
+    _sync_booking(ctx, procedure_id)
     money = [name for name in ("price", "internal_cost") if before[name] != row[name]]
     if money:
         record_change(ctx, "procedure.price", "procedure", procedure_id, before={n: before[n] for n in money},
                       after={n: row[n] for n in money})
     return row
+
+
+def _sync_booking(ctx, procedure_id):
+    """The desk books from the price list (Saged, 2026-11-22): its booking service follows this procedure."""
+    from clinics.booking_services import sync
+
+    sync(ctx.alias, ctx.clinic_id, procedure_id)
 
 
 def _procedure(ctx, procedure_id, active=True):
@@ -945,6 +954,7 @@ def record_procedure(ctx, appointment_id, request):
         description = f"{description} - {package['name']}"
     line_id, invoice = billing.add_visit_line(ctx, appointment, "procedure", description, qty, unit_price, from_list)
     invoice = billing.consultation_rule(ctx, appointment, invoice)  # the owner's free-consultation option
+    invoice = billing.booked_procedure_rule(ctx, appointment, invoice, procedure["id"], True)  # booked on it: once
     now = timezone.now()
     record_id = sql.row(ctx, """
         INSERT INTO "clinical_visit_procedure" (clinic_id, appointment_id, patient_id, procedure_id, plan_item_id, tooth,
@@ -1092,6 +1102,10 @@ def remove_procedure(ctx, appointment_id, record_id):
     if record["invoice_line_id"] is not None:
         invoice = billing.consultation_rule(ctx, appointment,
                                             billing.remove_visit_line(ctx, appointment, record["invoice_line_id"]))
+        still = sql.row(ctx, 'SELECT 1 FROM "clinical_visit_procedure" WHERE clinic_id = %s AND appointment_id = %s '
+                             "AND procedure_id = %s AND id <> %s LIMIT 1",
+                        [ctx.clinic_id, appointment_id, record["procedure_id"], record["id"]]) is not None
+        invoice = billing.booked_procedure_rule(ctx, appointment, invoice, record["procedure_id"], still)
     from inventory.services import return_materials
 
     deltas = Deltas()

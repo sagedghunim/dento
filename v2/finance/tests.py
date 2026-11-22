@@ -105,7 +105,9 @@ class RegisterTests(M2TestCase):
         visit = self.in_room()
         self.assertEqual(self.pay(visit, 100, "cash").status_code, 403)
         self.assertEqual(self.pay(visit, 100, "card").status_code, 201)
-        self.assertEqual(call(self.doc, "GET", "/api/v1/register/shifts").status_code, 200)
+        # Past shifts are the owner's (Saged, 2026-11-22).
+        self.assertEqual(call(self.doc, "GET", "/api/v1/register/shifts").status_code, 403)
+        self.assertEqual(call(self.owner, "GET", "/api/v1/register/shifts").status_code, 200)
         other = current_shift(self.b)
         for method, url in (("GET", f"/api/v1/register/shifts/{other}"),
                             ("POST", f"/api/v1/register/shifts/{other}/close")):

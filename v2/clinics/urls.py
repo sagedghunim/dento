@@ -17,6 +17,7 @@ urlpatterns = [
     path("api/v1/team/members", team_views.team_members_endpoint),
     path("api/v1/team/members/<int:member_id>", team_views.member_update_view),
     path("api/v1/team/members/<int:member_id>/permissions", team_views.permissions_view),
+    path("api/v1/team/members/<int:member_id>/hours", team_views.hours_view),
     path("api/v1/team/members/<int:member_id>/temporary-password", team_views.password_view),
     path("api/v1/team/members/<int:member_id>/places", team_views.member_places_endpoint),
     path("api/v1/me/invitations", team_views.my_invitations_view),

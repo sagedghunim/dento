@@ -99,6 +99,11 @@ class Membership(models.Model):
     version = models.PositiveIntegerField(default=1)
     granted = ArrayField(models.CharField(max_length=40), default=list, blank=True)
     revoked = ArrayField(models.CharField(max_length=40), default=list, blank=True)
+    # Working hours the owner writes for their record (Saged, 2026-11-22): shown on Team, never blocks signing in.
+    # Weekdays as Python's (0 = Monday).
+    work_days = ArrayField(models.PositiveSmallIntegerField(), null=True, blank=True)  # null: none set
+    work_starts = models.TimeField(null=True, blank=True)
+    work_ends = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -110,6 +115,10 @@ class Membership(models.Model):
             models.CheckConstraint(condition=Q(role__in=["owner", "doctor", "assistant"]), name="membership_role_valid"),
             models.CheckConstraint(condition=~Q(role="owner") | Q(is_active=True), name="membership_owner_active"),
             models.CheckConstraint(condition=Q(sections__len__lte=20), name="membership_sections_max"),
+            models.CheckConstraint(condition=Q(work_days__len__lte=7), name="membership_work_days_max"),
+            models.CheckConstraint(condition=(Q(work_starts__isnull=True) & Q(work_ends__isnull=True))
+                                   | (Q(work_starts__isnull=False) & Q(work_ends__isnull=False)),
+                                   name="membership_work_hours_pair"),
             models.CheckConstraint(condition=Q(role="assistant") | Q(sections=[]), name="membership_sections_assistant"),
         ]
 
@@ -136,6 +145,10 @@ class Service(models.Model):
                                           db_constraint=False, db_index=False, related_name="+")
     is_active = models.BooleanField(default=True)
     sort = models.PositiveSmallIntegerField(default=0)
+    # The doctor's price-list item this booking service stands for (Saged, 2026-11-22): the desk books from the same
+    # list the doctor records from. Kept in step by clinics.booking_services.sync; a plain integer, as clinical comes
+    # after clinics.
+    procedure_id = models.BigIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "clinics_service"
@@ -143,6 +156,8 @@ class Service(models.Model):
             models.UniqueConstraint(fields=["clinic", "id"], name="service_clinic_id_uniq"),
             # Each section of a center has its own "Consultation".
             models.UniqueConstraint(fields=["clinic", "section", "name"], name="service_section_name_uniq"),
+            models.UniqueConstraint(fields=["clinic", "procedure_id"], condition=Q(procedure_id__isnull=False),
+                                    name="service_one_per_procedure"),
             models.CheckConstraint(condition=Q(kind__in=["consultation", "follow_up", "procedure"]), name="service_kind_valid"),
             models.CheckConstraint(condition=Q(price__gte=0), name="service_price_not_negative"),
             CompositeForeignKey(fields=["clinic", "follow_up_service"], to="clinics.Service",

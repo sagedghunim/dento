@@ -200,8 +200,11 @@ def ensure_clinic_on_shard(entry, sections, owner, *, kind="clinic", city="", ph
 def copy_catalogues(clinic, section, language="ar"):
     """The section's procedures, medicines and prescription templates, from its specialty (design E3, E4)."""
     from clinical.services import copy_specialty
+    from clinics.booking_services import sync
+    from core.routing import current_scope
 
     copy_specialty(clinic.id, section, language)
+    sync(current_scope().alias, clinic.id)  # the desk books from the price list (Saged, 2026-11-22)
 
 
 def copy_services(clinic, section, language="ar"):

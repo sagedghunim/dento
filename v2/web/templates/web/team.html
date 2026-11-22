@@ -194,6 +194,34 @@
 </form>
 </dialog>
 
+{# Working hours for the record only (Saged, 2026-11-22): shown on Team, never limit signing in. #}
+<dialog class="sheet small" id="hours-dialog" aria-labelledby="hours-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="hours-title">{% translate "Working hours" %} · <bdi dir="auto" data-member-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <fieldset class="group">
+      <legend>{% translate "Days" %}</legend>
+      <div class="chips">{% for d, name in week %}<label class="chip"><input type="checkbox" name="day" value="{{ d }}"><span>{{ name }}</span></label>{% endfor %}</div>
+    </fieldset>
+    <div class="grid-form">
+      <label class="field">{% translate "From" %}<input name="starts" type="time" step="900" dir="ltr"></label>
+      <label class="field">{% translate "To" %}<input name="ends" type="time" step="900" dir="ltr"></label>
+    </div>
+    <p class="muted">{% translate "For your record: shown here only. Signing in is not limited by it." %}</p>
+    <button type="button" class="link-btn" data-clear-hours>{% translate "No set hours" %}</button>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+
 <dialog class="sheet" id="add-dialog" aria-labelledby="add-title">
 <form novalidate>
   <header class="dialog-head">

@@ -76,11 +76,57 @@ def member_payload(member, actor_membership=None):
         "display_name": member.display_name, "display_name_en": member.display_name_en, "title": member.title,
         "role": member.role, "is_active": member.is_active, "sections": list(member.sections), "version": member.version,
         "codes": sorted(codes), "groups": {key: perms.group_state(codes, key) for key in perms.GROUP_CODES},
+        "hours": {"days": list(member.work_days or []),
+                  "starts": member.work_starts.strftime("%H:%M") if member.work_starts else "",
+                  "ends": member.work_ends.strftime("%H:%M") if member.work_ends else ""},
+        "hours_text": hours_text(member),
     }
     if actor_membership is not None:
         body["is_me"] = member.id == actor_membership.id
         body["editable"] = _editable(actor_membership, member)
     return body
+
+
+WEEK = (5, 6, 0, 1, 2, 3, 4)  # Saturday first, as in Egypt; Python's Monday is 0
+
+
+def hours_text(member):
+    """"Saturday – Thursday · 8:00 AM – 4:00 PM", or "" when no hours are set (Saged, 2026-11-22)."""
+    from django.utils.dates import WEEKDAYS
+
+    from web.format import clock_text
+
+    days = [d for d in WEEK if d in (member.work_days or [])]
+    parts = []
+    if len(days) == 7:
+        parts.append(_("Every day"))
+    elif days:
+        at = [WEEK.index(d) for d in days]
+        if len(days) >= 3 and at == list(range(at[0], at[0] + len(at))):  # one run of days
+            parts.append(f"{WEEKDAYS[days[0]]} – {WEEKDAYS[days[-1]]}")
+        else:
+            parts.append("، ".join(str(WEEKDAYS[d]) for d in days))
+    if member.work_starts and member.work_ends:
+        parts.append(f"{clock_text(member.work_starts)} – {clock_text(member.work_ends)}")
+    return " · ".join(parts)
+
+
+def set_hours(ctx, member_id, version, days, starts, ends):
+    """PUT /team/members/{id}/hours: the working days and hours the owner writes down (Saged, 2026-11-22). They are
+    shown on Team only; signing in is never limited by them. No days and no times clears them."""
+    target = _target(ctx, member_id)
+    if target.version != version:
+        raise _stale(target.version)
+    before = {"days": list(target.work_days or []), "starts": target.work_starts, "ends": target.work_ends}
+    values = {"work_days": days, "work_starts": starts, "work_ends": ends}
+    if (days, starts, ends) == (before["days"], before["starts"], before["ends"]):
+        return member_payload(target, ctx.membership)
+    target.version = _write(ctx, target.id, version, values)
+    target.work_days, target.work_starts, target.work_ends = days, starts, ends
+    record_change(ctx, "team.hours", "membership", target.id,
+                  before={"days": before["days"], "starts": str(before["starts"] or ""), "ends": str(before["ends"] or "")},
+                  after={"days": days, "starts": str(starts or ""), "ends": str(ends or "")})
+    return member_payload(target, ctx.membership)
 
 
 def _editable(actor, target):

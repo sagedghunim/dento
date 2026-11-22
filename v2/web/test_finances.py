@@ -77,10 +77,13 @@ class FinancesPageTests(FinancesCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("data-shift-id", r.content.decode())
         shift = r.content.decode().split('data-shift-id="')[1].split('"')[0]
-        r = fragment(self.desk, f"/finances/shifts/{shift}")
+        # A shift's report and the past shifts are the owner's (Saged, 2026-11-22).
+        self.assertEqual(fragment(self.desk, f"/finances/shifts/{shift}").status_code, 403)
+        r = fragment(self.owner, f"/finances/shifts/{shift}")
         self.assertEqual(r.status_code, 200)
         self.assertIn("فكة", r.content.decode())
-        self.assertEqual(fragment(self.desk, "/finances/shifts").status_code, 200)
+        self.assertEqual(fragment(self.desk, "/finances/shifts").status_code, 403)
+        self.assertEqual(fragment(self.owner, "/finances/shifts").status_code, 200)
 
     def test_the_register_lists_drawer_expenses_by_category_and_other_stays(self):
         items = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
@@ -182,7 +185,7 @@ class FinancesPageTests(FinancesCase):
         other = self.clinic("b", "shard_2")
         r = call(other.client("owner"), "POST", "/api/v1/register/movements", {"kind": "in", "amount": 100, "reason": "x"})
         theirs = r.json()["shift"]["id"]
-        self.assertEqual(fragment(self.desk, f"/finances/shifts/{theirs}").status_code, 404)
+        self.assertEqual(fragment(self.owner, f"/finances/shifts/{theirs}").status_code, 404)
 
     def test_english_mode_and_a_past_month(self):
         self.owner.cookies["django_language"] = "en"

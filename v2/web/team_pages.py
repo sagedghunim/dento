@@ -97,8 +97,12 @@ def team_page(request, ctx):
 
     sections = _sections(ctx)
     center = places.is_center(ctx.clinic)
+    from django.utils.dates import WEEKDAYS
+
     context = {"ctx": ctx, "nav_active": "team", "can_team": can_team, "can_settings": can_settings,
-               "sections": sections}
+               "sections": sections,
+               # The working-hours dialog's days, Saturday first (Saged, 2026-11-22).
+               "week": [(d, str(WEEKDAYS[d])) for d in team.WEEK]}
     if can_team:
         context["team"] = {
             **team.team(ctx), "is_owner": ctx.membership.is_owner, "me": ctx.membership_id,

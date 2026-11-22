@@ -382,6 +382,22 @@ document.addEventListener("click", (event) => {
   } else if ((button = on("[data-more]"))) loadMore(button);
 });
 
+// "Give the money back from the drawer" in the patient file lands here with ?give_back=<bill> (Saged, 2026-11-22):
+// one question, then the drawer shows the cash that went out.
+const giveBackDialog = setup("give-back-dialog", () => ({
+  request(item) {
+    return { method: "POST", url: `/api/v1/invoices/${item.id}/give-back`, body: {}, label: t("give_back") };
+  },
+  done(data) {
+    toast(t("fin_given_back", { amount: moneyText(data.payment.amount) }));
+    reloadTab();
+  },
+}));
+if (giveBackDialog) {
+  giveBackDialog.open({ id: Number(document.getElementById("give-back-dialog").dataset.invoice) });
+  history.replaceState(null, "", `${window.location.pathname}?tab=register`);
+}
+
 // "Close the drawer" on Today lands here with ?close=1 (Saged, 2026-11-22): the count opens at once.
 if (new URLSearchParams(window.location.search).get("close") === "1") {
   const closer = document.querySelector("[data-close-shift]");

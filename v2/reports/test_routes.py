@@ -10,8 +10,8 @@ EXPECTED = {
     ("GET", "api/v1/register"): ("cash.collect",),
     ("POST", "api/v1/register/open"): ("cash.shift",),
     ("POST", "api/v1/register/movements"): ("cash.shift",),
-    ("GET", "api/v1/register/shifts"): ("cash.shift",),
-    ("GET", "api/v1/register/shifts/<int:shift_id>"): ("cash.shift",),
+    ("GET", "api/v1/register/shifts"): ("finances.view",),  # past shifts: the owner's (Saged, 2026-11-22)
+    ("GET", "api/v1/register/shifts/<int:shift_id>"): ("finances.view",),
     ("POST", "api/v1/register/shifts/<int:shift_id>/close"): ("cash.shift",),
     # F3 expenses
     ("GET", "api/v1/expense-categories"): ("expenses.manage",),

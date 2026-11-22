@@ -51,6 +51,8 @@ def _perms(ctx):
     return {"view": ctx.can("finances.view"), "pay": ctx.can("finances.view") and ctx.can("finances.pay"),
             "expenses": ctx.can("expenses.manage"), "collect": ctx.can("cash.collect"),
             "shift": ctx.can("cash.shift"),
+            # Past shifts and their reports: the owner's (Saged, 2026-11-22); the desk keeps today's drawer.
+            "shifts": ctx.can("finances.view"),
             "drawer_expense": ctx.can("cash.shift") and not ctx.can("expenses.manage"),  # by category, today only
             "cash_moves": ctx.can("cash.shift") and ctx.can("cash.collect"),
             "patients": ctx.can("patients.view")}
@@ -215,7 +217,7 @@ def _register_context(ctx, perms):
     context = {"current": _shift_report(ctx, shift) if shift else None}
     if perms["expenses"] or perms["drawer_expense"]:
         context.update(_pay_choices(ctx, _categories(ctx)))
-    if perms["shift"]:
+    if perms["shifts"]:
         context["shifts"], context["shifts_next"] = _shift_page(ctx)
     return context
 
@@ -386,6 +388,16 @@ def _pick_tab(ctx, raw):
     return (raw if raw in keys else keys[0]) if keys else None, tabs
 
 
+def _give_back(ctx, tab, raw):
+    """?give_back=<invoice> from the patient file (Saged, 2026-11-22): the bill whose overpayment the register asks to
+    give back, or None (not the register, no billing.collect, or nothing over the bill any more)."""
+    if tab != "register" or not raw or not raw.isdigit() or not ctx.can("billing.collect") or int(raw) > 2**63 - 1:
+        return None
+    from billing.selectors import invoice_credit
+
+    return invoice_credit(ctx, int(raw))
+
+
 @require_GET
 @ensure_csrf_cookie
 @page()
@@ -396,6 +408,7 @@ def finances_page(request, ctx):
         return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
     month = _month_param(request.GET.get("month"), business_day(ctx.clinic))
     context = _tab_context(ctx, tab, month)
+    context["give_back"] = _give_back(ctx, tab, request.GET.get("give_back"))
     context.update({"nav_active": "finances", "tabs": tabs, "tab_label": dict(tabs)[tab],
                     "month_tabs": MONTH_TABS, "methods": list(_method_labels().items())})
     return render(request, "web/finances.html", context)
@@ -429,14 +442,14 @@ def expense_rows(request, ctx):
     return _more(request, "web/_fin_expense_rows.html", rows, more)
 
 
-@fragment(perm="cash.shift")
+@fragment(perm="finances.view")  # past shifts: the owner's (Saged, 2026-11-22)
 def shift_rows(request, ctx):
     """GET /finances/shifts?after=: older shifts."""
     rows, more = _shift_page(ctx, request)
     return _more(request, "web/_fin_shift_rows.html", rows, more)
 
 
-@fragment(perm="cash.shift")
+@fragment(perm="finances.view")
 def shift_report(request, ctx, shift_id):
     """GET /finances/shifts/<id>: one shift's report (totals by method and the movements)."""
     from finance import services

@@ -6,7 +6,7 @@
 // booking moves straight to the next one; "skip" passes one over. Each booking carries its follow-up's id, so the
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { courseOf, loadCourses, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
+import { courseOf, courseService, loadCourses, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
@@ -144,7 +144,8 @@ export function initBook({ onBooked, defaults } = {}) {
     name.replaceChildren(el("bdi", null, p.name));
     name.firstChild.dir = "auto";
     dialog.querySelector("[data-picked-meta]").replaceChildren(...patientMeta(p));
-    loadCourses(dialog, p.id, continues);
+    // A plan's session keeps its own visit fee: nothing is proposed for it (Saged, 2026-11-22).
+    loadCourses(dialog, p.id, continues, { propose: !plan }).then(() => { if (patient === p && courseOf(dialog) && !plan) followCourse(); });
     quote();
   }
 
@@ -206,17 +207,35 @@ export function initBook({ onBooked, defaults } = {}) {
 
   const sectionId = () => { const c = form.querySelector('[name="section"]:checked'); return c ? c.value : ""; };
   when.sectionOf = sectionId;
-  const serviceId = () => { const c = form.querySelector('[name="service"]:checked'); return c ? Number(c.value) : null; };
+  // The consultation chip or an item of the doctor's price list (Saged, 2026-11-22): one of the two is picked.
+  const priceList = field("service_list");
+  const pickedService = () => form.querySelector('[name="service"]:checked') || (priceList && priceList.value ? priceList.selectedOptions[0] : null);
+  const serviceId = () => { const c = pickedService(); return c ? Number(c.value) : null; };
+  function setService(id) {
+    const chip = form.querySelector(`[name="service"][value="${CSS.escape(String(id))}"]`);
+    const option = priceList && [...priceList.options].find((o) => o.value === String(id) && !o.disabled);
+    if (!chip && !option) return false;
+    form.querySelectorAll('[name="service"]').forEach((input) => { input.checked = input === chip; });
+    if (priceList) priceList.value = option ? option.value : "";
+    showQty();
+    return true;
+  }
+  // A visit that goes on with a treatment takes that treatment's service; "A new treatment" goes back to the first.
+  function followCourse() {
+    const id = courseService(dialog);
+    if (!(id && setService(id))) { if (priceList) priceList.value = ""; pickFirstService(); }
+    quote();
+  }
   // How many of a procedure (Saged, 2026-11-19): 3 fillings are booked once, at 3 times the price.
   const qtyBox = form.querySelector("[data-qty-box]");
   const qty = () => {
-    const c = form.querySelector('[name="service"]:checked');
+    const c = pickedService();
     if (!c || c.dataset.kind !== "procedure" || !field("qty")) return 1;
     const n = Number(asciiDigits(field("qty").value.trim()));
     return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
   };
   function showQty() {
-    const c = form.querySelector('[name="service"]:checked');
+    const c = pickedService();
     if (qtyBox) qtyBox.hidden = !c || c.dataset.kind !== "procedure";
   }
 
@@ -226,6 +245,13 @@ export function initBook({ onBooked, defaults } = {}) {
       chip.hidden = Boolean(section) && Boolean(chip.dataset.section) && chip.dataset.section !== section;
       if (chip.hidden) chip.querySelector("input").checked = false;
     });
+    if (priceList) {
+      for (const o of priceList.options) {
+        if (!o.value) continue;
+        o.hidden = o.disabled = Boolean(section) && Boolean(o.dataset.section) && o.dataset.section !== section;
+      }
+      if (priceList.value && priceList.selectedOptions[0].disabled) priceList.value = "";
+    }
     when.filterDoctors(section);
     if (!serviceId()) pickFirstService();
     if (!when.doctor()) pickOnlyDoctor();
@@ -245,7 +271,13 @@ export function initBook({ onBooked, defaults } = {}) {
 
   form.addEventListener("change", (event) => {
     if (event.target.name === "section") { filterBySection(); when.loadMonth(true); when.refresh(); }
-    if (event.target.name === "service") { showQty(); quote(); }
+    if (event.target.name === "service") { if (priceList) priceList.value = ""; showQty(); quote(); }
+    if (event.target.name === "service_list") {
+      if (priceList.value) form.querySelectorAll('[name="service"]').forEach((input) => { input.checked = false; });
+      else pickFirstService();
+      showQty(); quote();
+    }
+    if (event.target.name === "continues_id") followCourse();
     if (event.target.name === "qty") quote();
     if (event.target.name === "collect" || event.target.name === "arrive" || event.target.name === "deposit") labels();
     if (event.target.name === "amount") field("amount").dataset.touched = "1";
@@ -263,6 +295,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!doctor || !service || !day) { fee.textContent = ""; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(day)}`;
     if (patient) url += `&patient=${patient.id}`;
+    if (patient && courseOf(dialog)) url += "&continues=1";
     if (plan && patient) url += `&follow_up=${session().id}`;  // a plan session's own visit price
     const result = await get(url);
     if (seq !== quoteSeq) return;

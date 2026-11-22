@@ -822,14 +822,8 @@ msgstr "بالدور"
 msgid "Not working this day"
 msgstr "لا يعمل في هذا اليوم"
 
-msgid "Waiting:"
-msgstr "في الانتظار:"
-
 msgid "With the doctor:"
 msgstr "مع الطبيب:"
-
-msgid "Done:"
-msgstr "انتهى:"
 
 msgid "No bookings yet."
 msgstr "لا توجد حجوزات بعد."
@@ -839,9 +833,6 @@ msgstr "لا يعمل أي طبيب في هذا اليوم، ولا توجد ح�
 
 msgid "New"
 msgstr "جديد"
-
-msgid "Follow-up"
-msgstr "إعادة"
 
 msgid "Extra"
 msgstr "إضافي"
@@ -2508,9 +2499,6 @@ msgstr ""
 "مين في الفريق، وبالضبط كل شخص يشوف ويعمل إيه، وأسماء العيادة. التغييرات تطبق"
 " فورًا."
 
-msgid "Whoever is free first"
-msgstr "أول طبيب يفضى"
-
 msgid "You"
 msgstr "أنت"
 
@@ -3269,9 +3257,6 @@ msgstr "متبقي من زيارات سابقة:"
 
 msgid "To pay:"
 msgstr "مطلوب:"
-
-msgid "Booked:"
-msgstr "حاجزين:"
 
 msgid "Booked, not here yet"
 msgstr "حاجزين، لم يصلوا بعد"
@@ -4346,3 +4331,63 @@ msgstr "مفيش فلوس مدفوعة زيادة عن الفاتورة دي."
 
 msgid "Paid over the bill, given back"
 msgstr "مدفوع زيادة عن الفاتورة، اترجّع"
+
+msgid "Center doctor"
+msgstr "طبيب المركز"
+
+msgid "Or from the price list"
+msgstr "أو من قايمة الأسعار"
+
+msgid "Pick a service"
+msgstr "اختار الخدمة"
+
+msgid "Paid over the bill:"
+msgstr "مدفوع زيادة عن الفاتورة:"
+
+msgid "Give the money back from the drawer"
+msgstr "رد المبلغ من الخزنة"
+
+msgid "Given back to the patient"
+msgstr "اترجّع للمريض"
+
+msgid "Give the money back"
+msgstr "رد المبلغ"
+
+msgid "Give it back"
+msgstr "رجّعها"
+
+msgid "{amount} went back to the patient from the drawer."
+msgstr "{amount} رجعت للمريض من الخزنة."
+
+msgid "Every day"
+msgstr "كل يوم"
+
+msgid "Write the time as HH:MM."
+msgstr "اكتب الوقت كده: 08:00."
+
+msgid "Write both times, from and to."
+msgstr "اكتب الوقتين: من وإلى."
+
+msgid "The end time must differ from the start."
+msgstr "وقت النهاية لازم يكون غير وقت البداية."
+
+msgid "Working hours"
+msgstr "مواعيد الشغل"
+
+msgid "From"
+msgstr "من"
+
+msgid "To"
+msgstr "إلى"
+
+msgid "Hours"
+msgstr "المواعيد"
+
+msgid "For your record: shown here only. Signing in is not limited by it."
+msgstr "للعلم بس: بتظهر هنا، ومش بتمنع الدخول للبرنامج."
+
+msgid "No set hours"
+msgstr "من غير مواعيد"
+
+msgid "Give this back to the patient from the drawer?"
+msgstr "ترجّع المبلغ ده للمريض من الخزنة؟"

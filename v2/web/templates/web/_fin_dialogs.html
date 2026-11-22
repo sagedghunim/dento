@@ -1,4 +1,25 @@
 {% load i18n hamada %}
+{% if give_back %}{# From the patient file's "Give the money back from the drawer" (Saged, 2026-11-22): asked once. #}
+<dialog class="sheet small" id="give-back-dialog" aria-labelledby="give-back-title" data-invoice="{{ give_back.id }}" data-patient="{{ give_back.patient_id }}">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="give-back-title">{% translate "Give the money back" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p>{% translate "Give this back to the patient from the drawer?" %}</p>
+    <p><strong>{{ give_back.credit|money }}</strong> · <bdi dir="auto">{{ give_back.patient }}</bdi></p>
+    <p class="muted">{% translate "Bill" %} {{ give_back.number|num }}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Give it back" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
 {% if tab == "register" %}
 {% if perms.cash_moves %}
 <dialog class="sheet small" id="cash-dialog" aria-labelledby="cash-title">
