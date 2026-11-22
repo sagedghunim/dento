@@ -539,7 +539,7 @@ function markActing(row) {
 
 const MESSAGES = {
   arrive: "arrived", call: "called", finish: "finished", "undo-arrive": "undone_arrive", "undo-call": "undone_call",
-  ready: "readied", "undo-ready": "undone_ready", "no-show": "marked_no_show", "undo-no-show": "undone_no_show",
+  ready: "readied", "undo-ready": "undone_ready", wait: "told_wait", "no-show": "marked_no_show", "undo-no-show": "undone_no_show",
 };
 const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"], ready: ["undo-ready", "ready"],
                "no-show": ["undo-no-show", "no_show"] };
@@ -582,7 +582,7 @@ card.addEventListener("click", (event) => {
   if (menu) menu.open = false;
   const v = visitOf(row);
   switch (button.dataset.act) {
-    case "arrive": case "call": case "ready": case "undo-arrive": case "undo-call": case "no-show": case "undo-no-show":
+    case "arrive": case "call": case "ready": case "wait": case "undo-arrive": case "undo-call": case "no-show": case "undo-no-show":
       quick(v.id, button.dataset.act, v.status, v.name, v.doctorId);
       break;
     case "next":  // the next visit of a plan: the same patient and doctor, no search (desk review 4)

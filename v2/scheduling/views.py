@@ -260,6 +260,7 @@ def _undo_view(action):
 
 
 undo_arrive_view = _undo_view("undo_arrive")
+wait_view = _undo_view("wait")  # the doctor's "wait" to the desk's "ready" (Saged, 2026-11-22)
 undo_assist_view = _undo_view("undo_assist")
 undo_ready_view = _undo_view("undo_ready")
 undo_call_view = _undo_view("undo_call")

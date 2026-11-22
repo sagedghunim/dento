@@ -4295,3 +4295,27 @@ msgstr "لسه مفتوحة"
 
 msgid "No register shift was open."
 msgstr "ما كانش فيه وردية خزنة مفتوحة."
+
+msgid "Ask the doctor"
+msgstr "اطلب من الدكتور"
+
+msgid "Call in now, without asking"
+msgstr "دخّله دلوقتي من غير ما تسأل"
+
+msgid "Let in"
+msgstr "دخّله"
+
+msgid "The desk asks to send in"
+msgstr "الاستقبال بيسأل: يدخل؟"
+
+msgid "The doctor said wait"
+msgstr "الدكتور قال استنى"
+
+msgid "Wait"
+msgstr "استنى"
+
+msgid "Waiting for the doctor's answer"
+msgstr "مستني رد الدكتور"
+
+msgid "{name}: told to wait"
+msgstr "{name}: يستنى شوية"

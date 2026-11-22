@@ -205,3 +205,22 @@ class UndoRaceTests(TransactionTestCase):
             booked = Appointment.objects.filter(clinic_id=self.a.id, status="booked", arrived_at__isnull=True).count()
             undone = AuditChange.objects.filter(clinic_id=self.a.id, action="appointment.undo_arrive").count()
         self.assertEqual(booked, undone)
+
+
+class AskTheDoctorTests(M1TestCase):
+    """The desk asks the doctor to take a patient; the doctor lets them in or says wait (Saged, 2026-11-22)."""
+
+    def test_the_doctor_says_wait_and_the_desk_can_ask_again(self):
+        doctor = self.a.membership("owner")  # book() books with the owner as the doctor
+        appt = self.book(arrive=True).json()["appointment"]
+        self.assertEqual(self.act(appt["id"], "ready", "waiting").status_code, 200)  # the desk asks
+        r = self.act(appt["id"], "wait", "ready", client=self.a.client("owner"))
+        self.assertEqual(r.status_code, 200, r.content)
+        row = self.appointment(appt["id"])
+        self.assertEqual((row.status, row.ready_at, row.wait_at is not None), ("waiting", None, True))
+        self.assertEqual(audits(self.a, "appointment.wait")[0]["membership_id"], doctor.id)
+        # Asking again clears the doctor's "wait"; calling in clears it too.
+        self.assertEqual(self.act(appt["id"], "ready", "waiting").status_code, 200)
+        self.assertIsNone(self.appointment(appt["id"]).wait_at)
+        self.assertEqual(self.act(appt["id"], "call", "ready", client=self.a.client("owner")).status_code, 200)
+        self.assertEqual(self.appointment(appt["id"]).status, "in_room")

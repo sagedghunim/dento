@@ -18,12 +18,17 @@
   </div>
   <div class="appt-side">
     {% include "web/_status_pill.html" with status=a.status arrived_at=a.arrived_at wait=a.wait %}
+    {% if a.status == "ready" and a.doctor_id == ctx.membership_id %}<span class="pill amber" data-asked>{% translate "The desk asks to send in" %}</span>
+    {% elif a.wait_at and a.status != "ready" and a.status != "in_room" and a.status != "done" %}<span class="pill grey" data-told-wait>{% translate "The doctor said wait" %} · {{ a.wait_at|clock }}</span>{% endif %}
     {% if perms.collect %}{% if a.due > 0 %}<span class="pill amber"><svg class="icon"><use href="#i-cash"/></svg>{% translate "To pay:" %} {{ a.due|money }}</span>{% elif a.invoice and a.invoice.paid > 0 %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "Paid" %}</span>{% endif %}{% endif %}
     <div class="appt-actions">
       {% if is_today and perms.queue %}
+        {# The visit's doctor calls in; anyone else asks the doctor, who lets in or says wait (Saged, 2026-11-22). #}
         {% if a.status == "booked" %}<button type="button" class="btn" data-act="arrive">{% translate "Arrived" %}</button>
-        {% elif a.status == "waiting" or a.status == "ready" %}<button type="button" class="btn" data-act="call">{% translate "Call in" %}</button>
-        {% elif a.status == "with_assistant" %}<button type="button" class="btn ghost" data-act="ready">{% translate "Ready for the doctor" %}</button>
+        {% elif a.doctor_id == ctx.membership_id and a.status == "ready" %}<button type="button" class="btn" data-act="call">{% translate "Let in" %}</button><button type="button" class="btn ghost" data-act="wait">{% translate "Wait" %}</button>
+        {% elif a.doctor_id == ctx.membership_id and a.status == "waiting" %}<button type="button" class="btn" data-act="call">{% translate "Call in" %}</button>
+        {% elif a.status == "waiting" or a.status == "with_assistant" %}<button type="button" class="btn{% if a.wait_at %} ghost{% endif %}" data-act="ready">{% translate "Ask the doctor" %}</button>
+        {% elif a.status == "ready" %}<span class="pill amber">{% translate "Waiting for the doctor's answer" %}</span>
         {% elif a.status == "in_room" %}<button type="button" class="btn" data-act="finish">{% translate "Finish visit" %}</button>{% endif %}
       {% endif %}
       {% if a.dental and a.status == "in_room" %}<a class="btn ghost" href="/visits/{{ a.id }}/teeth">{% translate "Dental chart" %}</a>{% endif %}
@@ -37,6 +42,7 @@
           {% if perms.collect %}<button type="button" class="menu-item" data-act="invoice">{% translate "Bill and payments" %}</button>{% endif %}
           {% if perms.money and perms.view_patients and a.invoice and a.invoice.paid > 0 %}<button type="button" class="menu-item" data-act="receipt">{% translate "Print receipt" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "waiting" and features.undo_arrive %}<button type="button" class="menu-item" data-act="undo-arrive">{% translate "Undo arrival" %}</button>{% endif %}
+          {% if is_today and perms.queue and a.doctor_id != ctx.membership_id and a.status == "waiting" or is_today and perms.queue and a.doctor_id != ctx.membership_id and a.status == "ready" %}<button type="button" class="menu-item" data-act="call">{% translate "Call in now, without asking" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "in_room" and features.undo_call %}<button type="button" class="menu-item" data-act="undo-call">{% translate "Undo call in" %}</button>{% endif %}
           {% if perms.book and a.status == "booked" %}<button type="button" class="menu-item" data-act="reschedule">{% translate "Change the time" %}</button>{% endif %}
           {% if is_today and perms.queue and a.status == "booked" %}<button type="button" class="menu-item" data-act="no-show" data-after="{{ a.starts_at|default:'' }}"{% if not a.started %} hidden{% endif %}>{% translate "Didn't come" %}</button>{% endif %}

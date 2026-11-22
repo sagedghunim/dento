@@ -66,6 +66,8 @@ class Appointment(models.Model):
     arrived_at = models.DateTimeField(null=True, blank=True)
     with_assistant_at = models.DateTimeField(null=True, blank=True)
     ready_at = models.DateTimeField(null=True, blank=True)
+    # When the visit's doctor last answered the desk's "ready" with "wait" (Saged, 2026-11-22); cleared by asking again.
+    wait_at = models.DateTimeField(null=True, blank=True)
     called_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)

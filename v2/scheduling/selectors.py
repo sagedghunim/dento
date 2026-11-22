@@ -24,7 +24,7 @@ STATUS_KEYS = ("booked", "waiting", "with_assistant", "ready", "in_room", "done"
 # The columns every appointment payload is built from (one query with joins inside the clinic).
 ROW_SQL = """
     SELECT a.id, a.day, a.queue_no, a.status, a.starts_at, a.ends_at, a.is_extra, a.source, a.fee, a.is_follow_up,
-           a.is_new, a.auto_closed, a.note, a.arrived_at, a.with_assistant_at, a.ready_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
+           a.is_new, a.auto_closed, a.note, a.arrived_at, a.with_assistant_at, a.ready_at, a.wait_at, a.called_at, a.finished_at, a.cancelled_at, a.cancel_reason,
            a.created_at,
            a.doctor_id, a.section_id, a.patient_id, p.full_name AS patient_name, p.phone AS patient_phone,
            p.file_no AS patient_file_no, a.service_id, s.name AS service_name, s.name_en AS service_name_en,
@@ -71,6 +71,7 @@ def payload(clinic, r):
         "visit_price": r.get("visit_price") or "", "qty": r.get("qty") or 1,
         "auto_closed": r["auto_closed"], "note": r["note"], "arrived_at": _iso(clinic, r["arrived_at"]),
         "with_assistant_at": _iso(clinic, r.get("with_assistant_at")), "ready_at": _iso(clinic, r.get("ready_at")),
+        "wait_at": _iso(clinic, r.get("wait_at")),
         "called_at": _iso(clinic, r["called_at"]), "finished_at": _iso(clinic, r["finished_at"]),
         "timings": timings(r),
         "cancelled_at": _iso(clinic, r["cancelled_at"]), "cancel_reason": r["cancel_reason"],

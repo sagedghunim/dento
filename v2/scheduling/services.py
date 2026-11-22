@@ -41,6 +41,9 @@ UNDO = {
                    ("waiting", "with_assistant")),
     "undo_call": ("in_room", "called_at", "CASE WHEN ready_at IS NULL THEN 'waiting' ELSE 'ready' END",
                   ("waiting", "ready")),
+    # The doctor's answer to the desk's "ready" (Saged, 2026-11-22): not yet. Back a step, with the time it was said.
+    "wait": ("ready", "ready_at", "CASE WHEN with_assistant_at IS NULL THEN 'waiting' ELSE 'with_assistant' END",
+             ("waiting", "with_assistant")),
 }
 
 
@@ -321,6 +324,8 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     extra_set, extra_params, extra_where = "", [], ""
     if action == "cancel":
         extra_set, extra_params = ", cancel_reason = %s", [reason]
+    if action in ("ready", "call"):
+        extra_set = ", wait_at = NULL"  # asked again, or let in: the doctor's "wait" is over
     if action == "arrive":
         extra_where = " AND day = %s"  # arrive is allowed only on the visit's business day
     if action == "call":
@@ -428,10 +433,14 @@ def undo(ctx, appointment_id, action, seen):
     if seen != source:
         raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
                        fields={"status": "invalid"})
-    changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = {target_sql}, {column} = NULL, updated_at = %s, '
-                           "updated_by_id = %s WHERE clinic_id = %s AND id = %s AND status = %s "
+    now = timezone.now()
+    extra_set, extra_params = "", []
+    if action == "wait":  # the screens offer it to the visit's doctor; the change log says who
+        extra_set, extra_params = ", wait_at = %s", [now]
+    changed = sql.row(ctx, f'UPDATE "scheduling_appointment" SET status = {target_sql}, {column} = NULL{extra_set}, '
+                           "updated_at = %s, updated_by_id = %s WHERE clinic_id = %s AND id = %s AND status = %s "
                            f"RETURNING day, OLD.{column}, status",
-                      [timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id, source])
+                      [*extra_params, now, ctx.membership_id, ctx.clinic_id, appointment_id, source])
     if changed is None:
         return _unchanged(ctx, appointment_id, action, targets, None)
     day, undone_at, target = changed
