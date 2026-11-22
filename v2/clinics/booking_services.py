@@ -48,3 +48,23 @@ def sync(alias, clinic_id, procedure_id=None):
     with connections[alias].cursor() as cursor:
         for statement in (ADOPT, FOLLOW, ADD):
             cursor.execute(statement.format(only=only), params)
+
+
+# How many of a service the desk may book (Saged, 2026-11-22): it follows the price list's unit. Teeth, quadrants,
+# arches and single units are counted (with their own ceiling); a whole case or a session is one. A procedure service
+# not tied to the price list keeps the old count, 1 to 20.
+COUNTED = {"tooth": 20, "quadrant": 4, "arch": 2, "unit": 20}
+
+
+def count_limit(ctx, service_id, kind):
+    """The most of this service one booking takes, or None when it is not counted."""
+    from core import sql
+
+    if kind != "procedure":
+        return None
+    found = sql.row(ctx, 'SELECT p.unit FROM "clinics_service" s LEFT JOIN "clinical_procedure" p '
+                         'ON p.clinic_id = s.clinic_id AND p.id = s.procedure_id WHERE s.clinic_id = %s AND s.id = %s',
+                    [ctx.clinic_id, service_id])
+    if found is None or found[0] is None:
+        return 20
+    return COUNTED.get(found[0])

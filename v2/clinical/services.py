@@ -114,6 +114,24 @@ def _appointment(ctx, appointment_id):
     return appointment
 
 
+def log_file(ctx, action, patient_id, appointment=None, target_type="", target_id=None, **details):
+    """The file's history (Saged, 2026-11-22): every change to a patient's medical file, with who and when, for the
+    owner. `outside`: written while the patient wasn't in with the doctor or the assistant (or with no visit at all);
+    `late`: the visit had already finished."""
+    status = appointment["status"] if appointment is not None else None
+    if status not in ("in_room", "with_assistant"):
+        details["outside"] = True
+    if status == "done":
+        details["late"] = True
+    if appointment is not None:
+        details.setdefault("appointment", appointment["id"])
+    record_change(ctx, action, target_type, target_id, patient_id=patient_id, **details)
+
+
+def _clip(value, size=1000):
+    return value[:size] + "…" if isinstance(value, str) and len(value) > size else value
+
+
 def _open_visit(appointment):
     """Clinical records go on a visit that took place or is taking place, never on a cancelled one."""
     if appointment["status"] in ("cancelled", "no_show"):
@@ -471,6 +489,8 @@ def create_prescription(ctx, patient_id, appointment_id, section_id, notes, line
                    line["strength"], line["form"], line["dose"], line["note"]]
     sql.run(ctx, 'INSERT INTO "clinical_prescription_item" (clinic_id, prescription_id, position, medicine_id, name, '
                  f"generic, strength, form, dose, note) VALUES {', '.join(values)}", params)
+    log_file(ctx, "prescription.add", patient["id"], appointment if appointment_id is not None else None,
+             "prescription", prescription_id, number=number, medicines=[line["name"] for line in lines])
     return prescription_id, allergy_warnings(patient["allergies"], lines)
 
 
@@ -516,6 +536,7 @@ def save_note(ctx, appointment_id, version, values):
             current = sql.row(ctx, 'SELECT id, complaint, diagnosis, notes, version, updated_at FROM "clinical_visit_note" '
                                    "WHERE clinic_id = %s AND appointment_id = %s", [ctx.clinic_id, appointment_id])
             raise stale_note(_note_row(current))
+        _log_note(ctx, appointment, {name: "" for name in NOTE_FIELDS}, values)
         return _note_row(found), True
     current = _note_row(current)
     if all(current[name] == values[name] for name in NOTE_FIELDS):
@@ -535,7 +556,15 @@ def save_note(ctx, appointment_id, version, values):
                          "RETURNING id, complaint, diagnosis, notes, version, updated_at", [
         values["complaint"], values["diagnosis"], values["notes"], now, ctx.membership_id, ctx.clinic_id, current["id"],
         version])
+    _log_note(ctx, appointment, current, values)
     return _note_row(found), True
+
+
+def _log_note(ctx, appointment, before, after):
+    changed = [name for name in NOTE_FIELDS if (before[name] or "") != (after[name] or "")]
+    if changed:
+        log_file(ctx, "visit_note.save", appointment["patient_id"], appointment, "appointment", appointment["id"],
+                 before={n: _clip(before[n]) for n in changed}, after={n: _clip(after[n]) for n in changed})
 
 
 # --- Vitals (design E3) ----------------------------------------------------------------------------------------
@@ -621,6 +650,8 @@ def save_vitals(ctx, appointment_id, version, values):
             return current, False  # already so: a harmless repeat
         raise ApiError("stale", _("Someone changed the vital signs meanwhile. Reload and try again."), 409,
                        fields={"version": current["version"] if current else 0}, extra={"vitals": current})
+    log_file(ctx, "vitals.save", appointment["patient_id"], appointment, "appointment", appointment_id,
+             after={n: str(values[n]) for n in names if values[n] is not None})
     return vitals_row(found), True
 
 
@@ -659,6 +690,8 @@ def add_attachment(ctx, patient_id, appointment_id, title, upload):
     except Exception:
         store.delete(key)
         raise
+    log_file(ctx, "attachment.add", patient["id"], appointment if appointment_id is not None else None,
+             "attachment", found[0], title=title or file_name)
     # A rollback after this point (a later refusal in the request) leaves an unreferenced file; the storage key
     # starts with the clinic id, and a sweep can remove files no row names.
     return found[0]
@@ -873,6 +906,9 @@ def set_tooth(ctx, patient_id, tooth, condition, surfaces, note, appointment_id=
         raise ApiError("stale", _("Someone changed this tooth meanwhile. Reload and try again."), 409,
                        fields={"condition": current[2] if current else None},
                        extra={"tooth": tooth_row(current) if current else None, "tooth_number": tooth})
+    log_file(ctx, "tooth.set", patient["id"], appointment if appointment_id is not None else None, "tooth", tooth,
+             tooth=tooth, before={"condition": current[2] if current else None},
+             after={"condition": condition, "surfaces": surfaces})
     return _set_tooth(ctx, patient["id"], tooth, condition, surfaces, note, appointment_id), True
 
 
@@ -1008,6 +1044,9 @@ def record_procedure(ctx, appointment_id, request):
               "name_ar": procedure["name_ar"], "name_en": procedure["name_en"], "tooth": tooth, "surfaces": surfaces,
               "area": request["area"], "qty": qty, "unit_price": unit_price, "amount": qty * unit_price,
               "invoice_line_id": line_id, "plan_item_id": plan_item["id"] if plan_item else None, "note": request["note"]}
+    log_file(ctx, "visit_procedure.add", appointment["patient_id"], appointment, "visit_procedure", record_id,
+             procedure_id=procedure["id"], name=procedure["name_ar"], name_en=procedure["name_en"], tooth=tooth,
+             qty=qty, amount=qty * unit_price)
     return record, invoice, state, version
 
 
@@ -1117,8 +1156,8 @@ def remove_procedure(ctx, appointment_id, record_id):
     before = {name: record[name] for name in RECORD_FIELDS if name not in ("id", "created_at")}
     before["created_at"] = record["created_at"].isoformat()
     # The answer's replay reads `appointment` and `restored` back from this row (clinical.views._replay_removed).
-    record_change(ctx, "visit_procedure.remove", "visit_procedure", record["id"], before=before,
-                  appointment=appointment_id, restored=list(restored) if restored else None)
+    log_file(ctx, "visit_procedure.remove", record["patient_id"], appointment, "visit_procedure", record["id"],
+             before=before, restored=list(restored) if restored else None)
     deltas.doctor_day(appointment["day"], appointment["doctor_id"], procedures=-1).clinic_day(appointment["day"])
     deltas.write_doctors(ctx)
     version = deltas.write_clinics(ctx)[appointment["day"]]
@@ -1182,6 +1221,8 @@ def create_plan(ctx, patient_id, section, title, items):
                            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                       [ctx.clinic_id, patient["id"], section["id"], title, timezone.now(), ctx.membership_id])[0]
     _insert_plan_items(ctx, plan_id, cleaned, 1)
+    log_file(ctx, "plan.create", patient["id"], None, "plan", plan_id, title=title,
+             items=[c["procedure_id"] for c in cleaned])
     return plan_id
 
 
@@ -1190,7 +1231,7 @@ def add_plan_items(ctx, plan_id, items):
     from scheduling.rules import patient_sql
 
     mine, params = patient_sql(ctx, "pl.clinic_id", "pl.patient_id")  # another doctor's patient's plan is 404
-    found = sql.row(ctx, f'SELECT pl.id, pl.section_id FROM "clinical_plan" pl WHERE pl.clinic_id = %s AND pl.id = %s{mine} '
+    found = sql.row(ctx, f'SELECT pl.id, pl.section_id, pl.patient_id FROM "clinical_plan" pl WHERE pl.clinic_id = %s AND pl.id = %s{mine} '
                          "FOR NO KEY UPDATE", [ctx.clinic_id, plan_id, *params])
     if found is None:
         raise not_found("plan")
@@ -1200,6 +1241,7 @@ def add_plan_items(ctx, plan_id, items):
     if count + len(cleaned) > MAX_PLAN_ITEMS:
         raise ApiError("invalid", _("A plan has 1 to 60 items."), fields={"items": "count"})
     _insert_plan_items(ctx, plan_id, cleaned, last + 1)
+    log_file(ctx, "plan.items_add", found[2], None, "plan", plan_id, items=[c["procedure_id"] for c in cleaned])
     return plan_id
 
 
@@ -1225,6 +1267,11 @@ def move_plan_item(ctx, item_id, status, expected):
                     [status, timezone.now(), ctx.clinic_id, item_id, expected, status,
                      sorted(PLAN_MOVES.get(expected, ()))])
     if found is not None:
+        item = sql.row(ctx, 'SELECT pl.patient_id, i.procedure_id, i.tooth FROM "clinical_plan_item" i JOIN "clinical_plan" pl '
+                            "ON pl.clinic_id = i.clinic_id AND pl.id = i.plan_id WHERE i.clinic_id = %s AND i.id = %s",
+                       [ctx.clinic_id, item_id])
+        log_file(ctx, "plan_item.status", item[0], None, "plan_item", item_id, procedure_id=item[1], tooth=item[2],
+                 before={"status": expected}, after={"status": status})
         return found[0], True
     current = sql.row(ctx, 'SELECT plan_id, status FROM "clinical_plan_item" WHERE clinic_id = %s AND id = %s',
                       [ctx.clinic_id, item_id])

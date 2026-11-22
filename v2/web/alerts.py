@@ -27,7 +27,8 @@ ACTIONS = ("visit_procedure.remove", "invoice.line_remove", "invoice.discount", 
 DAYS = 60
 LIMIT = 150
 # A register closed with the count matching is not news.
-_WHERE = ("clinic_id = %s AND action = ANY(%s) AND at >= %s "
+# Plus any change to a file after its visit had finished (Saged, 2026-11-22: web.file_history).
+_WHERE = ("clinic_id = %s AND (action = ANY(%s) OR details->>'late' = 'true') AND at >= %s "
           "AND NOT (action = 'shift.close' AND coalesce((details->'after'->>'difference')::bigint, 0) = 0)")
 
 
@@ -52,7 +53,7 @@ def unseen(ctx):
 
 def items(ctx):
     """The latest alerts, newest first, each with who, when, what and the patient when there is one."""
-    rows = sql.dicts(ctx, f'SELECT id, action, membership_id, target_id, details, at FROM "audit_change" '
+    rows = sql.dicts(ctx, f'SELECT id, action, membership_id, target_id, patient_id, details, at FROM "audit_change" '
                           f"WHERE {_WHERE} ORDER BY at DESC, id DESC LIMIT %s",
                      [ctx.clinic_id, list(ACTIONS), _since(), LIMIT])
     if not rows:
@@ -81,6 +82,13 @@ def items(ctx):
     item_ids = [r["target_id"] for r in rows if r["action"] == "item.count"]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
+    from .file_history import describe
+
+    late = [r for r in rows if r["action"] not in ACTIONS]
+    told = {r["id"]: text for r, text in zip(late, describe(ctx, late))}
+    late_ids = [r["patient_id"] for r in late if r["patient_id"]]
+    late_names = dict(sql.rows(ctx, 'SELECT id, full_name FROM "patients_patient" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
+                               [ctx.clinic_id, late_ids])) if late_ids else {}
     shift_of = _shifts(ctx, rows[-1]["at"], names)
     seen = ctx.membership.alerts_seen_at
     out = []
@@ -90,7 +98,13 @@ def items(ctx):
         item = {"id": r["id"], "at": local_iso(ctx.clinic, r["at"]), "who": names.get(r["membership_id"], _("The system")),
                 "new": not seen or r["at"] > seen, "amount": None, "patient": None, "patient_id": None, "what": "",
                 "detail": "", "level": "warn", "shift": shift_of(r["at"])}
-        if action == "visit_procedure.remove":
+        if r["id"] in told:  # a file changed after its visit ended
+            text = told[r["id"]]
+            item["what"] = f"{text['what']} · {_('After the visit ended')}"
+            item["detail"], item["amount"] = text["detail"], text["amount"]
+            item["patient_id"] = r["patient_id"]
+            item["patient"] = late_names.get(r["patient_id"])
+        elif action == "visit_procedure.remove":
             item["what"] = _("Removed a recorded procedure")
             item["detail"] = procedures.get(before.get("procedure_id"), "") + (f" · {before['tooth']}" if before.get("tooth") else "")
             item["amount"] = before.get("amount")

@@ -1173,3 +1173,10 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .new-tag { margin-block-start: 12px; align-items: end; }
 .tag-filter { margin-block: 12px 4px; }
 a.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-color: var(--teal); color: var(--teal-dark); }
+/* The file's history (Saged, 2026-11-22) */
+.history-changes { margin-block-start: 6px; }
+.history-changes summary { cursor: pointer; color: var(--teal-dark); }
+.history-changes dl { margin: 6px 0 0; display: grid; gap: 4px; }
+.history-changes dl div { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-changes dt { font-weight: 600; }
+.history-changes dd { margin: 0; white-space: pre-wrap; }

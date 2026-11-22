@@ -38,7 +38,7 @@
         {% for s in config.services %}{% if s.booking and s.kind == "consultation" %}<option value="{{ s.id }}" data-section="{{ s.section_id|default_if_none:'' }}" data-kind="{{ s.kind }}">{{ s.name }}</option>{% endif %}{% endfor %}
         {% include "web/_price_list_options.html" %}
       </select></label>
-      <label class="field qty-field" data-qty-box hidden>{% translate "How many (for example 3 fillings)" %}<input name="qty" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr"></label>
+      {% include "web/_qty_field.html" %}
     </div>
     <p class="muted" data-defaults-note role="status" hidden></p>
     {% if config.perms.collect %}

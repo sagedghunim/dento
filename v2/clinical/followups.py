@@ -211,7 +211,15 @@ def add(ctx, appointment_id, items=None, recipe_of=None, tooth=None):
     sql.run(ctx, 'INSERT INTO "clinical_plan_item" (clinic_id, plan_id, procedure_id, label, position, tooth, area, '
                  f"price, status, due_on, visit_id, updated_at, visit_price) VALUES {', '.join(values)}", params)
     _tell_today(ctx, {appointment["day"]})
+    services.log_file(ctx, "follow_up.add", appointment["patient_id"], appointment, "plan", plan[0],
+                      steps=[{"label": r[1], "procedure_id": r[0], "days": r[2]} for r in rows])
     return appointment["patient_id"]
+
+
+def _log(ctx, *args, **details):
+    from . import services
+
+    services.log_file(ctx, *args, **details)
 
 
 def _item(ctx, item_id):
@@ -240,6 +248,7 @@ def set_due(ctx, item_id, days):
                  "WHERE clinic_id = %s AND id = %s",
             [item["visit_day"] + dt.timedelta(days=days), timezone.now(), ctx.clinic_id, item_id])
     _tell_today(ctx, {item["visit_day"]})
+    _log(ctx, "follow_up.due", item["patient_id"], None, "plan_item", item_id, days=days)
     return item["patient_id"]
 
 
@@ -250,6 +259,7 @@ def drop(ctx, item_id):
         sql.run(ctx, "UPDATE \"clinical_plan_item\" SET status = 'dropped', updated_at = %s WHERE clinic_id = %s AND id = %s",
                 [timezone.now(), ctx.clinic_id, item_id])
         _tell_today(ctx, {item["visit_day"]})
+        _log(ctx, "follow_up.drop", item["patient_id"], None, "plan_item", item_id)
     elif item["status"] != "dropped":
         raise ApiError("status_changed", _("This follow-up was already booked or closed."), 409,
                        fields={"status": item["status"]})

@@ -1,6 +1,6 @@
 // Native <dialog>s (design 7.1, 7.6) and the browser half of safe repeats for their forms (design 7.4).
 import { discardPending, errorMessage, get, isOk, newKey, save } from "./api.js";
-import { clockParts, localDigits } from "./numbers.js";
+import { asciiDigits, clockParts, localDigits } from "./numbers.js";
 import { t } from "./strings.js";
 
 // --- Opening and closing: focus returns to the button that opened the dialog ---
@@ -468,6 +468,34 @@ export function courseService(dialog) {
   const select = dialog.querySelector('[name="continues_id"]');
   const option = select && select.value ? select.selectedOptions[0] : null;
   return option && option.dataset.service ? Number(option.dataset.service) : null;
+}
+
+// How many of the picked service (Saged, 2026-11-22), by its price-list unit: teeth, quadrants, jaws or units, each
+// with its ceiling (the server checks the same, clinics/booking_services.COUNTED). A consultation, a whole case or a
+// session is one, and the box is hidden. A procedure service outside the price list (no data-unit) counts units.
+const COUNT_MAX = { tooth: 20, quadrant: 4, arch: 2, unit: 20 };
+
+function unitOf(option) {
+  if (!option || option.dataset.kind !== "procedure") return "";
+  const unit = option.dataset.unit ?? "unit";
+  return unit in COUNT_MAX ? unit : "";
+}
+
+export function showCount(box, option) {
+  if (!box) return;
+  const unit = unitOf(option);
+  if (box.dataset.shown !== unit) box.querySelector("input").value = "1";  // another kind of count starts at 1
+  box.dataset.shown = unit;
+  box.hidden = !unit;
+  if (!unit) return;
+  box.querySelector("[data-qty-label]").textContent = box.dataset[unit];
+  box.querySelector("input").max = String(COUNT_MAX[unit]);
+}
+
+export function countOf(box) {
+  if (!box || box.hidden || !box.dataset.shown) return 1;
+  const n = Number(asciiDigits(box.querySelector("input").value.trim()));
+  return Number.isInteger(n) && n >= 1 && n <= COUNT_MAX[box.dataset.shown] ? n : 1;
 }
 
 export function courseOf(dialog) {

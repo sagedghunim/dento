@@ -3,8 +3,8 @@
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
-import { courseOf, courseService, loadCourses, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
-import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
+import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
@@ -102,14 +102,9 @@ export function initWalkIn({ onBooked } = {}) {
   const doctorId = () => Number(field("doctor").value) || defaults.doctor_id || null;
   const serviceId = () => Number(field("service").value) || null;
 
-  // How many of a procedure (Saged, 2026-11-19): shown for a procedure service only.
+  // How many (Saged, 2026-11-19, 2026-11-22): by the service's unit (teeth, quadrants, jaws); none for a cleaning.
   const qtyBox = form.querySelector("[data-qty-box]");
-  const isProcedure = () => { const o = field("service").selectedOptions[0]; return Boolean(o && o.dataset.kind === "procedure"); };
-  const qty = () => {
-    if (!isProcedure()) return 1;
-    const n = Number(asciiDigits(field("qty").value.trim()));
-    return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
-  };
+  const qty = () => countOf(qtyBox);
 
   // Only the services of the chosen doctor's sections (a doctor's sections are those of their sessions today).
   function filterServices() {
@@ -176,7 +171,7 @@ export function initWalkIn({ onBooked } = {}) {
     const doctor = doctorId();
     const service = serviceId();
     const seq = ++quoteSeq;
-    qtyBox.hidden = !isProcedure();
+    showCount(qtyBox, field("service").selectedOptions[0]);
     if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;
     if (patient) url += `&patient=${patient.id}`;

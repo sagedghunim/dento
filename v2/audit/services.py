@@ -5,7 +5,8 @@ from django.utils import timezone
 from .models import AuditAccess, AuditChange
 
 
-def record_change(ctx, action, target_type="", target_id=None, before=None, after=None, **extra):
+def record_change(ctx, action, target_type="", target_id=None, before=None, after=None, patient_id=None, **extra):
+    """One row of the change log; `patient_id` puts it in that patient's file history (Saged, 2026-11-22)."""
     details = {}
     if before is not None:
         details["before"] = before
@@ -14,7 +15,7 @@ def record_change(ctx, action, target_type="", target_id=None, before=None, afte
     details.update(extra)
     AuditChange.objects.create(
         clinic_id=ctx.clinic_id, actor_kind=ctx.actor, membership_id=ctx.membership_id, user_id=ctx.user_id,
-        action=action, target_type=target_type, target_id=target_id, details=details, ip=ctx.ip,
+        patient_id=patient_id, action=action, target_type=target_type, target_id=target_id, details=details, ip=ctx.ip,
         request_id=ctx.request_id, at=timezone.now(),
     )
 

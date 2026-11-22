@@ -2,7 +2,7 @@
 
 from django.urls import path
 
-from . import alerts, finance_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
+from . import alerts, file_history, finance_pages, followup_pages, inventory_pages, overview_pages, pages, rx_pages, team_pages, teeth, visit_pages
 
 urlpatterns = [
     path("today", pages.today_page, name="today"),
@@ -18,6 +18,7 @@ urlpatterns = [
     path("visits/<int:appointment_id>/chart", visit_pages.visit_chart, name="visit-chart"),
     path("visits/<int:appointment_id>/teeth", teeth.visit_teeth_page, name="visit-teeth"),
     path("patients/<int:patient_id>/teeth", teeth.patient_teeth_page, name="patient-teeth"),
+    path("patients/<int:patient_id>/history", file_history.file_history_page, name="patient-history"),
     path("patients/<int:patient_id>/teeth/<int:tooth>/history", teeth.tooth_history, name="tooth-history"),
     path("follow-ups", followup_pages.followups_page, name="follow-ups"),
     path("follow-ups/whatsapp/<int:patient_id>", followup_pages.whatsapp_plan, name="follow-ups-whatsapp"),

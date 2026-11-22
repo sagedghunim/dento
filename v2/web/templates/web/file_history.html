@@ -1,0 +1,26 @@
+{% extends "web/base.html" %}{% load i18n hamada %}
+{% block title %}{% translate "File history" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="muted"><a href="/patients/{{ patient.id }}"><bdi dir="auto">{{ patient.full_name }}</bdi></a></p>
+  <h1>{% translate "File history" %}</h1>
+  <p>{% translate "Everything done in this file, newest first: who did it and when. A change made while the patient wasn't in with the doctor is marked." %}</p>
+</div>
+<section class="card">
+  {% if items %}
+  <ul class="alert-list" data-history>
+    {% for h in items %}
+    <li class="alert-row {% if h.late %}level-bad{% elif h.outside %}level-warn{% else %}level-info{% endif %}">
+      <div class="alert-main">
+        <p class="alert-what"><strong>{{ h.what }}</strong>{% if h.late %} <span class="pill red">{% translate "After the visit ended" %}</span>{% elif h.outside %} <span class="pill amber">{% translate "Outside the visit" %}</span>{% endif %}</p>
+        <p class="muted"><bdi dir="auto">{{ h.who }}</bdi> · {{ h.at|shortday }} · {{ h.at|clock }}{% if h.detail %} · <bdi dir="auto">{{ h.detail }}</bdi>{% endif %}</p>
+        {% if h.changes %}<details class="history-changes"><summary>{% translate "What changed" %}</summary><dl>{% for label, was, now in h.changes %}<div><dt>{{ label }}</dt><dd><bdi dir="auto">{{ was }}</bdi> → <bdi dir="auto">{{ now }}</bdi></dd></div>{% endfor %}</dl></details>{% endif %}
+      </div>
+      {% if h.amount is not None %}<p class="alert-amount num">{{ h.amount|money }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if older %}<div class="list-foot"><a class="btn ghost" href="?before={{ older }}">{% translate "Older" %}</a></div>{% endif %}
+  {% else %}<p class="empty-note">{% if first_page %}{% translate "Nothing recorded in this file yet." %}{% else %}{% translate "Nothing older." %}{% endif %}</p>{% endif %}
+</section>
+{% endblock %}

@@ -3920,9 +3920,6 @@ msgstr ""
 msgid "Only the account's owner can change this."
 msgstr "صاحب الحساب بس هو اللي يقدر يغيّر ده."
 
-msgid "How many (for example 3 fillings)"
-msgstr "العدد (مثلًا 3 حشوات)"
-
 msgid "Enter a count from 1 to 20."
 msgstr "اكتب عدد من 1 لـ 20."
 
@@ -4039,15 +4036,6 @@ msgstr "لغى مصروف"
 
 msgid "A stock count changed the quantity"
 msgstr "الجرد غيّر الكمية في المخزن"
-
-msgid ""
-"What the team did with money and records in the last two months: removed "
-"procedures and bill lines, discounts, refunds, voided bills, the register "
-"short or over, price changes and stock counts."
-msgstr ""
-"اللي الفريق عمله في الفلوس والسجلات آخر شهرين: إجراءات أو بنود فواتير "
-"اتشالت، وخصومات، وفلوس اترجّعت، وفواتير اتلغت، والخزنة لو ناقصة أو زيادة، "
-"وتغيير أسعار، وجرد المخزن."
 
 msgid ""
 "Nothing to report. The team hasn't removed, discounted or refunded anything "
@@ -4391,3 +4379,119 @@ msgstr "من غير مواعيد"
 
 msgid "Give this back to the patient from the drawer?"
 msgstr "ترجّع المبلغ ده للمريض من الخزنة؟"
+
+msgid "Added a file"
+msgstr "رفع ملف"
+
+msgid "Added a follow-up"
+msgstr "حط متابعة"
+
+msgid "Added to a treatment plan"
+msgstr "زوّد على خطة العلاج"
+
+msgid "After the visit ended"
+msgstr "بعد ما الزيارة خلصت"
+
+msgid "Brought the file back"
+msgstr "رجّع الملف"
+
+msgid "Changed a plan item"
+msgstr "غيّر بند في الخطة"
+
+msgid "Changed a tooth on the chart"
+msgstr "غيّر حالة سن"
+
+msgid "Changed the patient's details"
+msgstr "عدّل بيانات المريض"
+
+msgid "Changed the tags"
+msgstr "غيّر العلامات"
+
+msgid "Changed the visit fee"
+msgstr "غيّر تمن الكشف"
+
+msgid "Changed the visit's notes"
+msgstr "عدّل ملاحظات الكشف"
+
+msgid "Dropped"
+msgstr "اتلغى"
+
+msgid "Enter a count from 1 to %(max)s."
+msgstr "اكتب عدد من 1 لـ %(max)s."
+
+msgid ""
+"Everything done in this file, newest first: who did it and when. A change "
+"made while the patient wasn't in with the doctor is marked."
+msgstr ""
+"كل اللي اتعمل في الملف ده، الأحدث الأول: مين عمله وإمتى. والتعديل اللي اتعمل"
+" والمريض مش جوه عند الدكتور عليه علامة."
+
+msgid "File history"
+msgstr "سجل الملف"
+
+msgid "Guardian"
+msgstr "ولي الأمر"
+
+msgid "How many jaws (upper, lower)?"
+msgstr "كام فك؟ (فوق، تحت)"
+
+msgid "How many quadrants of the mouth?"
+msgstr "كام ربع من الفم؟"
+
+msgid "How many teeth?"
+msgstr "كام سن؟"
+
+msgid "How many?"
+msgstr "العدد"
+
+msgid "Made a treatment plan"
+msgstr "عمل خطة علاج"
+
+msgid "Moved a follow-up's day"
+msgstr "غيّر ميعاد متابعة"
+
+msgid "Nothing older."
+msgstr "مفيش أقدم من كده."
+
+msgid "Nothing recorded in this file yet."
+msgstr "لسه مفيش حاجة متسجلة في الملف ده."
+
+msgid "Older"
+msgstr "الأقدم"
+
+msgid "Opened the file"
+msgstr "فتح الملف"
+
+msgid "Outside the visit"
+msgstr "من بره الكشف"
+
+msgid "Recorded a procedure"
+msgstr "سجّل شغل"
+
+msgid "Recorded the vital signs"
+msgstr "سجّل العلامات الحيوية"
+
+msgid "Took a follow-up back"
+msgstr "شال متابعة"
+
+msgid "What changed"
+msgstr "إيه اللي اتغير"
+
+msgid "Whose mobile"
+msgstr "الموبايل بتاع مين"
+
+msgid "Wrote a prescription"
+msgstr "كتب روشتة"
+
+msgid "Wrote the visit's notes"
+msgstr "كتب ملاحظات الكشف"
+
+msgid ""
+"What the team did with money and records in the last two months: removed "
+"procedures and bill lines, discounts, refunds, voided bills, the register "
+"short or over, price changes, stock counts, and a patient's file changed "
+"after the visit ended."
+msgstr ""
+"اللي الفريق عمله في الفلوس والسجلات آخر شهرين: إجراءات أو بنود فواتير "
+"اتشالت، وخصومات، وفلوس اترجّعت، وفواتير اتلغت، والخزنة لو ناقصة أو زيادة، "
+"وتغيير أسعار، وجرد المخزن، وتعديل في ملف مريض بعد ما الزيارة خلصت."

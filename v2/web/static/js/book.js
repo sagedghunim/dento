@@ -6,8 +6,8 @@
 // booking moves straight to the next one; "skip" passes one over. Each booking carries its follow-up's id, so the
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { courseOf, courseService, loadCourses, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
+import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
+import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
@@ -226,18 +226,11 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!(id && setService(id))) { if (priceList) priceList.value = ""; pickFirstService(); }
     quote();
   }
-  // How many of a procedure (Saged, 2026-11-19): 3 fillings are booked once, at 3 times the price.
+  // How many (Saged, 2026-11-19, 2026-11-22): 3 fillings are booked once, at 3 times the price; the count follows
+  // the service's unit (teeth, quadrants, jaws), and a cleaning or a consultation has none.
   const qtyBox = form.querySelector("[data-qty-box]");
-  const qty = () => {
-    const c = pickedService();
-    if (!c || c.dataset.kind !== "procedure" || !field("qty")) return 1;
-    const n = Number(asciiDigits(field("qty").value.trim()));
-    return Number.isInteger(n) && n >= 1 && n <= 20 ? n : 1;
-  };
-  function showQty() {
-    const c = pickedService();
-    if (qtyBox) qtyBox.hidden = !c || c.dataset.kind !== "procedure";
-  }
+  const qty = () => countOf(qtyBox);
+  function showQty() { showCount(qtyBox, pickedService()); }
 
   function filterBySection() {
     const section = sectionId();
@@ -446,7 +439,7 @@ export function initBook({ onBooked, defaults } = {}) {
     confirmOther = false;
     hideConflict(dialog);
     if (field("amount")) delete field("amount").dataset.touched;
-    if (qtyBox) qtyBox.hidden = true;
+    showCount(qtyBox, null);
     if (field("print")) { try { field("print").checked = localStorage.getItem("hamada.print") === "1"; } catch (e) { /* none */ } }
     // "Booked by" opens on the last one this browser used (desk review 6); "here now" and "collect" start unticked.
     try {

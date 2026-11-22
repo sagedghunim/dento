@@ -95,14 +95,20 @@ def _booking_groups(ctx, services):
     covers (an examination), as on the visit screen."""
     from clinical.followups import VISIT_FEE_CATEGORIES
     from clinical.models import Procedure
+    from clinics.booking_services import COUNTED
 
     from .visit_pages import CATEGORY_WORDS
 
     ids = [s["procedure_id"] for s in services if s["procedure_id"]]
-    found = {p_id: (category, sort) for p_id, category, sort in Procedure.objects.filter(
-        clinic_id=ctx.clinic_id, id__in=ids, is_active=True).values_list("id", "category", "sort")} if ids else {}
+    found, units = {}, {}
+    for p_id, category, sort, unit in (Procedure.objects.filter(clinic_id=ctx.clinic_id, id__in=ids, is_active=True)
+                                       .values_list("id", "category", "sort", "unit") if ids else ()):
+        found[p_id], units[p_id] = (category, sort), unit
     for s in services:
         category = found.get(s["procedure_id"], (None,))[0]
+        # What a booking counts (Saged, 2026-11-22): teeth, quadrants, arches or units; "" is one, not counted.
+        unit = units.get(s["procedure_id"])
+        s["unit"] = unit if unit in COUNTED else ("" if unit or s["kind"] != "procedure" else "unit")
         s["booking"] = s["kind"] == "consultation" or (category is not None and category not in VISIT_FEE_CATEGORIES)
         if category is None or not s["booking"]:
             s["group"] = ""

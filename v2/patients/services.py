@@ -158,6 +158,7 @@ def create(ctx, values):
         ctx.clinic_id, ctx.clinic_id, values["full_name"], values["name_norm"], values["phone"], values["phone_norm"],
         values["phone_owner"], values["guardian_relation"], values["sex"], values["birth_date"], values["birth_date_estimated"], values["address"], values["notes"],
         values["allergies"], values["chronic_conditions"], now, ctx.user_id, now])
+    record_change(ctx, "patient.create", "patient", row[0], patient_id=row[0], file_no=row[1])
     return {"id": row[0], "file_no": row[1], **values}
 
 
@@ -180,9 +181,16 @@ def update(ctx, patient_id, changes, expected, today):
     Patient.objects.filter(clinic_id=ctx.clinic_id, id=patient.id).update(**changes, updated_at=patient.updated_at)
     identity = [name for name in changes if name in IDENTITY and before[name] != _comparable(changes[name])]
     if identity:
-        record_change(ctx, "patient.identity", "patient", patient.id,
+        record_change(ctx, "patient.identity", "patient", patient.id, patient_id=patient.id,
                       before={name: before[name] for name in identity},
                       after={name: _comparable(changes[name]) for name in identity})
+    # The rest of the file's details, for its history (Saged, 2026-11-22); the search keys are not news.
+    other = [name for name in changes if name not in IDENTITY and not name.endswith("_norm")
+             and before[name] != _comparable(changes[name])]
+    if other:
+        record_change(ctx, "patient.edit", "patient", patient.id, patient_id=patient.id,
+                      before={name: before[name] for name in other},
+                      after={name: _comparable(changes[name]) for name in other})
     bump(ctx, today)  # names and phones show on Today (design 5.11)
     return patient
 

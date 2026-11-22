@@ -178,7 +178,7 @@ def _stale(invoice):
 
 
 def _written(ctx, invoice, appointment, updated):
-    record_change(ctx, "invoice.discount", "invoice", invoice["id"],
+    record_change(ctx, "invoice.discount", "invoice", invoice["id"], patient_id=invoice["patient_id"],
                   before={"discount": invoice["discount"], "type": invoice["discount_type_id"]},
                   after={"discount": updated["discount"], "type": updated["discount_type_id"],
                          **({"name": updated["discount_name"]} if updated["discount_type_id"] else {})})

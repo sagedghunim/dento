@@ -14,6 +14,8 @@ class AuditChange(models.Model):
     actor_kind = models.CharField(max_length=10)  # member, system, platform
     membership_id = models.BigIntegerField(null=True)
     user_id = models.BigIntegerField(null=True)
+    # The file it belongs to (Saged, 2026-11-22): the owner reads a patient's history from here.
+    patient_id = models.BigIntegerField(null=True, blank=True)
     action = models.CharField(max_length=40)
     target_type = models.CharField(max_length=40, blank=True, default="")
     target_id = models.BigIntegerField(null=True)
@@ -27,6 +29,8 @@ class AuditChange(models.Model):
         indexes = [
             models.Index("clinic_id", models.F("at").desc(), models.F("id").desc(), name="audit_change_clinic_at"),
             models.Index("clinic_id", "target_type", "target_id", models.F("at").desc(), models.F("id").desc(), name="audit_change_target"),
+            models.Index("clinic_id", "patient_id", models.F("at").desc(), models.F("id").desc(), name="audit_change_patient",
+                         condition=models.Q(patient_id__isnull=False)),
         ]
 
 

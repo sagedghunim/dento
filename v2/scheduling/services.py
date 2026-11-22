@@ -143,7 +143,16 @@ def book(ctx, request, deltas=None):
         found_price = visit_price_of(ctx, request["follow_up_id"])
         visit_price = found_price if service.kind == "consultation" else ""
     fee, is_follow_up = rules.fee_for(service, eligible, visit_price)
-    qty = (request.get("qty") or 1) if service.kind == "procedure" else 1  # 3 fillings: 3 times the price
+    from clinics.booking_services import count_limit
+
+    # 3 fillings: 3 times the price; a cleaning is one. The unit is read only when more than one is asked for.
+    qty = (request.get("qty") or 1) if service.kind == "procedure" else 1
+    if qty > 1:
+        limit = count_limit(ctx, service.id, service.kind)
+        if not limit:
+            qty = 1
+        elif qty > limit:
+            raise ApiError("invalid", _("Enter a count from 1 to %(max)s.") % {"max": limit}, fields={"qty": "range"})
     fee *= qty
     if is_deposit and clinic_settings.deposit_percent(clinic):
         asked = clinic_settings.deposit(clinic, fee)  # a percent of this visit's fee (Saged, 2026-11-19)

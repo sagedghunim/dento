@@ -281,7 +281,7 @@ def _void(ctx, invoice, reason):
                  "WHERE clinic_id = %s AND id = %s AND status = 'open' AND paid = 0",
             [timezone.now(), ctx.membership_id, ctx.clinic_id, invoice["id"]])
     record_change(ctx, "invoice.void", "invoice", invoice["id"], before={"status": "open", "total": invoice["total"]},
-                  after={"status": "void"}, reason=reason)
+                  after={"status": "void"}, reason=reason, patient_id=invoice["patient_id"])
 
 
 def _lock_invoice(ctx, invoice_id):
@@ -433,7 +433,7 @@ def drop_line(ctx, invoice, appointment, line):
         _return_package_session(ctx, appointment["id"], line["id"])
     updated = move_subtotal(ctx, invoice["id"], -amount)
     sql.run(ctx, 'DELETE FROM "billing_invoice_line" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, line["id"]])
-    record_change(ctx, "invoice.line_remove", "invoice", invoice["id"],
+    record_change(ctx, "invoice.line_remove", "invoice", invoice["id"], patient_id=invoice["patient_id"],
                   before={"line": line["id"], "kind": line["kind"], "service_id": line["service_id"],
                           "description": line["description"], "qty": line["qty"], "unit_price": line["unit_price"],
                           "amount": amount, "from_list": line["from_list"]},
@@ -482,7 +482,8 @@ def set_discount(ctx, invoice_id, discount, expected):
     before = {"discount": invoice["discount"]}
     if invoice["discount_type_id"] is not None:
         before["type"] = invoice["discount_type_id"]
-    record_change(ctx, "invoice.discount", "invoice", invoice["id"], before=before, after={"discount": discount})
+    record_change(ctx, "invoice.discount", "invoice", invoice["id"], before=before, after={"discount": discount},
+                  patient_id=invoice["patient_id"])
     version = Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
     return updated, version
 
@@ -535,7 +536,7 @@ def refund(ctx, payment_id, amount, method=None, note=""):
                                     f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
                                [amount, amount if was_deposit else 0, ctx.clinic_id, invoice["id"]]))
     record_change(ctx, "payment.refund", "payment", payment_id, before={"refunded": refunded - amount},
-                  after={"refunded": refunded}, amount=amount, refund_id=row["id"])
+                  after={"refunded": refunded}, amount=amount, refund_id=row["id"], patient_id=invoice["patient_id"])
     deltas = Deltas()
     if doctor_id is not None:
         deltas.doctor_day(today, doctor_id, refunded=amount)
@@ -606,7 +607,7 @@ def set_visit_line(ctx, appointment_id, service_id, amount, reason, only_from=No
                  "AND id = %s", [qty, amount // qty, amount, ctx.clinic_id, line[0]])
     move_subtotal(ctx, invoice["id"], amount - line[1])
     record_change(ctx, "invoice.visit_fee", "invoice", invoice["id"], before={"line": line[0], "amount": line[1]},
-                  after={"amount": amount}, reason=reason)
+                  after={"amount": amount}, reason=reason, patient_id=invoice["patient_id"])
     return True
 
 
