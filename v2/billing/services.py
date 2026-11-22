@@ -425,8 +425,8 @@ def drop_line(ctx, invoice, appointment, line):
     if percent is None and invoice["discount"] > left:
         raise ApiError("discount_exceeds", _("Lower the discount before removing this line."), 409)
     discount = invoice["discount"] if percent is None else percent_of(left, percent)
-    if not fits(invoice, left - discount):
-        raise _paid_exceeds()
+    # More paid than what is left stays as the patient's credit, given back from the drawer (give_back): no
+    # "refund first" (Saged, 2026-11-22).
     if line["kind"] == "package":
         void_packages(ctx, invoice["id"], line["id"])  # F7: refused once a session was used
     elif line["kind"] == "procedure" and appointment:
@@ -546,6 +546,32 @@ def refund(ctx, payment_id, amount, method=None, note=""):
     deltas.write_doctors(ctx)
     versions = deltas.write_clinics(ctx)
     return row, invoice, versions[visit_day]
+
+
+def give_back(ctx, invoice_id, method="cash"):
+    """What was paid over the bill (a line removed after paying), given back to the patient (Saged, 2026-11-22).
+
+    The credit is what is paid over the total, beyond a booking deposit still held. It is refunded from the bill's
+    payments, latest first, each through `refund` (audited, the drawer for cash, the owner's alerts). Returns the
+    last refund's (row, invoice, version).
+    """
+    invoice, _appointment = _lock_invoice(ctx, invoice_id)
+    credit = invoice["paid"] - max(invoice["total"], invoice["deposit"])
+    if credit <= 0:
+        raise ApiError("no_credit", _("Nothing was paid over this bill."), 409)
+    payments = sql.rows(ctx, 'SELECT id, amount - refunded FROM "billing_payment" WHERE clinic_id = %s '
+                             "AND invoice_id = %s AND kind = 'payment' AND NOT is_deposit AND refunded < amount "
+                             "ORDER BY id DESC", [ctx.clinic_id, invoice["id"]])
+    left, answer = credit, None
+    for payment_id, available in payments:
+        part = min(left, available)
+        answer = refund(ctx, payment_id, part, method, _("Paid over the bill, given back"))
+        left -= part
+        if not left:
+            break
+    if answer is None or left:
+        raise ApiError("no_credit", _("Nothing was paid over this bill."), 409)
+    return answer
 
 
 # --- The visit's own line (Saged, 2026-11-16) ------------------------------------------------------------------

@@ -6,7 +6,7 @@ open invoice (audited): voids and refunds keep their rows.
 
 from django.db import models
 from django.db.models import F, Q
-from django.db.models.functions import Greatest, Now
+from django.db.models.functions import Now
 from django.utils import timezone
 
 from core.constraints import CompositeForeignKey
@@ -87,8 +87,9 @@ class Invoice(models.Model):
             models.CheckConstraint(condition=Q(status__in=["open", "void"]), name="invoice_status_valid"),
             models.CheckConstraint(condition=Q(discount__gte=0, discount__lte=F("subtotal")), name="invoice_discount_valid"),
             models.CheckConstraint(condition=Q(total=F("subtotal") - F("discount")), name="invoice_total_valid"),
-            models.CheckConstraint(condition=Q(paid__gte=0, paid__lte=Greatest(F("total"), F("deposit"))),
-                                   name="invoice_paid_fits"),
+            # More may be paid than the total: a deposit held, or a line removed after paying, which leaves the
+            # patient a credit the desk gives back (Saged, 2026-11-22). Collecting never goes over what is owed.
+            models.CheckConstraint(condition=Q(paid__gte=0), name="invoice_paid_fits"),
             models.CheckConstraint(condition=Q(deposit__gte=0, deposit__lte=F("paid")), name="invoice_deposit_valid"),
             models.CheckConstraint(condition=~Q(status="void") | Q(paid=0), name="invoice_void_unpaid"),
             models.CheckConstraint(condition=Q(number__gt=0), name="invoice_number_positive"),

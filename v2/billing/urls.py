@@ -13,4 +13,5 @@ urlpatterns = [
     path("api/v1/invoices/<int:invoice_id>/discount", views.discount_view),
     path("api/v1/invoices/<int:invoice_id>/void", views.void_view),
     path("api/v1/payments/<int:payment_id>/refund", views.refund_view),
+    path("api/v1/invoices/<int:invoice_id>/give-back", views.give_back_view),
 ]

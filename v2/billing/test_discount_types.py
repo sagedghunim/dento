@@ -356,7 +356,7 @@ class ApplyTests(DiscountTestCase):
             self.kind(f"More {n}")
         many = self.queries(lambda: call(self.desk, "GET", f"/api/v1/appointments/{invoice['appointment']['id']}/discount-types"))
         self.assertEqual((few, many), (4, 4))
-        self.assertLessEqual(self.queries(lambda: self.apply(invoice, friends)), 14)
+        self.assertLessEqual(self.queries(lambda: self.apply(invoice, friends)), 15)  # plus the register shifts read
 
 
 class PercentStaysTrueTests(DiscountTestCase):
@@ -389,13 +389,17 @@ class PercentStaysTrueTests(DiscountTestCase):
         self.assertEqual((after["subtotal"], after["discount"], after["total"]),
                          (subtotal, (subtotal * 10 + 50) // 100, subtotal - (subtotal * 10 + 50) // 100))
 
-    def test_a_removal_that_would_leave_more_paid_than_the_total_is_refused(self):
+    def test_a_removal_that_leaves_more_paid_than_the_total_is_a_credit(self):
+        # No more "refund first" (Saged, 2026-11-22): the percent is worked out again and the rest is a credit.
         half = self.kind("Half", value=50)
         invoice = self.add_line(self.invoice())
         invoice = self.apply(invoice, half).json()["invoice"]
-        self.pay(invoice, invoice["total"])
+        paid = invoice["total"]
+        self.pay(invoice, paid)
         r = self.remove_line(invoice, invoice["lines"][-1])
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
+        self.assertEqual(r.status_code, 200, r.content)
+        after = r.json()["invoice"]
+        self.assertEqual(after["credit"], paid - after["total"])
 
     def test_a_fixed_type_keeps_its_amount_and_the_lower_it_first_rule(self):
         price = self.services_a["procedure"].price

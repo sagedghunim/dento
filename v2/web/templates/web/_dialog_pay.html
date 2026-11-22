@@ -18,6 +18,8 @@
       <div><dt>{% translate "Owed" %}</dt><dd data-sum="due"></dd></div>
       <div data-credit-row hidden><dt>{% translate "Paid over the bill" %}</dt><dd data-sum="credit"></dd></div>
     </dl>
+    {# The patient's credit goes back to them from the drawer, like Collect the other way (Saged, 2026-11-22). #}
+    {% if config.perms.collect %}<p class="give-back" data-give-back-row hidden><button type="button" class="btn ghost" data-run="give-back">{% translate "Give it back to the patient" %}</button></p>{% endif %}
     <p class="muted" data-status role="status"></p>
 
     <section class="subsection" data-collect aria-labelledby="pay-collect-title">

@@ -168,17 +168,17 @@ class RemoveProcedureTests(RemoveProcedureCase):
         self.assertEqual(self.remove(record["id"]).status_code, 200)
         self.assertEqual(call(self.desk, "GET", packages).json()["items"][0]["left"], 3)
 
-    def test_refused_when_more_was_paid_than_the_new_total(self):
+    def test_removed_after_paying_leaves_the_patient_a_credit(self):
+        # No more "refund first" (Saged, 2026-11-22): the money paid for it is the patient's credit.
         self.sees_money()
         record = self.record(self.filling, tooth=36)
         total = self.fee + self.filling["price"]
         r = call(self.desk, "POST", f"/api/v1/appointments/{self.visit['id']}/payments", {"amount": total, "method": "cash"})
         self.assertEqual(r.status_code, 201, r.content)
         r = self.remove(record["id"])
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
-        self.assertEqual(len(self.rows(VisitProcedure, id=record["id"])), 1)
-        self.assertEqual(self.rows(Tooth, patient_id=self.patient)[0]["condition"], "filling")
-        self.assertEqual(self.procedures_today(), 1)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["invoice"]["credit"], self.filling["price"])
+        self.assertEqual(len(self.rows(VisitProcedure, id=record["id"])), 0)
 
     def test_refused_when_a_typed_discount_exceeds_what_is_left(self):
         record = self.record(self.filling, tooth=36)
@@ -251,4 +251,4 @@ class RemoveUnderDepositTests(DepositTestCase):
             # Pay everything that is owed now: removing the last procedure would leave paid over total and deposit.
             self.assertEqual(self.pay(visit["id"], total - DEPOSIT).status_code, 201)
             r = call(self.owner, "DELETE", f"{url}/{second['id']}")
-            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
+            self.assertEqual(r.status_code, 200, r.content)  # the patient's credit now (Saged, 2026-11-22)

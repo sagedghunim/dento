@@ -46,6 +46,13 @@ def objects(test, fixture):
     invoice = call(client, "GET", f"/api/v1/invoices/{paid['invoice']['id']}").json()["invoice"]
     line = call(client, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
                 {"kind": "procedure", "service_id": services["procedure"].id}).json()["invoice"]["lines"][-1]
+    # A bill with a credit: paid in full, then a line removed (Saged, 2026-11-22).
+    credited = book(payment={"amount": 1000, "method": "cash"})
+    with_line = call(client, "POST", f"/api/v1/invoices/{credited['invoice']['id']}/lines",
+                     {"kind": "procedure", "service_id": services["procedure"].id}).json()["invoice"]
+    call(client, "POST", f"/api/v1/appointments/{credited['id']}/payments",
+         {"amount": with_line["total"] - with_line["paid"], "method": "cash"})
+    call(client, "DELETE", f"/api/v1/invoices/{with_line['id']}/lines/{with_line['lines'][-1]['id']}")
     unpaid = book()
     no_show = book()
     call(client, "POST", f"/api/v1/appointments/{no_show['id']}/no-show", {"status": "booked"})
@@ -54,6 +61,7 @@ def objects(test, fixture):
                            callable=callable_["id"],
                            assisted=assisted["id"], readied=readied["id"], no_show=no_show["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
+                           credited_invoice=with_line["id"],
                            unpaid_invoice=unpaid_invoice["id"], patient=booked["patient"]["id"], owner=owner,
                            # a patient with no open visit today: Book and Walk-in may take them (Saged, 2026-11-17)
                            free_patient=callable_["patient"]["id"],
@@ -116,6 +124,9 @@ def mutating(test, o):
         "discount": ("PUT", f"/api/v1/invoices/{o.invoice}/discount", {"discount": 100, "expected_discount": 0},
                      {"discount": 200, "expected_discount": 0}, ["billing.discount"]),
         "void": ("POST", f"/api/v1/invoices/{o.unpaid_invoice}/void", {}, {"x": 1}, ["billing.refund"]),
+        # Before "refund": the last entry's codes stay revoked while the reads' objects are made.
+        "give back": ("POST", f"/api/v1/invoices/{o.credited_invoice}/give-back", {}, {"method": "card"},
+                      ["billing.collect"]),
         "refund": ("POST", f"/api/v1/payments/{o.payment}/refund", {"amount": 50}, {"amount": 60}, ["billing.refund"]),
     }
 

@@ -104,7 +104,9 @@ class LineAndDiscountTests(BillingTestCase):
         foreign = self.services_b["procedure"].id
         self.assertEqual(call(self.desk, "POST", url, {"kind": "procedure", "service_id": foreign}).status_code, 404)
 
-    def test_removing_a_line_only_while_paid_stays_within_the_total(self):
+    def test_removing_a_paid_line_leaves_a_credit_the_desk_gives_back_from_the_drawer(self):
+        # No more "refund first" (Saged, 2026-11-22): what was paid over the new total is the patient's credit,
+        # and "Give back" pays it out of the drawer as a refund.
         appt = self.visit()
         invoice = self.invoice_of(appt["id"])
         procedure = self.services_a["procedure"]
@@ -112,12 +114,16 @@ class LineAndDiscountTests(BillingTestCase):
                      {"kind": "procedure", "service_id": procedure.id}).json()["invoice"]["lines"]
         self.pay(appt["id"], self.fee + 100)
         r = call(self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}")
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
-        payment = call(self.desk, "GET", f"/api/v1/invoices/{invoice['id']}").json()["invoice"]["payments"][0]
-        self.grant("billing.refund")
-        call(self.desk, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 100})
-        r = call(self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}")
-        self.assertEqual((r.status_code, r.json()["invoice"]["total"]), (200, self.fee))
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.json()["invoice"]["total"], r.json()["invoice"]["paid"], r.json()["invoice"]["credit"]),
+                         (self.fee, self.fee + 100, 100))
+        back = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/give-back", {})
+        self.assertEqual(back.status_code, 201, back.content)
+        self.assertEqual((back.json()["invoice"]["paid"], back.json()["invoice"]["credit"]), (self.fee, 0))
+        payments = call(self.desk, "GET", f"/api/v1/invoices/{invoice['id']}").json()["invoice"]["payments"]
+        self.assertEqual(sorted((p["kind"], p["amount"]) for p in payments)[-1], ("refund", 100))
+        nothing = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/give-back", {})
+        self.assertEqual((nothing.status_code, nothing.json()["error"]["code"]), (409, "no_credit"))
         with clinic_transaction(self.a.id, self.a.shard):
             self.assertTrue(AuditChange.objects.filter(clinic_id=self.a.id, action="invoice.line_remove").exists())
         self.assertEqual(call(self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}")

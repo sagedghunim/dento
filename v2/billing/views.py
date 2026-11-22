@@ -125,6 +125,16 @@ def refund_view(request, ctx, data, payment_id):
                   target_id=refund["id"])
 
 
+@api("POST", perm="billing.collect", replay=_replay_payment)
+def give_back_view(request, ctx, data, invoice_id):
+    """POST {method?}: what was paid over the bill goes back to the patient, cash from the drawer by default."""
+    invoice_id = validate.path_id(invoice_id, services.not_found("invoice"))
+    method = validate.choice(data, "method", METHODS) if data.get("method") is not None else "cash"
+    refund, invoice, version = services.give_back(ctx, invoice_id, method)
+    return Result(_payment_answer(ctx, refund, invoice, version), status=201, target_type="payment",
+                  target_id=refund["id"])
+
+
 # --- Session packages (F7) -------------------------------------------------------------------------------------
 
 

@@ -44,6 +44,9 @@ export function initPay({ onChanged } = {}) {
     const creditRow = dialog.querySelector("[data-credit-row]");
     creditRow.hidden = !(s.credit > 0);
     creditRow.querySelector("dt").textContent = visit.status === "no_show" ? t("deposit") : creditLabel;
+    // Give back what was paid over the bill beyond a deposit still held (the server works out the same).
+    const giveBack = dialog.querySelector("[data-give-back-row]");
+    if (giveBack) giveBack.hidden = !(invoice && invoice.status === "open" && invoice.paid - Math.max(invoice.total, invoice.deposit || 0) > 0);
     return s;
   }
 
@@ -247,6 +250,9 @@ export function initPay({ onChanged } = {}) {
       if (!option || !amount) { submitter.say(t("bad_amount")); return; }
       result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
       if (result && isOk(result)) { toast(t("refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
+    } else if (name === "give-back") {
+      result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/give-back`, {}, [t("give_back"), visit.name].join(" · "));
+      if (result && isOk(result)) { toast(t("given_back")); await load(); }
     } else if (name === "void") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/void`, {}, t("bill"));
       if (result && isOk(result)) { invoice = result.data.invoice; render(); toast(t("bill_voided")); }

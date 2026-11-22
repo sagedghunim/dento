@@ -345,14 +345,16 @@ class CreditTests(DepositTestCase):
             self.assertEqual(self.pay(other["id"], 200_00).status_code, 201)
             bill = self.bill(other["id"])
             r = call(self.desk, "DELETE", f"/api/v1/invoices/{bill['id']}/lines/{bill['lines'][0]['id']}")
-            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
+            self.assertEqual(r.status_code, 200, r.content)  # what was paid stays as the patient's credit (Saged, 2026-11-22)
+            self.assertEqual(r.json()["invoice"]["credit"], CONSULT)
 
     def test_the_database_refuses_more_than_the_total_without_a_deposit(self):
         from django.db import IntegrityError, transaction
 
         with self.on(0):
             visit = self.book(payment={"amount": CONSULT, "method": "cash"}, doctor_id=self.owner_id).json()["appointment"]
-        for change in ({"paid": CONSULT + 1}, {"deposit": 1, "paid": 0}, {"deposit": -1}):
+        # More paid than the total is allowed (a credit, Saged 2026-11-22); a negative paid or deposit never is.
+        for change in ({"paid": -1}, {"deposit": 1, "paid": 0}, {"deposit": -1}):
             with self.assertRaises(IntegrityError), clinic_transaction(self.a.id, self.a.shard), \
                     transaction.atomic(using=self.a.shard):
                 Invoice.objects.filter(clinic_id=self.a.id, id=visit["invoice"]["id"]).update(**change)
@@ -811,7 +813,7 @@ class RandomDepositTests(DepositTestCase):
         for invoice in self.rows(Invoice):
             held = sum(p["amount"] - p["refunded"] for p in payments if p["invoice_id"] == invoice["id"] and p["is_deposit"])
             self.assertEqual(invoice["deposit"], held, invoice)  # the deposit held = deposit payments less their refunds
-            self.assertLessEqual(invoice["paid"], max(invoice["total"], invoice["deposit"]), invoice)
+            # More paid than the total is a credit now (a line removed after paying, Saged 2026-11-22).
             self.assertGreaterEqual(invoice["paid"], invoice["deposit"], invoice)
         with self.on(2):
             for visit_id in visits:

@@ -4334,3 +4334,15 @@ msgstr "تكملة: {service}، بدأ {started} (دي الزيارة {n})"
 
 msgid "This visit"
 msgstr "الزيارة دي"
+
+msgid "Give it back to the patient"
+msgstr "رجّعها للمريض"
+
+msgid "Given back to the patient from the drawer"
+msgstr "اترجّعت للمريض من الخزنة"
+
+msgid "Nothing was paid over this bill."
+msgstr "مفيش فلوس مدفوعة زيادة عن الفاتورة دي."
+
+msgid "Paid over the bill, given back"
+msgstr "مدفوع زيادة عن الفاتورة، اترجّع"
