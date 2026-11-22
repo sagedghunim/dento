@@ -4,11 +4,11 @@
     <div class="visit-when">
       {# The day and the time, never the queue turn: a turn means nothing later (Saged, 2026-11-22). #}
       <strong class="nowrap">{{ v.day|shortday }}{% if v.starts_at %} · {{ v.starts_at|clock }}{% elif v.arrived_at %} · {{ v.arrived_at|clock }}{% endif %}</strong>
-      <span><bdi dir="auto">{{ v.service.name }}</bdi>{% if v.qty > 1 %} × {{ v.qty|digits }}{% endif %} · <bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi>{% if v.course_no > 1 or v.in_course %} · <span class="pill teal">{% translate "Visit" %} {{ v.course_no|num }}</span>{% endif %}</span>
+      <span>{% if v.bill %}{% for line in v.bill.lines %}<bdi dir="auto">{{ line.label }}</bdi>{% if line.qty > 1 %} × {{ line.qty|digits }}{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}{% else %}<bdi dir="auto">{{ v.service.name }}</bdi>{% if v.qty > 1 %} × {{ v.qty|digits }}{% endif %}{% endif %} · <bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi>{% if v.course_no > 1 or v.in_course %} · <span class="pill teal">{% translate "Visit" %} {{ v.course_no|num }}</span>{% endif %}</span>
     </div>
     <div class="visit-side">
       {% include "web/_status_pill.html" with status=v.status %}
-      {% if perms.money %}<span class="num">{{ v.fee|money }}</span>{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}<span class="pill amber">{% translate "Owes" %} {{ v.due|money }}</span>{% endif %}{% endif %}
+      {% if perms.money %}<span class="num">{% if v.invoice and v.invoice.total is not None %}{{ v.invoice.total|money }}{% else %}{{ v.fee|money }}{% endif %}</span>{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}<span class="pill amber">{% translate "Owes" %} {{ v.due|money }}</span>{% endif %}{% endif %}
       {% if perms.collect and v.status != "cancelled" and v.status != "no_show" %}<button type="button" class="btn{% if not v.due %} ghost{% endif %}" data-act="pay">{% if v.due > 0 %}{% translate "Collect" %}{% else %}{% translate "Bill" %}{% endif %}</button>{% endif %}
       {% if perms.money and v.invoice and v.invoice.paid > 0 %}<button type="button" class="icon-btn" data-act="receipt" aria-label="{% translate "Print receipt" %}" title="{% translate "Print receipt" %}"><svg class="icon"><use href="#i-print"/></svg></button>{% endif %}
     </div>
@@ -20,5 +20,8 @@
     {% if v.medicines %}<div><dt>{% translate "Prescription" %}</dt><dd>{% for m in v.medicines %}<bdi dir="ltr">{{ m.name }}</bdi>{% if m.dose %} <span class="muted"><bdi dir="auto">{{ m.dose }}</bdi></span>{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if v.note.notes %}<div><dt>{% translate "Notes" %}</dt><dd><bdi dir="auto">{{ v.note.notes }}</bdi></dd></div>{% endif %}
   </dl>{% endif %}{% elif v.note_text %}<p class="visit-note"><bdi dir="auto">{{ v.note_text|truncatechars:300 }}</bdi></p>{% endif %}
+  {% if perms.money and v.bill %}<dl class="visit-detail visit-bill">
+    <div><dt>{% translate "The bill" %}</dt><dd>{% for line in v.bill.lines %}<span class="nowrap"><bdi dir="auto">{{ line.label }}</bdi>{% if line.qty > 1 %} · {{ line.qty|digits }} × {{ line.unit_price|money }}{% endif %} · <span class="num">{{ line.amount|money }}</span></span>{% if not forloop.last %}، {% endif %}{% endfor %}{% if v.bill.discount %}، <span class="nowrap">{% translate "Discount" %} −<span class="num">{{ v.bill.discount|money }}</span></span>{% endif %}</dd></div>
+  </dl>{% endif %}
 </li>
 {% endfor %}

@@ -5,6 +5,19 @@
   <h1 id="security-title">{% translate "Two-step sign-in" %}</h1>
   {% if has_totp %}
     <p>{% translate "Two-step sign-in is on for your account." %}</p>
+    <h2>{% translate "Add the code to another phone" %}</h2>
+    <p class="muted">{% translate "Anyone who scans it gets the same changing code as you. Show it only to people you trust with this account." %}</p>
+    <form id="totp-show" class="stack-form">
+      <label class="field">{% translate "Your password" %}
+        <input name="password" type="password" autocomplete="current-password" required maxlength="200">
+      </label>
+      <button class="btn ghost" type="submit">{% translate "Show the code" %}</button>
+      <p class="form-error" data-error></p>
+    </form>
+    <div id="totp-again" hidden>
+      <div id="totp-qr" class="qr" aria-live="polite"></div>
+      <p class="muted">{% translate "Can't scan? Enter this key in the app:" %} <code id="totp-secret" dir="ltr"></code></p>
+    </div>
     <a class="btn" href="/">{% translate "Continue" %}</a>
   {% else %}
     <p>{% translate "Clinic owners sign in with a password and a code from an authenticator app, such as Google Authenticator or Microsoft Authenticator." %}</p>

@@ -89,6 +89,7 @@ if (dialog) {
       field("name_ar").value = p.name_ar;
       field("name_en").value = p.name_en || "";
       field("family").value = p.family || "";
+      if (field("family").value !== (p.family || "")) field("family").value = "";
       field("unit").value = p.unit;
       if (field("section_id")) { field("section_id").value = String(p.section_id); field("section_id").disabled = true; }
       if (field("price")) field("price").closest("label").hidden = true;  // the price is changed in the list
@@ -96,8 +97,19 @@ if (dialog) {
       if (field("section_id")) field("section_id").disabled = false;
       if (field("price")) field("price").closest("label").hidden = false;
     }
+    showNewFamily();
     openDialog(dialog, opener);
   }
+
+  // A main service of the clinic's own (Saged, 2026-11-22): "+ A new main service" asks its name.
+  const newFamily = dialog.querySelector("[data-family-new]");
+  function showNewFamily() {
+    newFamily.hidden = field("family").value !== "+new";
+  }
+  field("family").addEventListener("change", () => {
+    showNewFamily();
+    if (!newFamily.hidden) field("family_new").focus();
+  });
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-add-procedure]")) open(null, event.target.closest("button"));
@@ -109,6 +121,10 @@ if (dialog) {
     event.preventDefault();
     const body = { name_ar: field("name_ar").value.trim(), name_en: field("name_en").value.trim(),
                    family: field("family").value, unit: field("unit").value };
+    if (body.family === "+new") {
+      body.family = field("family_new").value.trim().replace(/\s+/g, " ");
+      if (!body.family) { submitter.say(t("family_needed")); field("family_new").focus(); return; }
+    }
     if (!body.name_ar) { submitter.say(t("name_needed")); field("name_ar").focus(); return; }
     let result;
     if (editing) {

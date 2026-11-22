@@ -39,7 +39,7 @@
     <table class="lines">
       <thead><tr><th>{% translate "Item" %}</th><th class="n">{% translate "Qty" %}</th><th class="n">{% translate "Amount" %}</th></tr></thead>
       <tbody>
-        {% for line in r.lines %}<tr><td><bdi dir="auto">{{ line.label }}</bdi></td><td class="n">{{ line.qty|num }}</td><td class="n">{{ line.amount|money }}</td></tr>{% endfor %}
+        {% for line in r.lines %}<tr><td><bdi dir="auto">{{ line.label }}</bdi></td><td class="n">{{ line.qty|num }}{% if line.qty > 1 %} × {{ line.unit_price|money }}{% endif %}</td><td class="n">{{ line.amount|money }}</td></tr>{% endfor %}
       </tbody>
     </table>
     <dl class="totals">

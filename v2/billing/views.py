@@ -360,6 +360,19 @@ def installments_make_view(request, ctx, data, patient_id):
     return Result({"plan": plan}, status=201, target_type="patient", target_id=patient_id)
 
 
+@api("POST", perm=("billing.collect", "money.view"), replay=_installment_answer)
+def installments_pay_view(request, ctx, data, patient_id):
+    """{amount, method}: a payment toward the running plan; more than is due now splits the rest again (Saged,
+    2026-11-22)."""
+    from . import installments
+
+    amount = parse_money(data.get("amount"), "amount", low=1)
+    method = validate.choice(data, "method", METHODS)
+    plan, payments = installments.pay(ctx, patient_id, amount, method)
+    return Result({"plan": plan, "payments": [p["id"] for p in payments]}, status=201, target_type="patient",
+                  target_id=patient_id)
+
+
 @api("DELETE", perm=("billing.collect", "money.view"), replay=_installment_answer)
 def installments_cancel_view(request, ctx, data, patient_id):
     from . import installments

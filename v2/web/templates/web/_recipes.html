@@ -1,10 +1,11 @@
 {% load i18n %}{# Follow-ups after a procedure: Team & settings (the owner) and Prescription (the doctor). #}
-<section class="card" aria-labelledby="recipes-title" data-recipes data-part="followups">
+<section class="card" aria-labelledby="recipes-title" data-recipes data-part="followups"{% if recipe_sections %} data-sections="{{ recipe_sections }}"{% endif %}>
   <div class="card-head">
     <div>
       <h2 id="recipes-title">{% translate "Follow-ups after a procedure" %}</h2>
       <p class="card-sub">{% translate "The sessions the doctor is offered to add after recording a procedure. Change them, turn them off, or add them to another procedure." %}</p>
     </div>
+    <button type="button" class="btn" data-recipe-new><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add follow-ups" %}</button>
   </div>
   <label class="field">{% translate "Find a procedure" %}
     <input type="search" dir="auto" autocomplete="off" maxlength="60" placeholder="{% translate "Type part of its name" %}" data-recipe-search>
@@ -20,6 +21,9 @@
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
+    <label class="field" data-recipe-pick hidden>{% translate "After which procedure?" %}
+      <select name="recipe_procedure"></select>
+    </label>
     <ol class="recipe-steps" data-recipe-steps></ol>
     <button type="button" class="btn ghost" data-recipe-add>{% translate "Add a session" %}</button>
   </div>

@@ -616,7 +616,7 @@ def procedure_update_view(request, ctx, data, procedure_id):
     procedure_id = _id(procedure_id, "procedure")
     changes = services.clean_procedure(_changes(data, PROCEDURE_CHANGES), partial=True)
     _may_change(ctx, list(changes))
-    if not ctx.can("settings.manage") and set(changes) - {"follow_up"}:
+    if not ctx.can("settings.manage"):  # a doctor's follow-ups too: their own sections only (Saged, 2026-11-22)
         _own_section(ctx, services._procedure(ctx, procedure_id, active=False)["section_id"])
     procedure = services.update_procedure(ctx, procedure_id, changes)
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)

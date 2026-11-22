@@ -17,6 +17,10 @@ if (card && dialog) {
   const form = dialog.querySelector("form");
   const submitter = new Submitter(dialog, { label: t("recipe_title") });
   const english = document.documentElement.lang === "en";
+  const pick = dialog.querySelector("[data-recipe-pick]");
+  const pickSelect = pick.querySelector("select");
+  // A doctor keeps the follow-ups of their own sections only (Saged, 2026-11-22); the owner every section's.
+  const mine = card.dataset.sections ? new Set(card.dataset.sections.split(",").map(Number)) : null;
   let procedures = [];
   let editing = null;
   let stepNo = 0;  // each step's radio group needs its own name
@@ -107,8 +111,33 @@ if (card && dialog) {
     return name;
   }
 
+  // "Add follow-ups" (Saged, 2026-11-22): pick a procedure that has none yet, then its sessions.
+  function openNew(opener) {
+    if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }
+    const free = procedures.filter((p) => !p.follow_up.length);
+    if (!free.length) { toast(t("recipe_all_set")); return; }
+    pickSelect.replaceChildren(Object.assign(el("option", null, t("recipe_pick")), { value: "" }),
+      ...free.map((p) => Object.assign(el("option", null, p.name), { value: String(p.id) })));
+    editing = null;
+    submitter.reset();
+    steps.replaceChildren();
+    dialog.querySelector("[data-recipe-name]").textContent = "";
+    pick.hidden = false;
+    openDialog(dialog, opener);
+    pickSelect.focus();
+  }
+
+  pickSelect.addEventListener("change", () => {
+    const p = procedures.find((x) => String(x.id) === pickSelect.value);
+    editing = p || null;
+    steps.replaceChildren();
+    dialog.querySelector("[data-recipe-name]").textContent = p ? p.name : "";
+    if (p) addStep();
+  });
+
   function open(p, opener) {
     if (!submitter.holdsUnknown()) {
+      pick.hidden = true;
       editing = p;
       submitter.reset();
       steps.replaceChildren();
@@ -147,14 +176,17 @@ if (card && dialog) {
     toast(t("recipe_saved", { name: editing.name }));
   }
 
+  card.querySelector("[data-recipe-new]").addEventListener("click", (event) => openNew(event.currentTarget));
   dialog.querySelector("[data-recipe-add]").addEventListener("click", () => {
+    if (!editing) { submitter.say(t("recipe_pick")); pickSelect.focus(); return; }
     if (steps.children.length >= 6) { submitter.say(t("recipe_max")); return; }
     addStep().focus();
   });
-  dialog.querySelector("[data-recipe-off]").addEventListener("click", () => { if (!submitter.unknown) saveRecipe([]); });
+  dialog.querySelector("[data-recipe-off]").addEventListener("click", () => { if (!submitter.unknown && editing) saveRecipe([]); });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (submitter.unknown) { saveRecipe(null); return; }
+    if (!editing) { submitter.say(t("recipe_pick")); pickSelect.focus(); return; }
     const recipe = read();
     if (!recipe) { submitter.say(t("recipe_bad")); return; }
     saveRecipe(recipe);
@@ -165,7 +197,7 @@ if (card && dialog) {
     status.textContent = t("loading");
     const result = await get("/api/v1/procedures");
     if (!isOk(result)) { status.textContent = errorMessage(result, t("failed")); return; }
-    procedures = result.data.items.map((p) => ({ id: p.id, name: p.name, section_id: p.section_id, follow_up: p.follow_up || [] }));
+    procedures = result.data.items.filter((p) => !mine || mine.has(p.section_id)).map((p) => ({ id: p.id, name: p.name, section_id: p.section_id, follow_up: p.follow_up || [] }));
     render();
   })();
 }

@@ -110,7 +110,7 @@ def _booking_groups(ctx, services):
         found[p_id] = {"category": category, "family": family, "sort": sort, "unit": unit}
     first = {}  # where each main service's first item is, for those not on Saged's list
     for p in found.values():
-        key = p["family"] if p["family"] in FAMILY_ORDER else f"c-{p['category']}"
+        key = p["family"] or f"c-{p['category']}"
         first[key] = min(first.get(key, p["sort"]), p["sort"])
     families = []
     for s in services:
@@ -125,6 +125,8 @@ def _booking_groups(ctx, services):
         if p["family"] in FAMILY_ORDER:
             s["family"], (ar, en) = p["family"], FAMILY_LABELS[p["family"]]
             s["group"] = pick(ar, en)
+        elif p["family"]:  # a main service the clinic added (Saged, 2026-11-22)
+            s["family"] = s["group"] = p["family"]
         else:
             s["family"] = f"c-{p['category']}"
             words = CATEGORY_WORDS.get(p["category"], ())
@@ -499,6 +501,7 @@ def patient_page(request, ctx, patient_id):
     record_access(ctx, patient.id, AuditAccess.Action.OPEN)
     visits = patient_visits(ctx, patient.id, VISITS_PAGE, None)
     _with_notes(ctx, visits["items"])
+    _with_bill(ctx, visits["items"])
     started = {v["continues_id"] for v in visits["items"] if v["continues_id"]}  # treatments with more visits
     for v in visits["items"]:
         v["in_course"] = v["id"] in started
@@ -551,7 +554,8 @@ def _installments(ctx, patient_id):
     values = clinic_settings.effective(ctx.clinic.settings)
     return {"plan": installments.read(ctx, patient_id),
             "defaults": {"down_percent": values["installment_down_percent"], "every": values["installment_every"],
-                         "count": values["installment_count"], "today": business_day(ctx.clinic).isoformat()}}
+                         "count": values["installment_count"], "today": business_day(ctx.clinic).isoformat()},
+            "methods": _labels()["methods"]}
 
 
 def _visit_summary(ctx, patient_id):
@@ -578,6 +582,45 @@ def _statement(ctx, patient_id):
                  WHERE clinic_id = %s AND patient_id = %s)""", [ctx.clinic_id, patient_id, ctx.clinic_id, patient_id])
     total, paid = int(total), int(paid)  # sums come back as decimals
     return {"total": total, "paid": paid, "left": total - paid}
+
+
+def bill_lines(lines):
+    """The lines a patient reads: a line at 0 (the consultation when a paid procedure was done in the visit, a booked
+    procedure counted on its own line) says nothing and goes, unless nothing is charged at all (Saged, 2026-11-22)."""
+    charged = [line for line in lines if line["amount"]]
+    return charged or lines
+
+
+def _with_bill(ctx, items):
+    """Each visit's bill lines (what was done, how many, at what price), one statement for the page: the visit shows
+    what was charged instead of the booked service (Saged, 2026-11-22: never "examination 0 EGP")."""
+    ids = [v["invoice"]["id"] for v in items if v.get("invoice")]
+    if not ids:
+        return items
+    from core import sql
+
+    money = ctx.can("money.view")
+    found = {}
+    for invoice_id, description, service, qty, unit_price, amount in sql.rows(ctx, """
+            SELECT l.invoice_id, l.description, s.name, l.qty, l.unit_price, l.amount FROM "billing_invoice_line" l
+              LEFT JOIN "clinics_service" s ON s.clinic_id = l.clinic_id AND s.id = l.service_id
+             WHERE l.clinic_id = %s AND l.invoice_id = ANY(%s::bigint[]) ORDER BY l.invoice_id, l.id""",
+            [ctx.clinic_id, ids]):
+        found.setdefault(invoice_id, []).append({"label": description or service or "", "qty": qty,
+                                                 "unit_price": unit_price if money else None,
+                                                 "amount": amount})
+    discounts = dict(sql.rows(ctx, 'SELECT id, discount FROM "billing_invoice" WHERE clinic_id = %s '
+                                   "AND id = ANY(%s::bigint[])", [ctx.clinic_id, ids])) if money else {}
+    for v in items:
+        lines = found.get(v["invoice"]["id"]) if v.get("invoice") else None
+        if not lines:
+            continue
+        lines = bill_lines(lines)
+        if not money:
+            for line in lines:
+                line["amount"] = None
+        v["bill"] = {"lines": lines, "discount": discounts.get(v["invoice"]["id"], 0)}
+    return items
 
 
 def _with_notes(ctx, items):
@@ -624,6 +667,7 @@ def _more(request, ctx, patient_id, kind):
     if kind == "visits":
         found = patient_visits(ctx, patient.id, VISITS_PAGE, paging.day_cursor(request))
         _with_notes(ctx, found["items"])
+        _with_bill(ctx, found["items"])
         template = "web/_visit_rows.html"
     else:
         found = patient_payments(ctx, patient.id, PAYMENTS_PAGE, paging.time_cursor(request))
@@ -673,9 +717,7 @@ def receipt_page(request, ctx, invoice_id):
     for line in data["lines"]:
         line["label"] = line["description"] or names.get(line["service_id"]) or "—"
     # A free line (a plan session's visit at 0) only confuses the patient: the receipt hides it (Saged, 2026-11-17).
-    paid_lines = [line for line in data["lines"] if line["amount"]]
-    if paid_lines:
-        data["lines"] = paid_lines
+    data["lines"] = bill_lines(data["lines"])
     language = request.GET.get("lang")
     if language not in ("ar", "en"):
         language = data["print"]["print_language"]

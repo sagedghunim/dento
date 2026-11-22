@@ -56,6 +56,8 @@ def groups(ctx, items):
     for p in items:
         if p["family"] in FAMILY_LABELS:
             key, label, rank = p["family"], pick(*FAMILY_LABELS[p["family"]]), (0, FAMILY_ORDER[p["family"]])
+        elif p["family"]:  # a main service the clinic added (Saged, 2026-11-22): its name is the key
+            key, label, rank = p["family"], p["family"], (0, len(FAMILY_ORDER))
         else:
             words = CATEGORY_WORDS.get(p["category"], ())
             key = f"c-{p['category']}"
@@ -103,5 +105,6 @@ def prices_page(request, ctx):
         "groups": groups(ctx, [p for p in found if p["is_active"]]),
         "removed": [p for p in found if not p["is_active"]],
         "families": [(key, pick(ar, en)) for key, (ar, en) in FAMILY_LABELS.items()],
+        "own_families": sorted({p["family"] for p in found if p["family"] and p["family"] not in FAMILY_LABELS}),
         "units": list(units.items()), "sections": sections if len(sections) > 1 else [],
     })

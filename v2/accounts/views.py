@@ -82,3 +82,11 @@ def totp_setup_view(request, data):
 @api("POST", member=False)
 def totp_confirm_view(request, data):
     return services.totp_confirm(request, request.user, text(data, "code", 10))
+
+
+@api("POST", member=False, key=False)
+def totp_show_view(request, data):
+    """The two-step code again (no request key: the answer holds the secret and is never stored for a replay)."""
+    if not request.user.is_authenticated:
+        raise ApiError("signed_out", _("Please sign in."), 401)
+    return services.totp_show(request, request.user, text(data, "password", 200, strip=False))

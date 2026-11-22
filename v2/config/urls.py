@@ -28,6 +28,7 @@ urlpatterns = [
     path(api + "me/language", accounts.language_view),
     path(api + "me/totp", accounts.totp_setup_view),
     path(api + "me/totp/confirm", accounts.totp_confirm_view),
+    path(api + "me/totp/show", accounts.totp_show_view),
     # Clinic configuration
     path(api + "clinic", clinics.clinic_view),
     path(api + "settings/clinic", clinics.clinic_settings_view),

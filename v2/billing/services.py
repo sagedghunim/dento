@@ -643,7 +643,7 @@ def lock_patient_invoices(ctx, patient_id, appointment_id):
     return sorted(found, key=lambda i: (i["created_at"], i["id"]))
 
 
-def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today):
+def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today, note=None):
     """'Also collect the earlier balance' (design E3): pay the patient's older unpaid invoices, oldest first.
 
     `invoices` come from lock_patient_invoices. The amount may not exceed what they owe. Each payment row
@@ -665,7 +665,7 @@ def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today
                 [part, ctx.clinic_id, invoice["id"]])
         doctor_id, day, section_id = visits.get(invoice["appointment_id"], (None, None, None))
         payments.append(_insert_payment(ctx, invoice, invoice["patient_id"], doctor_id, "payment", method, part, today,
-                                        _("Earlier balance"), section_id=section_id))
+                                        note or _("Earlier balance"), section_id=section_id))
         if doctor_id is not None:
             deltas.doctor_day(today, doctor_id, collected=part)
         deltas.money_day(today, section_id, method, collected=part)

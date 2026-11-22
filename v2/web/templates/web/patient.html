@@ -53,7 +53,7 @@
       <div class="plan-block">
         <p><strong><bdi dir="auto">{% if plan.title %}{{ plan.title }}{% else %}{% translate "Plan" %}{% endif %}</bdi></strong> <span class="muted">· {{ plan.created_at|shortday }}{% if plan.open_count %} · {% translate "Steps left:" %} {{ plan.open_count|digits }}{% else %} · {% translate "All steps done" %}{% endif %}</span></p>
         <ol class="plan-steps">
-          {% for i in plan.items %}{% if i.status != "dropped" %}<li class="{% if i.status == 'done' %}done{% endif %}"><bdi dir="auto">{{ i.name_ar }}</bdi>{% if i.tooth %} · {% translate "Tooth" %} {{ i.tooth|digits }}{% endif %} <span class="muted">· {% if i.status == "done" %}{% translate "Done" %}{% elif i.status == "in_progress" %}{% translate "In progress" %}{% else %}{% translate "Not yet" %}{% endif %}</span>{% if perms.money and i.price is not None %} <span class="num muted">{{ i.price|money }}</span>{% endif %}</li>{% endif %}{% endfor %}
+          {% for i in plan.items %}{% if i.status != "dropped" %}<li class="{% if i.status == 'done' %}done{% endif %}">{% if i.status == "done" %}<svg class="icon step-done" aria-hidden="true"><use href="#i-check"/></svg>{% endif %}<bdi dir="auto">{{ i.name_ar }}</bdi>{% if i.tooth %} · {% translate "Tooth" %} {{ i.tooth|digits }}{% endif %} <span class="{% if i.status == 'done' %}pill green{% else %}muted{% endif %}">{% if i.status == "done" %}{% translate "Done in a visit" %}{% elif i.status == "in_progress" %}{% translate "In progress" %}{% else %}{% translate "Not yet" %}{% endif %}</span>{% if perms.money and i.price is not None %} <span class="num muted">{{ i.price|money }}</span>{% endif %}</li>{% endif %}{% endfor %}
         </ol>
       </div>
       {% empty %}<p class="empty-note">{% translate "No treatment plan yet." %}</p>{% endfor %}
@@ -99,7 +99,7 @@
 <section class="card installments-card" aria-labelledby="inst-title" data-installments data-patient="{{ patient.id }}" data-owed="{% if statement %}{{ statement.left }}{% else %}0{% endif %}">
   <div class="card-head">
     <h2 id="inst-title">{% translate "Installments" %}</h2>
-    {% if installments.plan and installments.plan.status == "active" %}<button type="button" class="btn ghost danger" data-inst-cancel>{% translate "Cancel the installments" %}</button>
+    {% if installments.plan and installments.plan.status == "active" %}<div class="appt-actions">{% if not installments.plan.finished %}<button type="button" class="btn" data-inst-pay><svg class="icon"><use href="#i-plus"/></svg>{% translate "Pay an installment" %}</button>{% endif %}<button type="button" class="btn ghost danger" data-inst-cancel>{% translate "Cancel the installments" %}</button></div>
     {% elif statement and statement.left > 0 %}<button type="button" class="btn" data-inst-open>{% translate "Split what is owed" %}</button>{% endif %}
   </div>
   {% with plan=installments.plan %}{% if plan and plan.status == "active" %}
@@ -112,10 +112,10 @@
     {% for p in plan.parts %}<li class="inst-{{ p.state }}">
       <span>{{ p.due_on|shortday }}</span>
       <span class="num">{{ p.amount|money }}</span>
-      <span class="pill {% if p.state == 'paid' %}green{% elif p.state == 'late' %}red{% elif p.state == 'today' %}amber{% else %}grey{% endif %}">{% if p.state == "paid" %}{% translate "Paid" %}{% elif p.state == "late" %}{% translate "Late" %}{% if p.paid %} · {% translate "Paid" %} {{ p.paid|money }}{% endif %}{% elif p.state == "today" %}{% translate "Due today" %}{% else %}{% translate "Ahead" %}{% endif %}</span>
+      <span class="pill {% if p.state == 'paid' %}green{% elif p.state == 'late' %}red{% elif p.state == 'today' %}amber{% else %}grey{% endif %}">{% if p.state == "paid" %}{% translate "Paid" %}{% elif p.state == "late" %}{% translate "Late" %}{% if p.paid %} · {% translate "Paid" %} {{ p.paid|money }}{% endif %}{% elif p.state == "today" %}{% translate "Due today" %}{% if p.paid %} · {% translate "Paid" %} {{ p.paid|money }}{% endif %}{% else %}{% translate "Ahead" %}{% if p.paid %} · {% translate "Paid" %} {{ p.paid|money }}{% endif %}{% endif %}</span>
     </li>{% endfor %}
   </ol>
-  <p class="muted">{% translate "Payments on the bills count toward the installments by themselves, the earliest first." %}</p>
+  <p class="muted">{% translate "Payments count toward the installments by themselves, the earliest first. If the patient pays more than is due, the rest is split again evenly over the coming installments." %}</p>
   {% else %}<p class="empty-note">{% if statement and statement.left > 0 %}{% translate "No installments. Split what is owed into parts on set days." %}{% else %}{% translate "Nothing owed." %}{% endif %}</p>{% endif %}{% endwith %}
   <p class="form-error" data-inst-error role="alert"></p>
 </section>
@@ -148,7 +148,32 @@
   </footer>
 </form>
 </dialog>
+{% if installments.plan and installments.plan.status == "active" and not installments.plan.finished %}
+<dialog class="sheet small" id="inst-pay-dialog" aria-labelledby="inst-pay-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="inst-pay-title">{% translate "Pay an installment" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted">{% translate "Left of the installments:" %} <span class="num">{{ installments.plan.left|money }}</span></p>
+    <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+    <fieldset class="group">
+      <legend>{% translate "Paid by" %}</legend>
+      <div class="chips">{% for code, label in installments.methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div>
+    </fieldset>
+    <p class="notice" data-inst-pay-note hidden></p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Take the payment" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
 {{ installments.defaults|json_script:"inst-defaults" }}
+{{ installments.plan|json_script:"inst-plan" }}
 {% endif %}
 {% if patient_tags.edit %}
 <dialog class="sheet small" id="tags-dialog" aria-labelledby="tags-title" data-patient="{{ patient.id }}">

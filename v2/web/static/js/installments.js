@@ -99,3 +99,66 @@ if (card && dialog) {
     error.textContent = errorMessage(result, t("failed"));
   });
 }
+
+// "Pay an installment" (Saged, 2026-11-22): any amount toward the plan, one POST. More than is due by today splits
+// what is left again evenly over the coming parts (billing/installments.respread); the dialog says how first.
+const payDialog = document.getElementById("inst-pay-dialog");
+const plan = document.getElementById("inst-plan") ? JSON.parse(document.getElementById("inst-plan").textContent) : null;
+if (card && payDialog && plan) {
+  const form = payDialog.querySelector("form");
+  const amountField = form.elements.namedItem("amount");
+  const note = payDialog.querySelector("[data-inst-pay-note]");
+  const error = payDialog.querySelector("[data-error]");
+  const today = JSON.parse(document.getElementById("inst-defaults").textContent).today;
+  const dueNow = plan.parts.filter((p) => p.due_on <= today).reduce((sum, p) => sum + p.amount - p.paid, 0);
+  const next = plan.parts.find((p) => p.paid < p.amount);
+  let key = null;
+  wireClose(payDialog);
+
+  // The same split as the server: each rounded up to a whole pound, the last smaller.
+  function split(rest, count) {
+    let each = Math.ceil(rest / count);
+    each = Math.ceil(each / 100) * 100;
+    const out = [];
+    while (rest > 0 && out.length < count) { out.push(Math.min(each, rest)); rest -= out[out.length - 1]; }
+    return out;
+  }
+
+  function explain() {
+    const amount = parsePiastres(amountField.value) || 0;
+    const rest = plan.left - amount;
+    const coming = plan.parts.filter((p) => p.due_on > today && p.paid < p.amount).length;
+    note.hidden = !(amount > dueNow && rest > 0 && coming);
+    if (!note.hidden) note.textContent = t("inst_respread", { rest: moneyText(rest), parts: split(rest, coming).map(moneyText).join(" + ") });
+    error.textContent = amount > plan.left ? t("inst_over") : "";
+  }
+
+  card.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-inst-pay]")) return;
+    form.reset();
+    key = newKey();
+    const suggested = dueNow > 0 ? dueNow : next ? next.amount - next.paid : 0;
+    amountField.value = suggested ? amountInput(suggested) : "";
+    explain();
+    openDialog(payDialog, event.target);
+  });
+  form.addEventListener("input", explain);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const amount = parsePiastres(amountField.value);
+    if (!amount || amount <= 0 || amount > plan.left) { error.textContent = amount > plan.left ? t("inst_over") : t("bad_amount"); amountField.focus(); return; }
+    const button = form.querySelector("[data-submit]");
+    button.disabled = true;
+    const method = (form.querySelector('[name="method"]:checked') || {}).value || "cash";
+    const result = await save("POST", `/api/v1/patients/${card.dataset.patient}/installments/payments`, { amount, method },
+      { key, label: t("inst_title") });
+    button.disabled = false;
+    if (result.settled && isOk(result)) {
+      payDialog.close();
+      toast(t("inst_paid", { amount: moneyText(amount) }));
+      window.location.reload();
+      return;
+    }
+    error.textContent = errorMessage(result, t("failed"));
+  });
+}

@@ -333,7 +333,7 @@ msgid "The discount changed meanwhile. Reload and try again."
 msgstr "تغيّر الخصم في الأثناء. أعد التحميل وحاول مرة أخرى."
 
 msgid "The refund is more than what is left of this payment."
-msgstr "المبلغ المردود أكبر من المتبقي من هذه الدفعة."
+msgstr "المبلغ اللي هيرجع أكبر من الباقي من الدفعة دي."
 
 msgid "This action doesn't apply to a visit in that status."
 msgstr "هذا الإجراء لا يناسب زيارة في هذه الحالة."
@@ -783,7 +783,7 @@ msgid "Collected"
 msgstr "المحصَّل"
 
 msgid "Refunded"
-msgstr "المردود"
+msgstr "رجع للمرضى"
 
 msgid "Net"
 msgstr "الصافي"
@@ -807,7 +807,7 @@ msgid "No patient matches this search."
 msgstr "لا يوجد مريض يطابق هذا البحث."
 
 msgid "refunded"
-msgstr "مردود"
+msgstr "رجع منها للمريض"
 
 msgid ""
 "This day has more bookings than one screen shows. Use the doctor filters."
@@ -971,7 +971,7 @@ msgid "Collected {amount} from {name}"
 msgstr "تم تحصيل {amount} من {name}"
 
 msgid "Refunded {amount}"
-msgstr "تم ردّ {amount}"
+msgstr "رجع للمريض {amount}"
 
 msgid "Discount saved"
 msgstr "تم حفظ الخصم"
@@ -2555,7 +2555,7 @@ msgid "Cash payments"
 msgstr "مدفوعات نقدية"
 
 msgid "Cash refunds"
-msgstr "مردودات نقدية"
+msgstr "فلوس رجعت للمرضى كاش"
 
 msgid "Cash register"
 msgstr "الخزنة"
@@ -2586,7 +2586,7 @@ msgid ""
 "Collected is after refunds in the splits. Profit is what was collected, "
 "minus refunds, expenses and the staff pay earned this month."
 msgstr ""
-"المحصَّل في التقسيمات بعد خصم المردودات. الربح هو المحصَّل ناقص المردودات "
+"المحصَّل في التقسيمات بعد خصم اللي رجع للمرضى. الربح هو المحصَّل ناقص اللي رجع للمرضى "
 "والمصروفات وأجور الفريق المستحقة عن الشهر."
 
 msgid "Counted"
@@ -2818,7 +2818,7 @@ msgid "Record the payout"
 msgstr "سجّل الصرف"
 
 msgid "Refunded:"
-msgstr "المردود:"
+msgstr "رجع للمرضى:"
 
 msgid "Remove this category?"
 msgstr "حذف هذه الفئة؟"
@@ -3041,7 +3041,7 @@ msgid "Top tags"
 msgstr "أكثر الوسوم"
 
 msgid "after refunds"
-msgstr "بعد المردودات"
+msgstr "بعد خصم اللي رجع للمرضى"
 
 msgid "Patients:"
 msgstr "المرضى:"
@@ -4072,11 +4072,6 @@ msgstr "عليه النهارده"
 msgid "Ahead"
 msgstr "لسه"
 
-msgid ""
-"Payments on the bills count toward the installments by themselves, the "
-"earliest first."
-msgstr "أي فلوس بيدفعها على الفواتير بتتحسب من الأقساط لوحدها، الأقدم الأول."
-
 msgid "No installments. Split what is owed into parts on set days."
 msgstr "مفيش تقسيط. تقدر تقسّط اللي عليه على أيام محددة."
 
@@ -4568,3 +4563,72 @@ msgid ""
 "Changes the prices of their own services on the price list; sees no other "
 "money"
 msgstr "يغيّر أسعار خدماته هو في قايمة الأسعار، ومش بيشوف أي فلوس تانية"
+
+msgid "Add the code to another phone"
+msgstr "ضيف الكود على موبايل تاني"
+
+msgid "Anyone who scans it gets the same changing code as you. Show it only to people you trust with this account."
+msgstr "أي حد يمسح الكود ده هيطلع عنده نفس الأرقام اللي بتتغير. اعرضه بس للناس اللي بتأمنهم على الحساب ده."
+
+msgid "Your password"
+msgstr "كلمة السر بتاعتك"
+
+msgid "Show the code"
+msgstr "اعرض الكود"
+
+msgid "Two-step sign-in isn't set up yet."
+msgstr "الدخول بخطوتين لسه مش متفعّل."
+
+msgid "Sign in with your code first."
+msgstr "ادخل بالكود الأول."
+
+msgid "That password is wrong."
+msgstr "كلمة السر غلط."
+
+msgid "After which procedure?"
+msgstr "بعد أنهي إجراء؟"
+
+msgid "Pick the procedure first."
+msgstr "اختار الإجراء الأول."
+
+msgid "Every procedure already has follow-ups. Change them from the list."
+msgstr "كل الإجراءات ليها متابعات. عدّلها من القايمة."
+
+msgid "A new main service"
+msgstr "خدمة رئيسية جديدة"
+
+msgid "Name of the new main service"
+msgstr "اسم الخدمة الرئيسية الجديدة"
+
+msgid "Write the name of the new main service."
+msgstr "اكتب اسم الخدمة الرئيسية الجديدة."
+
+msgid "Pay an installment"
+msgstr "ادفع قسط"
+
+msgid "Payments count toward the installments by themselves, the earliest first. If the patient pays more than is due, the rest is split again evenly over the coming installments."
+msgstr "أي فلوس المريض يدفعها بتتحسب من الأقساط لوحدها، الأقدم الأول. ولو دفع أكتر من المطلوب، الباقي بيتقسم من جديد بالتساوي على الأقساط الجاية."
+
+msgid "Left of the installments:"
+msgstr "الباقي من التقسيط:"
+
+msgid "Take the payment"
+msgstr "استلم الفلوس"
+
+msgid "The {rest} left will be split again over the coming installments: {parts}."
+msgstr "الباقي {rest} هيتقسم من جديد على الأقساط الجاية: {parts}."
+
+msgid "The amount is more than what is left of the installments."
+msgstr "المبلغ أكبر من الباقي من التقسيط."
+
+msgid "Installment paid: {amount}"
+msgstr "اتدفع قسط: {amount}"
+
+msgid "Installment"
+msgstr "قسط"
+
+msgid "The bill"
+msgstr "الفاتورة"
+
+msgid "Done in a visit"
+msgstr "اتعمل"

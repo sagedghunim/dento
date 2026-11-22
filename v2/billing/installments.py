@@ -103,6 +103,78 @@ def make(ctx, patient_id, request):
     return read(ctx, patient_id)
 
 
+def split_evenly(rest, count):
+    """`rest` over `count` parts, each rounded up to a whole pound, the last smaller (never an empty part)."""
+    each = -(-rest // count)
+    each = -(-each // 100) * 100
+    out = []
+    while rest > 0 and len(out) < count:
+        out.append(min(each, rest))
+        rest -= out[-1]
+    return out
+
+
+def respread(parts, covered, total, today):
+    """[(due_on, amount)] after money paid ahead (Saged, 2026-11-22, choice "a"): the parts due by today stay; what
+    was paid beyond them is one part today, already paid; what is left is split evenly over the days of the parts
+    still to come that weren't paid before. `parts` are the plan's parts with what of each was paid before this
+    payment (`_states`); `covered` is everything paid on the plan now. None when nothing is left to split."""
+    kept = [(p["due_on"], p["amount"]) for p in parts if p["due_on"] <= today]
+    ahead = covered - sum(a for _d, a in kept)
+    days = [p["due_on"] for p in parts if p["due_on"] > today and p["paid"] < p["amount"]]
+    rest = total - covered
+    if ahead <= 0 or rest <= 0 or not days:
+        return None
+    return [*kept, (today, ahead), *zip(days, split_evenly(rest, len(days)))]
+
+
+def pay(ctx, patient_id, amount, method):
+    """POST patients/{id}/installments/payments (Saged, 2026-11-22): the patient pays any amount toward the plan.
+    It is taken on the plan's bills, the oldest first. When it is more than what is due by today, what is left is
+    split again evenly over the parts still to come, so each of them gets smaller. Returns (plan, payments)."""
+    from summaries.services import Deltas
+
+    from .services import collect_earlier, lock_patient_invoices
+
+    if sql.row(ctx, 'SELECT id FROM "patients_patient" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+               [ctx.clinic_id, patient_id]) is None:
+        raise ApiError("not_found", _("This patient wasn't found."), 404)
+    found = sql.dicts(ctx, 'SELECT id, total, created_at FROM "billing_installment_plan" WHERE clinic_id = %s '
+                           "AND patient_id = %s AND status = 'active'", [ctx.clinic_id, patient_id])
+    if not found:
+        raise ApiError("not_found", _("This patient has no installments."), 404)
+    plan = found[0]
+    today = business_day(ctx.clinic)
+    covered = _covered(ctx, [plan["id"]]).get(plan["id"], 0)
+    before = _states(_parts(ctx, [plan["id"]]).get(plan["id"], []), covered, today)
+    for p in before:
+        p["due_on"] = dt.date.fromisoformat(p["due_on"])
+    if amount > plan["total"] - covered:
+        raise ApiError("over_balance", _("The amount is more than what is left of the installments."), 409,
+                       fields={"amount": "over_balance"})
+    bills = [i for i in lock_patient_invoices(ctx, patient_id, 0) if i["created_at"] <= plan["created_at"]]
+    deltas = Deltas()
+    payments = collect_earlier(ctx, bills, 0, amount, method, deltas, today, note=_("Installment"))
+    deltas.write_doctors(ctx)
+    deltas.write_clinics(ctx)
+    due_now = sum(p["amount"] - p["paid"] for p in before if p["due_on"] <= today)
+    if amount > due_now:
+        parts = respread(before, covered + amount, plan["total"], today)
+        if parts is not None:
+            sql.run(ctx, 'DELETE FROM "billing_installment" WHERE clinic_id = %s AND plan_id = %s',
+                    [ctx.clinic_id, plan["id"]])
+            values, params = [], []
+            for position, (day, part) in enumerate(parts):
+                values.append("(%s, %s, %s, %s, %s, %s)")
+                params += [ctx.clinic_id, plan["id"], patient_id, position, day, part]
+            sql.run(ctx, 'INSERT INTO "billing_installment" (clinic_id, plan_id, patient_id, position, due_on, amount) '
+                         f"VALUES {', '.join(values)}", params)
+            record_change(ctx, "installment_plan.respread", "installment_plan", plan["id"],
+                          before={"parts": [[p["due_on"].isoformat(), p["amount"]] for p in before]},
+                          after={"parts": [[d.isoformat(), a] for d, a in parts]}, patient_id=patient_id)
+    return read(ctx, patient_id), payments
+
+
 def cancel(ctx, patient_id):
     """DELETE patients/{id}/installments: the running plan stops; what is owed stays on the bills."""
     found = sql.row(ctx, 'UPDATE "billing_installment_plan" SET status = %s, ended_at = %s WHERE clinic_id = %s '

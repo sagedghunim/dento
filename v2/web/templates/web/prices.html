@@ -45,7 +45,8 @@
   </header>
   <div class="dialog-body tight">
     {% if sections %}<label class="field">{% translate "Section" %}<select name="section_id">{% for s in sections %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
-    <label class="field">{% translate "Main service" %}<select name="family"><option value="">{% translate "Other" %}</option>{% for key, label in families %}{% if key != "other" %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}</select></label>
+    <label class="field">{% translate "Main service" %}<select name="family"><option value="">{% translate "Other" %}</option>{% for key, label in families %}{% if key != "other" %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}{% for name in own_families %}<option value="{{ name }}">{{ name }}</option>{% endfor %}<option value="+new">＋ {% translate "A new main service" %}</option></select></label>
+    <label class="field" data-family-new hidden>{% translate "Name of the new main service" %}<input name="family_new" dir="auto" maxlength="40" autocomplete="off"></label>
     <label class="field">{% translate "Name in Arabic" %}<input name="name_ar" dir="rtl" maxlength="160" autocomplete="off" data-autofocus></label>
     <label class="field">{% translate "Name in English" %}<input name="name_en" dir="ltr" maxlength="160" autocomplete="off"></label>
     <label class="field">{% translate "Counted" %}<select name="unit">{% for key, label in units %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>

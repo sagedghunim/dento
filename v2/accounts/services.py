@@ -148,13 +148,8 @@ def change_password(request, user, current, new):
     return {"next": next_step(request, user)}
 
 
-def totp_setup(user):
-    """Start or resume set-up: a new secret until a code confirms it."""
-    if user.has_totp:
-        raise ApiError("already_set_up", _("Two-step sign-in is already set up."), 409)
-    if not user.totp_secret:
-        user.totp_secret = crypto.encrypt(totp.new_secret())
-        user.save(update_fields=["totp_secret"])
+def _qr(user):
+    """The secret and its QR code, for an authenticator app."""
     secret = crypto.decrypt(user.totp_secret)
     uri = totp.provisioning_uri(secret, user.username)
     buffer = io.BytesIO()
@@ -167,6 +162,36 @@ def totp_setup(user):
     size = qr.symbol_size(scale=6, border=4)[0]
     svg = buffer.getvalue().decode().replace("<svg ", f'<svg viewBox="0 0 {size} {size}" ', 1)
     return {"secret": secret, "qr_svg": svg}
+
+
+def totp_setup(user):
+    """Start or resume set-up: a new secret until a code confirms it."""
+    if user.has_totp:
+        raise ApiError("already_set_up", _("Two-step sign-in is already set up."), 409)
+    if not user.totp_secret:
+        user.totp_secret = crypto.encrypt(totp.new_secret())
+        user.save(update_fields=["totp_secret"])
+    return _qr(user)
+
+
+def totp_show(request, user, password):
+    """The code again, for another phone (Saged, 2026-11-22: the people working with him on the demo share the
+    owner's sign-in). Only on a session that already passed two-step sign-in, and with the password typed again."""
+    if not user.has_totp or not user.totp_secret:
+        raise ApiError("not_set_up", _("Two-step sign-in isn't set up yet."), 409)
+    if not request.session.get(SESSION_MFA):
+        raise ApiError("mfa_required", _("Sign in with your code first."), 403)
+    keys = throttle.keys_for(user.username, client_ip(request) or "-")
+    wait = throttle.wait_seconds(keys)
+    if wait:
+        minutes = max(1, -(-wait // 60))
+        raise ApiError("too_many_attempts", _("Too many attempts. Try again in %(minutes)s minutes.") % {"minutes": minutes},
+                       429)
+    if not user.check_password(password):
+        throttle.record_failure(keys)
+        raise ApiError("wrong_password", _("That password is wrong."), 400, fields={"password": "wrong"})
+    event(user.id, "totp_shown", request)
+    return _qr(user)
 
 
 def totp_confirm(request, user, code):

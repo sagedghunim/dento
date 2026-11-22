@@ -58,10 +58,12 @@ export function initPay({ onChanged } = {}) {
     // Items
     const lines = dialog.querySelector("[data-lines]");
     if (invoice) {
-      lines.replaceChildren(...invoice.lines.map((line) => {
+      // A line at 0 next to charged ones (a free consultation with a paid procedure) goes (Saged, 2026-11-22).
+      const charged = invoice.lines.filter((line) => line.amount);
+      lines.replaceChildren(...(charged.length ? charged : invoice.lines).map((line) => {
         const li = el("li");
         const name = line.description || (services[line.service_id] && services[line.service_id].name) || visit.service || "";
-        const label = el("bdi", null, line.qty > 1 ? `${name} × ${localDigits(line.qty)}` : name);
+        const label = el("bdi", null, line.qty > 1 ? (line.unit_price != null ? `${name} · ${localDigits(line.qty)} × ${moneyText(line.unit_price)}` : `${name} × ${localDigits(line.qty)}`) : name);
         label.dir = "auto";
         const right = el("span", "amt");
         right.append(money(line.amount));
