@@ -572,15 +572,17 @@ class QueryCountTests(M1TestCase):
         self._bulk_appointments(300)
         large = measure()
         self.assertEqual(small, large)
-        # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version.
-        self.assertEqual(small[1], 3)
-        self.assertLessEqual(small[0], 6)
+        # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version, and the
+        # open register shift, since the day follows the drawer (Saged, 2026-11-22).
+        self.assertEqual(small[1], 4)
+        self.assertLessEqual(small[0], 7)  # plus the register shifts: the day follows the drawer
         # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4), plus the
         # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0), plus the open
         # cash shift taken before the doctor-day (F1, 8a: cash opens a shift when none is, and that INSERT can
         # wait on another, so it must come before any summary row). Fixed: it never grows with the day.
         # Plus the lock on (patient, day) and the read of the patient's open visits that day (Saged, 2026-11-17).
-        self.assertLessEqual(small[2], 17)
+        # Plus the register shifts read once for the business day (Saged, 2026-11-22: the day follows the drawer).
+        self.assertLessEqual(small[2], 18)
 
 
 class FinishTests(M1TestCase):

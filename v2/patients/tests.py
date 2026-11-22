@@ -182,7 +182,7 @@ class PatientTests(M1TestCase):
         self.assertEqual(counts(), small)
         # set_config, membership, SET LOCAL; then 1-2 searches; then the details of what was found, if anything;
         # then the timeout put back, so it doesn't outlive the search (chief judge M1, R1).
-        self.assertEqual(small, (6, 7, 6, 5))
+        self.assertEqual(small, (7, 8, 7, 6))  # each with one read of the register shifts: the day follows the drawer
 
 
 class SearchPlanTests(TransactionTestCase):

@@ -3,7 +3,7 @@
 // /appointments/walk-in books today at the next turn, marked arrived, under one key until a definite answer.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
-import { Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
+import { courseOf, loadCourses, Submitter, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
@@ -48,10 +48,12 @@ export function initWalkIn({ onBooked } = {}) {
     who.dir = "auto";
     name.replaceChildren(who);
     dialog.querySelector("[data-picked-meta]").replaceChildren(...patientMeta(p));
+    loadCourses(dialog, p.id);
     quote();
   }
 
   function showFinder() {
+    loadCourses(dialog, null);
     patient = null;
     picked.hidden = true;
     finder.hidden = false;
@@ -189,6 +191,7 @@ export function initWalkIn({ onBooked } = {}) {
   function body() {
     const out = {};
     if (patient) out.patient_id = patient.id;
+    if (patient && courseOf(dialog)) out.continues_id = courseOf(dialog);
     else if (newBox && !newBox.hidden) out.new_patient = np.values();
     if (confirmOther) out.confirm_other_doctor = true;
     if (field("doctor").value) out.doctor_id = Number(field("doctor").value);
@@ -247,6 +250,7 @@ export function initWalkIn({ onBooked } = {}) {
     picked.hidden = true;
     finder.hidden = false;
     if (newBox) newBox.hidden = true;
+    loadCourses(dialog, null);
     defaults = { doctor_id: null, service_id: null };
     field("doctor").value = doctorId ? String(doctorId) : "";
     if (field("doctor").value !== String(doctorId || "")) field("doctor").value = "";  // not working today

@@ -12,6 +12,8 @@
         <div><div class="who" data-picked-name></div><div class="muted" data-picked-meta></div></div>
         <button type="button" class="btn ghost" data-change-patient>{% translate "Change" %}</button>
       </div>
+      {# A visit of a treatment already started takes its next number (Saged, 2026-11-22). #}
+      <label class="field" data-course-box hidden>{% translate "This visit" %}<select name="continues_id"><option value="">{% translate "A new treatment" %}</option></select></label>
       <div data-finder>
         <label class="field">{% translate "Search by name, mobile or file number" %}
           <input name="q" type="search" autocomplete="off" dir="auto" maxlength="60" enterkeyhint="search" data-autofocus>

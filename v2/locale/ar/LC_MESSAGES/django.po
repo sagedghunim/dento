@@ -4325,3 +4325,12 @@ msgstr "قفل الخزنة"
 
 msgid "Closing the drawer ends the day: the next day starts now."
 msgstr "قفل الخزنة بيقفل اليوم، واليوم الجديد بيبدأ من دلوقتي."
+
+msgid "A new treatment"
+msgstr "علاج جديد"
+
+msgid "Continues: {service}, started {started} (this is visit {n})"
+msgstr "تكملة: {service}، بدأ {started} (دي الزيارة {n})"
+
+msgid "This visit"
+msgstr "الزيارة دي"

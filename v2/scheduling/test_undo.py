@@ -224,3 +224,27 @@ class AskTheDoctorTests(M1TestCase):
         self.assertIsNone(self.appointment(appt["id"]).wait_at)
         self.assertEqual(self.act(appt["id"], "call", "ready", client=self.a.client("owner")).status_code, 200)
         self.assertEqual(self.appointment(appt["id"]).status, "in_room")
+
+
+class TreatmentCourseTests(M1TestCase):
+    """Visits of one treatment are numbered 1, 2, 3… with no count planned; a new treatment starts at 1
+    (Saged, 2026-11-22)."""
+
+    def test_a_visit_that_continues_a_treatment_takes_the_next_number(self):
+        first = self.book().json()["appointment"]
+        self.assertEqual(first["course_no"], 1)
+        patient = first["patient"]["id"]
+        second = self.book(patient_id=patient, continues_id=first["id"], day=self.later(7)).json()["appointment"]
+        third = self.book(patient_id=patient, continues_id=second["id"], day=self.later(14)).json()["appointment"]
+        self.assertEqual((second["course_no"], third["course_no"]), (2, 3))
+        self.assertEqual(third["continues_id"], first["id"])  # every visit points at the first one
+        fresh = self.book(patient_id=patient, day=self.later(21)).json()["appointment"]
+        self.assertEqual((fresh["course_no"], fresh["continues_id"]), (1, None))
+        courses = call(self.desk, "GET", f"/api/v1/patients/{patient}/courses").json()["items"]
+        self.assertEqual([(c["id"], c["last_no"]) for c in courses][-1], (first["id"], 3))
+        # Another patient's visit can't be continued.
+        other = self.book().json()["appointment"]
+        self.book(patient_id=patient, continues_id=other["id"], day=self.later(28), expect=404)
+
+    def later(self, days):
+        return (today(self.a) + dt.timedelta(days=days)).isoformat()

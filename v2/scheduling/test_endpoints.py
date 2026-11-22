@@ -128,6 +128,7 @@ def reads(test, o):
         "file": ("GET", f"/api/v1/patients/{o.patient}", ["patients.view"], "open"),
         "visits": ("GET", f"/api/v1/patients/{o.patient}/visits", ["patients.view"], "history"),
         "payments": ("GET", f"/api/v1/patients/{o.patient}/payments", ["patients.view"], "history"),
+        "courses": ("GET", f"/api/v1/patients/{o.patient}/courses", ["appointments.book"], None),
         "today": ("GET", "/api/v1/today", ["appointments.book", "appointments.queue"], None),
         "quote": ("GET", f"/api/v1/appointments/quote?doctor={o.owner}&service={o.consultation}&patient={o.patient}"
                          f"&day={day}", ["appointments.book"], None),

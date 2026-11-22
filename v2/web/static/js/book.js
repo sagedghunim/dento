@@ -6,7 +6,7 @@
 // booking moves straight to the next one; "skip" passes one over. Each booking carries its follow-up's id, so the
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
-import { Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
+import { courseOf, loadCourses, Submitter, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
 import { amountInput, asciiDigits, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
@@ -144,10 +144,12 @@ export function initBook({ onBooked, defaults } = {}) {
     name.replaceChildren(el("bdi", null, p.name));
     name.firstChild.dir = "auto";
     dialog.querySelector("[data-picked-meta]").replaceChildren(...patientMeta(p));
+    loadCourses(dialog, p.id, continues);
     quote();
   }
 
   function showFinder() {
+    loadCourses(dialog, null);
     patient = null;
     picked.hidden = true;
     finder.hidden = false;
@@ -307,6 +309,7 @@ export function initBook({ onBooked, defaults } = {}) {
     const out = { doctor_id: when.doctor(), service_id: serviceId(), day: when.day(), source: form.querySelector('[name="source"]:checked').value };
     if (qty() > 1) out.qty = qty();
     if (patient) out.patient_id = patient.id;
+    if (patient && courseOf(dialog)) out.continues_id = courseOf(dialog);
     else if (newBox && !newBox.hidden) out.new_patient = np.values();
     if (confirmOther) out.confirm_other_doctor = true;
     const slot = when.slot();
@@ -388,6 +391,7 @@ export function initBook({ onBooked, defaults } = {}) {
   // --- opening ---
 
   let fixed = null;  // the doctor picked at the top of Today, kept for the plan's next sessions
+  let continues = null;  // the visit whose treatment a "next visit" continues
   function open({ plan: sessions = null, opener, ...rest } = {}) {
     if (submitter.holdsUnknown()) { openDialog(dialog, opener); return; }  // never a new key over an unknown one (R7)
     plan = sessions && sessions.length && rest.patient ? { items: sessions, index: 0 } : null;
@@ -397,8 +401,11 @@ export function initBook({ onBooked, defaults } = {}) {
 
   // The dialog afresh, for a new booking or for the plan's next session (the dialog then stays open).
   // fixedDoctor: the doctor picked at the top of Today (Saged, 2026-11-22): the booking is theirs, not asked again.
-  function start({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener, fixedDoctor = null } = {}) {
+  function start({ query = "", patient: given = null, doctorId = null, sectionId: section = "", opener, fixedDoctor = null,
+                   continues: course = null } = {}) {
+    continues = course;  // "Book the next visit" from a row: that visit's treatment goes on
     form.reset();
+    loadCourses(dialog, null);
     submitter.reset();
     results.replaceChildren();
     searchStatus.textContent = "";

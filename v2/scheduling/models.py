@@ -68,6 +68,9 @@ class Appointment(models.Model):
     ready_at = models.DateTimeField(null=True, blank=True)
     # When the visit's doctor last answered the desk's "ready" with "wait" (Saged, 2026-11-22); cleared by asking again.
     wait_at = models.DateTimeField(null=True, blank=True)
+    # One treatment's visits (Saged, 2026-11-22): each points at the treatment's first visit and is numbered 1, 2, 3…
+    continues_id = models.BigIntegerField(null=True, blank=True)
+    course_no = models.PositiveSmallIntegerField(default=1, db_default=1)
     called_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)

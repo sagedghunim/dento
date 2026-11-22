@@ -4,7 +4,7 @@
     <div class="visit-when">
       {# The day and the time, never the queue turn: a turn means nothing later (Saged, 2026-11-22). #}
       <strong class="nowrap">{{ v.day|shortday }}{% if v.starts_at %} · {{ v.starts_at|clock }}{% elif v.arrived_at %} · {{ v.arrived_at|clock }}{% endif %}</strong>
-      <span><bdi dir="auto">{{ v.service.name }}</bdi>{% if v.qty > 1 %} × {{ v.qty|digits }}{% endif %} · <bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi></span>
+      <span><bdi dir="auto">{{ v.service.name }}</bdi>{% if v.qty > 1 %} × {{ v.qty|digits }}{% endif %} · <bdi dir="auto">{{ names|get_item:v.doctor_id }}</bdi>{% if v.course_no > 1 or v.in_course %} · <span class="pill teal">{% translate "Visit" %} {{ v.course_no|num }}</span>{% endif %}</span>
     </div>
     <div class="visit-side">
       {% include "web/_status_pill.html" with status=v.status %}

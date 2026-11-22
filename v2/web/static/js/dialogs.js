@@ -430,3 +430,30 @@ export function receiptUrl(invoiceId, paper) {
 }
 
 export function rememberPaper(paper) { try { localStorage.setItem("hamada.paper", paper); } catch (e) { /* none */ } }
+
+// "This visit": a new treatment, or the next visit of one already started (Saged, 2026-11-22). Fills the select with
+// the patient's treatments; `preferred` (a visit id) is chosen when it belongs to one of them.
+export async function loadCourses(dialog, patientId, preferred = null) {
+  const box = dialog.querySelector("[data-course-box]");
+  if (!box) return;
+  const select = box.querySelector("select");
+  select.replaceChildren(select.options[0]);
+  select.value = "";
+  box.hidden = true;
+  if (!patientId) return;
+  const result = await get(`/api/v1/patients/${patientId}/courses`);
+  if (!isOk(result) || !result.data.items.length) return;
+  for (const c of result.data.items) {
+    const option = document.createElement("option");
+    option.value = String(c.id);
+    option.textContent = t("course_option", { service: c.service, started: c.started, n: localDigits(c.last_no + 1) });
+    select.append(option);
+  }
+  if (preferred && [...select.options].some((o) => o.value === String(preferred))) select.value = String(preferred);
+  box.hidden = false;
+}
+
+export function courseOf(dialog) {
+  const select = dialog.querySelector('[name="continues_id"]');
+  return select && select.value ? Number(select.value) : null;
+}

@@ -439,6 +439,9 @@ def patient_page(request, ctx, patient_id):
     record_access(ctx, patient.id, AuditAccess.Action.OPEN)
     visits = patient_visits(ctx, patient.id, VISITS_PAGE, None)
     _with_notes(ctx, visits["items"])
+    started = {v["continues_id"] for v in visits["items"] if v["continues_id"]}  # treatments with more visits
+    for v in visits["items"]:
+        v["in_course"] = v["id"] in started
     payments = patient_payments(ctx, patient.id, PAYMENTS_PAGE, None) if ctx.can("money.view") else None
     clinical_view = ctx.can("clinical.view")
     if clinical_view:

@@ -4,6 +4,8 @@ Lock order (design 5.0): request key → appointment → invoice → counters (p
 invoice) → doctor-days (one statement) → clinic-days (one statement, last).
 """
 
+import datetime as dt
+
 from django.db import IntegrityError
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -129,6 +131,7 @@ def book(ctx, request, deltas=None):
     else:
         fields = patients.clean_fields(request["new_patient"], today)
         eligible, has_arrived = False, False
+    continues_id, course_no = _course(ctx, patient["id"], request.get("continues_id")) if fields is None else (None, 1)
     visit_price = ""
     if request.get("follow_up_id") is not None:
         # The plan session's own visit fee (set on the follow-up when the doctor added it; it never changes after),
@@ -176,6 +179,7 @@ def book(ctx, request, deltas=None):
             is_extra=is_extra,
             status="waiting" if request["arrive"] else "booked", source=request["source"], fee=fee,
             is_follow_up=is_follow_up, is_new=not has_arrived, note=request["note"], visit_price=visit_price, qty=qty,
+            continues_id=continues_id, course_no=course_no,
             arrived_at=now if request["arrive"] else None, created_at=now, created_by_id=ctx.membership_id,
             updated_at=now, updated_by_id=ctx.membership_id)
     except IntegrityError as error:
@@ -208,7 +212,7 @@ def book(ctx, request, deltas=None):
         "id": appointment.id, "day": day, "queue_no": queue_no, "status": appointment.status, "starts_at": starts_at,
         "ends_at": ends_at, "is_extra": is_extra, "source": request["source"], "fee": fee, "is_follow_up": is_follow_up,
         "is_new": not has_arrived, "auto_closed": False, "note": request["note"], "arrived_at": appointment.arrived_at,
-        "visit_price": visit_price, "qty": qty,
+        "visit_price": visit_price, "qty": qty, "continues_id": continues_id, "course_no": course_no,
         "called_at": None, "finished_at": None, "cancelled_at": None, "cancel_reason": "", "created_at": now,
         "doctor_id": doctor.doctor_id,
         "patient_id": patient["id"], "patient_name": patient["full_name"], "patient_phone": patient["phone"],
@@ -299,6 +303,47 @@ def check_same_day(ctx, patient, doctor_id, day, confirm=False, exclude_id=None)
         raise ApiError("other_doctor_today", _("%(name)s has a booking that day with %(doctor)s.") % {
             "name": name, "doctor": doctor_name}, 409, fields={"confirm_other_doctor": "required"},
             extra={"appointments": [visit_extra(ctx, v) for v in others]})
+
+
+def _course(ctx, patient_id, continues):
+    """The treatment a new visit continues (Saged, 2026-11-22): (the first visit's id, the next number), or (None, 1)
+    for a new treatment. `continues` is any visit of that treatment, of this patient."""
+    if continues is None:
+        return None, 1
+    found = sql.row(ctx, 'SELECT coalesce(continues_id, id) FROM "scheduling_appointment" '
+                         "WHERE clinic_id = %s AND id = %s AND patient_id = %s", [ctx.clinic_id, continues, patient_id])
+    if found is None:
+        raise rules.not_found("appointment")
+    root = found[0]
+    last = sql.row(ctx, 'SELECT max(course_no) FROM "scheduling_appointment" WHERE clinic_id = %s AND patient_id = %s '
+                        "AND (id = %s OR continues_id = %s) AND status NOT IN ('cancelled', 'no_show')",
+                   [ctx.clinic_id, patient_id, root, root])[0]
+    return root, (last or 0) + 1
+
+
+def courses(ctx, patient_id):
+    """The patient's treatments of the last year, latest first: the first visit, its service, the last number."""
+    mine, mine_params = rules.patient_sql(ctx, "p.clinic_id", "p.id")  # another place's or doctor's patient: 404
+    if sql.row(ctx, f'SELECT 1 FROM "patients_patient" p WHERE p.clinic_id = %s AND p.id = %s{mine}',
+               [ctx.clinic_id, patient_id, *mine_params]) is None:
+        raise rules.not_found("patient")
+    own, own_params = rules.visit_sql(ctx, "a.doctor_id")
+    rows = sql.rows(ctx, f"""
+        SELECT c.root, c.last_no, c.last_day, r.day, s.name, s.name_en FROM (
+            SELECT coalesce(a.continues_id, a.id) AS root, max(a.course_no) AS last_no, max(a.day) AS last_day
+              FROM "scheduling_appointment" a
+             WHERE a.clinic_id = %s AND a.patient_id = %s AND a.status NOT IN ('cancelled', 'no_show')
+               AND a.day >= %s{own}
+             GROUP BY 1 ORDER BY 3 DESC LIMIT 8) c
+          JOIN "scheduling_appointment" r ON r.clinic_id = %s AND r.id = c.root
+          JOIN "clinics_service" s ON s.clinic_id = r.clinic_id AND s.id = r.service_id
+         ORDER BY c.last_day DESC""",
+                    [ctx.clinic_id, patient_id, business_day(ctx.clinic) - dt.timedelta(days=365), *own_params,
+                     ctx.clinic_id])
+    from core.i18n import pick
+
+    return [{"id": r[0], "last_no": r[1], "last_day": r[2].isoformat(), "started": r[3].isoformat(),
+             "service": pick(r[4], r[5])} for r in rows]
 
 
 def _not_today():
@@ -726,6 +771,7 @@ def walk_in(ctx, request):
         "patient_id": request["patient_id"], "new_patient": request["new_patient"], "doctor_id": doctor_id,
         "service_id": service_id, "day": today, "starts_at": None, "extra": False, "arrive": True, "walk_in": True,
         "source": "clinic", "note": request["note"], "payment": request["payment"], "qty": request.get("qty") or 1,
+        "continues_id": request.get("continues_id"),
         "confirm_other_doctor": request.get("confirm_other_doctor", False)})
     return appointment, version, waiting_ahead(ctx, appointment)
 

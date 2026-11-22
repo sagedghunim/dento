@@ -586,7 +586,7 @@ card.addEventListener("click", (event) => {
       quick(v.id, button.dataset.act, v.status, v.name, v.doctorId);
       break;
     case "next":  // the next visit of a plan: the same patient and doctor, no search (desk review 4)
-      if (book) book.open({ patient: v.patient, doctorId: v.doctorId, opener: button });
+      if (book) book.open({ patient: v.patient, doctorId: v.doctorId, opener: button, continues: v.id });
       break;
     case "finish":
       if (config.perms.collect && (v.due > 0 || v.earlier > 0)) visitDialogs.finish(v, button);

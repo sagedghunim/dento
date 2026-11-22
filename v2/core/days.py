@@ -29,35 +29,41 @@ def _clock_day(clinic, instant=None):
     return local.date()
 
 
-OPEN_SHIFT = "_open_shift_started"  # cached on the clinic object for the request
+RECENT_SHIFTS = "_recent_shifts"  # cached on the clinic object for the request
+RECENT = dt.timedelta(days=3)  # older instants keep the clock rule: one day back at most matters only near now
 
 
 def _shift_started(clinic, instant):
     """When the register shift open at `instant` (now when None) was opened, or None. A clinic object that isn't a
-    saved row (unit tests) has no shifts."""
+    saved row (unit tests) has no shifts. One read per request: the open shift, and the shifts of the last days for
+    past instants (a Today page asks for each of its rows)."""
     state = getattr(clinic, "_state", None)
     if getattr(clinic, "id", None) is None or state is None or state.db is None:
         return None
-    if instant is None and OPEN_SHIFT in clinic.__dict__:
-        return clinic.__dict__[OPEN_SHIFT]
     from django.db.models import Q
 
     from finance.models import Shift
 
-    shifts = Shift.objects.using(state.db).filter(clinic_id=clinic.id)
+    now = timezone.now()
+    if RECENT_SHIFTS not in clinic.__dict__:  # one read: the open shift and those closed in the last days
+        clinic.__dict__[RECENT_SHIFTS] = list(
+            Shift.objects.using(state.db).filter(Q(closed_at__isnull=True) | Q(closed_at__gte=now - RECENT),
+                                                 clinic_id=clinic.id)
+            .order_by("-opened_at").values_list("opened_at", "closed_at")[:50])
+    shifts = clinic.__dict__[RECENT_SHIFTS]
     if instant is None:
-        shifts = shifts.filter(status="open")
-    else:
-        shifts = shifts.filter(Q(closed_at__isnull=True) | Q(closed_at__gt=instant), opened_at__lte=instant)
-    started = shifts.order_by("-opened_at").values_list("opened_at", flat=True).first()
-    if instant is None:
-        clinic.__dict__[OPEN_SHIFT] = started
-    return started
+        return next((opened_at for opened_at, closed_at in shifts if closed_at is None), None)
+    if instant < now - RECENT:
+        return None
+    for opened_at, closed_at in shifts:
+        if opened_at <= instant and (closed_at is None or instant < closed_at):
+            return opened_at
+    return None
 
 
 def forget_shift(clinic):
     """After opening or closing a shift in this request: the day is worked out again."""
-    clinic.__dict__.pop(OPEN_SHIFT, None)
+    clinic.__dict__.pop(RECENT_SHIFTS, None)
 
 
 def business_day(clinic, instant=None):

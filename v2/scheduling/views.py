@@ -114,6 +114,7 @@ def book_view(request, ctx, data):
         # The desk saw "has a booking that day with another doctor" and books anyway (Saged, 2026-11-17).
         "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"),
         "qty": _qty(data),
+        "continues_id": _optional_id(data, "continues_id"),  # a visit of the treatment this one continues
     }
     appointment, version = services.book(ctx, body)
     from billing import visibility
@@ -329,6 +330,7 @@ def walk_in_view(request, ctx, data):
         "service_id": _optional_id(data, "service_id"), "section_id": _optional_id(data, "section_id"),
         "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
         "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"), "qty": _qty(data),
+        "continues_id": _optional_id(data, "continues_id"),
     }
     appointment, version, ahead = services.walk_in(ctx, body)
     from billing import visibility
@@ -336,3 +338,9 @@ def walk_in_view(request, ctx, data):
     visibility.appointment(ctx, appointment)
     return Result(_walk_in_answer(appointment, version, ahead), status=201, target_type="appointment",
                   target_id=appointment["id"])
+
+
+@api("GET", perm="appointments.book")
+def courses_view(request, ctx, data, patient_id):
+    """The patient's treatments a new visit can continue (Saged, 2026-11-22)."""
+    return {"items": services.courses(ctx, validate.path_id(patient_id, rules.not_found("patient")))}
