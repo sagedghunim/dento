@@ -647,9 +647,10 @@ if (nextAdd) {
       ...findProcedures(q).map((p) => ({ proc: p })),
     ], null, (o) => {
       what.value = o.proc ? o.proc.name : o.label;
+      what.closest(".picker").classList.remove("invalid");
       if (o.proc) what.dataset.proc = o.proc.id; else delete what.dataset.proc;
     });
-    what.addEventListener("input", () => { delete what.dataset.proc; });
+    what.addEventListener("input", () => { delete what.dataset.proc; what.closest(".picker").classList.remove("invalid"); });
     n.addEventListener("input", dates);
     unit.addEventListener("change", dates);
     return li;
@@ -711,9 +712,15 @@ if (nextAdd) {
       if (total > 730) { error.textContent = t("plan_too_far"); li.querySelector("[data-plan-n]").focus(); return null; }
       const what = li.querySelector("[data-plan-what]");
       const typed = what.value.trim();
+      if (!typed) {  // every session says what it is (Saged, 2026-11-23): an empty one is never saved as a guess
+        what.closest(".picker").classList.add("invalid");
+        error.textContent = t("plan_need_what");
+        what.focus();
+        return null;
+      }
       const proc = what.dataset.proc && catalogue.get(Number(what.dataset.proc));
       if (proc && proc.name === typed) out.push({ procedure_id: proc.id, days: total });
-      else out.push({ label: typed || fixed[0], days: total });
+      else out.push({ label: typed, days: total });
     }
     return out;
   }

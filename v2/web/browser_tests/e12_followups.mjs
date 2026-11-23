@@ -125,6 +125,9 @@ async function runInArabic() {
     check((await page.eval(`document.querySelectorAll("[data-plan-rows] li").length`)) === 2, "two session rows");
     await page.eval(`(() => { const w = document.querySelector("[data-plan-rows] [data-plan-what]"); w.focus(); })()`);
     check(await page.eval(`document.querySelectorAll("[data-plan-rows] .picker-list:not([hidden]) [role=option]").length > 2`), "a tap shows the whole list");
+    await page.eval(`document.querySelector("[data-plan-save]").click()`);
+    check(await page.eval(`document.querySelector("[data-plan-rows] .picker").classList.contains("invalid")`), "an empty session is not saved");
+    await page.eval(`document.querySelectorAll("[data-plan-rows] [data-plan-what]").forEach((w) => { w.focus(); w.closest(".picker").querySelector("[role=option]").click(); })`);
     await page.eval(`(() => { const b = document.querySelector("[data-plan-save]"); b.click(); b.click(); })()`);
     await page.until(`${nextCount} === 4`, 10000, "the plan is added");
     await sleep(600);
@@ -134,6 +137,7 @@ async function runInArabic() {
     await offline(page, true);
     await page.eval(`document.querySelector("[data-plan-start]").click()`);
     await page.eval(`document.querySelector('[data-plan-count] [data-n="1"]').click()`);
+    await page.eval(`(() => { const w = document.querySelector("[data-plan-rows] [data-plan-what]"); w.focus(); w.closest(".picker").querySelector("[role=option]").click(); })()`);
     await page.eval(`document.querySelector("[data-plan-save]").click()`);
     await page.until(`!document.querySelector("[data-next-add] [data-submit]").hidden`, 45000, "offline: it offers Try again");
     await offline(page, false);

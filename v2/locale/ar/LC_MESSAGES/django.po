@@ -4729,3 +4729,9 @@ msgstr "الخطة بتعدّي سنتين. قصّر الفروق."
 
 msgid "The plan is saved. The desk books it when the visit is finished."
 msgstr "الخطة اتحفظت. المكتب هيحجزها لما الكشف يخلص."
+
+msgid "Pick from the list or type"
+msgstr "اختار من القايمة أو اكتب"
+
+msgid "Pick what each session is."
+msgstr "اختار الإجراء لكل جلسة."

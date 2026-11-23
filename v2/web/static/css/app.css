@@ -1201,6 +1201,7 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 
 /* A field that drops down a list (Saged, 2026-11-23): a tap shows every choice, a letter narrows it. */
 .picker { position: relative; }
+.picker.invalid input { border-color: var(--red); background: var(--red-tint); }
 .picker-list {
   position: absolute; inset-inline: 0; inset-block-start: 100%; z-index: 20; margin-block-start: 4px;
   max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
