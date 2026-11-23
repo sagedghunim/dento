@@ -1,4 +1,4 @@
-import { get } from "./api.js";
+import { errorMessage, get, isOk, send } from "./api.js";
 import { bindForm } from "./forms.js";
 
 const NEXT = { home: "/", clinics: "/clinics", password: "/account/password", security: "/account/security", platform: "/platform" };
@@ -21,16 +21,25 @@ function showCode(data) {
 }
 
 // Two-step sign-in already on: the same code again for another phone, after the password (Saged, 2026-11-22).
+// No request key, like signing in: nothing is stored, so there is nothing to confirm or replay.
 const showForm = document.getElementById("totp-show");
 if (showForm) {
-  bindForm(showForm, {
-    url: "/api/v1/me/totp/show",
-    body: (data) => ({ password: data.get("password") }),
-    onSaved: (data) => {
+  const showError = showForm.querySelector("[data-error]");
+  const showButton = showForm.querySelector('[type="submit"]');
+  showForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (showButton.disabled) return;
+    showButton.disabled = true;
+    showError.textContent = "";
+    const result = await send("POST", "/api/v1/me/totp/show", { password: new FormData(showForm).get("password") });
+    showButton.disabled = false;
+    if (isOk(result)) {
       showForm.hidden = true;
-      showCode(data);
+      showCode(result.data);
       document.getElementById("totp-again").hidden = false;
-    },
+      return;
+    }
+    showError.textContent = errorMessage(result, document.documentElement.lang === "ar" ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Try again.");
   });
 }
 
