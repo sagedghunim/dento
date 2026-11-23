@@ -4671,3 +4671,24 @@ msgstr "الكلام ده طويل أوي. قصّره شوية."
 
 msgid "A price is at least 10 EGP."
 msgstr "أقل سعر 10 جنيه."
+
+msgid "Patient's medical file"
+msgstr "ملف المريض الطبي"
+
+msgid "Diabetes, blood pressure, heart…"
+msgstr "سكر، ضغط، قلب…"
+
+msgid "Penicillin, anesthesia, latex…"
+msgstr "بنسلين، بنج، لاتكس…"
+
+msgid "Saving to the patient file…"
+msgstr "بيتحفظ في ملف المريض…"
+
+msgid "Saved in the patient file"
+msgstr "اتحفظ في ملف المريض"
+
+msgid "Not saved in the file yet: no connection. Retrying…"
+msgstr "لسه ما اتحفظش في الملف: مفيش نت. بنحاول تاني…"
+
+msgid "The patient's medical file isn't saved yet. Check the connection and try again."
+msgstr "ملف المريض الطبي لسه ما اتحفظش. اتأكد من النت وجرّب تاني."

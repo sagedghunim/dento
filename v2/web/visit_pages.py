@@ -147,6 +147,9 @@ def visit_page(request, ctx, appointment_id):
     perms = _perms(ctx)
     perms["prescribe"] = ctx.can("prescriptions.write")
     perms["finish"] = ctx.can("appointments.queue")
+    # The file's chronic conditions, allergies and notes, written from the visit (Saged, 2026-11-23): the same fields
+    # and rule as the file (patients.edit with clinical.write); the desk still fills them when it opens a new file.
+    perms["medical"] = ctx.can("patients.edit") and ctx.can("clinical.write")
     note = record["note"] or {"complaint": "", "diagnosis": "", "notes": "", "version": 0}
     config = {
         "appointment_id": visit["id"], "patient_id": patient_id, "section_id": visit["section_id"],
@@ -154,6 +157,7 @@ def visit_page(request, ctx, appointment_id):
         "note": {k: note[k] for k in ("complaint", "diagnosis", "notes", "version")},
         "procedures": _procedures(ctx, visit["section_id"]) if perms["record"] else [],
         "upcoming": followups.upcoming(ctx, patient_id, today), "today": today.isoformat(),
+        "medical": {k: patient[k] or "" for k in ("chronic_conditions", "allergies", "notes")},
     }
     # The doctor's six most used procedures are one tap each; the rest are found by typing (Saged, 2026-11-13).
     by_id = {p["id"]: p for p in config["procedures"]}

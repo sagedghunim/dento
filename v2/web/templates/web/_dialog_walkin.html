@@ -29,6 +29,8 @@
       </div>
       {% endif %}
     </fieldset>
+    {# The consultation first, picked by default, then the main services (Saged, 2026-11-23): someone who doesn't know yet what they need is booked for a consultation. #}
+    <div class="chips" data-consults role="group" aria-label="{% translate "Service" %}">{% for s in config.services %}{% if s.booking and s.kind == "consultation" %}<button type="button" class="chip-btn" data-consult="{{ s.id }}" aria-pressed="false"><bdi dir="auto">{{ s.name }}</bdi></button>{% endif %}{% endfor %}</div>
     {% include "web/_family_chips.html" %}
     <div class="grid-form">
       <label class="field" data-doctor-box>{% translate "Doctor" %}<select name="doctor">

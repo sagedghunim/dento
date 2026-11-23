@@ -20,7 +20,7 @@
       {# No phone here (Saged, 2026-11-19): a tap on it left the visit. The file opens in a new tab, the visit stays. #}
       {% if perms.view_patients %}<a class="btn ghost" href="/patients/{{ patient.id }}" data-open-file><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>{% translate "Patient file" %}</a>{% endif %}
     </div>
-    {% if patient.allergies or patient.chronic_conditions %}
+    {% if not perms.medical and patient.allergies or not perms.medical and patient.chronic_conditions %}
     <ul class="health-flags">
       {% if patient.allergies %}<li class="flag-allergy"><strong>{% translate "Allergies:" %}</strong> <bdi dir="auto">{{ patient.allergies }}</bdi></li>{% endif %}
       {% if patient.chronic_conditions %}<li class="flag-chronic"><strong>{% translate "Chronic conditions:" %}</strong> <bdi dir="auto">{{ patient.chronic_conditions }}</bdi></li>{% endif %}
@@ -28,6 +28,21 @@
     {% endif %}
     <p class="last-visit">{% if last %}<strong>{% translate "Last visit:" %}</strong> {{ last.day|shortday }} · <bdi dir="auto">{% if last.procedures %}{{ last.procedures|join:" · " }}{% else %}{{ last.service }}{% endif %}</bdi>{% if last.note %}<span class="last-note"><bdi dir="auto">{{ last.note|truncatechars:160 }}</bdi></span>{% endif %}{% else %}<strong>{% translate "First visit" %}</strong>{% endif %}</p>
   </section>
+
+  {% if perms.medical %}
+  {# The file's chronic conditions, allergies and notes, written here and saved to the file as typed (Saged, 2026-11-23). #}
+  <section class="card medical-card" aria-labelledby="medical-title" data-medical>
+    <div class="card-head">
+      <h2 id="medical-title">{% translate "Patient's medical file" %}</h2>
+      <span class="save-state" data-medical-state role="status" aria-live="polite"></span>
+    </div>
+    <div class="medical-grid">
+      <label class="field{% if patient.chronic_conditions %} flag-chronic{% endif %}">{% translate "Chronic conditions" %}<textarea name="chronic_conditions" maxlength="1000" dir="auto" rows="2" placeholder="{% translate "Diabetes, blood pressure, heart…" %}">{{ patient.chronic_conditions|default:"" }}</textarea></label>
+      <label class="field{% if patient.allergies %} flag-allergy{% endif %}">{% translate "Allergies" %}<textarea name="allergies" maxlength="1000" dir="auto" rows="2" placeholder="{% translate "Penicillin, anesthesia, latex…" %}">{{ patient.allergies|default:"" }}</textarea></label>
+      <label class="field medical-notes">{% translate "Notes" %}<textarea name="notes" maxlength="2000" dir="auto" rows="2">{{ patient.notes|default:"" }}</textarea></label>
+    </div>
+  </section>
+  {% endif %}
 
   <section class="card visit-notes" aria-labelledby="notes-title">
     <div class="card-head">
@@ -67,7 +82,7 @@
             <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
           </label>
           {# How many of the next procedure tapped (Saged, 2026-11-19): 3 fillings at once. A tooth number makes it one. #}
-          <label class="field proc-count">{% translate "Count" %}<input name="count" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr" data-proc-count></label>
+          <label class="field proc-count">{% translate "How many" %}<input name="count" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr" data-proc-count></label>
         </div>
         <div class="chips" data-proc-results aria-live="polite"></div>
         <div class="proc-confirm" data-proc-confirm hidden>
@@ -117,7 +132,8 @@
           <label class="chip"><input type="radio" name="what" value="label:{% translate "Continue the treatment" %}"><span>{% translate "Continue the treatment" %}</span></label>
           {% for p in top %}<label class="chip"><input type="radio" name="what" value="proc:{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi></span></label>{% endfor %}
         </div>
-        <label class="field next-other">{% translate "Something else (optional)" %}<input name="other" dir="auto" autocomplete="off" maxlength="80"></label>
+        <label class="field next-other">{% translate "Something else (optional)" %}<input name="other" dir="auto" autocomplete="off" maxlength="80" data-next-other></label>
+        <div class="chips" data-next-suggest aria-live="polite"></div>
       </fieldset>
       <fieldset class="group">
         <legend>{% translate "When: one tap adds it" %}</legend>

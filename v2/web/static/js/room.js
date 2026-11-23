@@ -128,6 +128,70 @@ box.addEventListener("blur", () => { if (box.value !== saved) flush(); });
 window.addEventListener("online", () => { if (box.value !== saved) flush(); });
 if (box.value !== saved) flush(); else if (saved) say(t("note_saved"));
 
+// --- the patient's medical file: chronic conditions, allergies, notes (Saged, 2026-11-23) ---
+// Saved to the file as the doctor types, one field at a time, with the value it replaces (a change made meanwhile on
+// another screen is refused, not overwritten). A lost answer resends the same request under the same key.
+
+const medical = document.querySelector("[data-medical]");
+let flushMedical = async () => true;     // the finish saves what was typed first
+if (medical) {
+  const medState = medical.querySelector("[data-medical-state]");
+  const medSaved = { ...data.medical };
+  const medLost = {};                    // field -> {key, body} whose answer was lost
+  const medTimers = {};
+  let medBusy = Promise.resolve();
+  const sayMed = (text, bad) => { medState.textContent = text; medState.classList.toggle("bad", Boolean(bad)); };
+
+  async function saveField(name) {
+    const area = medical.querySelector(`[name="${name}"]`);
+    const value = area.value.trim();
+    if (value === medSaved[name]) return true;
+    const lost = medLost[name];
+    const request = lost && lost.body.changes[name] === value
+      ? lost : { key: newKey(), body: { changes: { [name]: value }, expected: { [name]: medSaved[name] } } };
+    sayMed(t("medical_saving"));
+    const result = await send("PATCH", `/api/v1/patients/${data.patient_id}`, request.body, { key: request.key });
+    if (!result.settled) {
+      medLost[name] = request;
+      if (!result.signedOut) sayMed(t("medical_offline"), true);
+      clearTimeout(medTimers[name]);
+      medTimers[name] = setTimeout(() => queueField(name), 5000);
+      return false;
+    }
+    delete medLost[name];
+    if (!isOk(result)) { sayMed(errorMessage(result, t("failed")), true); return false; }
+    medSaved[name] = value;
+    if (name !== "notes") area.closest(".field").classList.toggle(name === "allergies" ? "flag-allergy" : "flag-chronic", Boolean(value));
+    if (area.value.trim() !== value) return saveField(name);  // typed meanwhile (already inside the queue)
+    sayMed(t("medical_saved"));
+    return true;
+  }
+  // One save at a time across the three fields.
+  function queueField(name) {
+    clearTimeout(medTimers[name]);
+    medBusy = medBusy.then(() => saveField(name));
+    return medBusy;
+  }
+  medical.addEventListener("input", (event) => {
+    const name = event.target.name;
+    if (!(name in medSaved)) return;
+    if (!medState.classList.contains("bad")) sayMed("");
+    clearTimeout(medTimers[name]);
+    medTimers[name] = setTimeout(() => queueField(name), 1200);
+  });
+  medical.addEventListener("focusout", (event) => {
+    const name = event.target.name;
+    if (name in medSaved && event.target.value.trim() !== medSaved[name]) queueField(name);
+  });
+  window.addEventListener("online", () => { for (const name of Object.keys(medLost)) queueField(name); });
+  flushMedical = async () => {
+    for (const name of Object.keys(medSaved)) {
+      if (medical.querySelector(`[name="${name}"]`).value.trim() !== medSaved[name] && !(await queueField(name))) return false;
+    }
+    return true;
+  };
+}
+
 // --- leaving warns: the doctor leaves by finishing the visit ---
 
 window.addEventListener("beforeunload", (event) => {
@@ -475,6 +539,33 @@ if (nextAdd) {
   const form = nextAdd.querySelector("form");
   const adding = new Submitter(nextAdd, { label: t("fu_title") });
   const retry = nextAdd.querySelector("[data-submit]");
+  // "Something else" suggests from the price list as the doctor types (Saged, 2026-11-23): from one letter, spelling
+  // variants match, a word that starts with it first. A tap picks that procedure; any other text still goes as typed.
+  const other = form.elements.namedItem("other");
+  const suggest = nextAdd.querySelector("[data-next-suggest]");
+  const plainName = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  const named = [...catalogue.values()].map((p) => [p, plainName(`${p.name} ${p.find || ""}`)]);
+  const clearOther = () => { other.value = ""; delete other.dataset.proc; suggest.replaceChildren(); };
+  other.addEventListener("input", () => {
+    delete other.dataset.proc;
+    const q = plainName(other.value.trim());
+    const rank = (text) => (!text.includes(q) ? -1 : text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2);
+    const found = q ? named.map(([p, text]) => [rank(text), p]).filter(([r]) => r >= 0)
+      .sort((a, b) => a[0] - b[0]).slice(0, 8).map(([, p]) => p) : [];
+    suggest.replaceChildren(...found.map((p) => {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      const name = el("bdi", null, p.name);
+      name.dir = "auto";
+      b.append(name);
+      b.addEventListener("click", () => { other.value = p.name; other.dataset.proc = p.id; suggest.replaceChildren(); });
+      return b;
+    }));
+  });
+  other.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { const first = suggest.querySelector("button"); if (first) { event.preventDefault(); first.focus(); } }
+  });
   const settle = () => {
     retry.hidden = !adding.unknown;
     nextAdd.querySelectorAll("[data-run]").forEach((b) => { b.disabled = Boolean(adding.unknown); });
@@ -485,7 +576,7 @@ if (nextAdd) {
     settle();
     if (!result || !isOk(result)) return;
     renderUpcoming(result.data.upcoming);
-    form.elements.namedItem("other").value = "";
+    clearOther();
     toast(t("fu_added"));
   }
   nextAdd.addEventListener("click", (event) => {
@@ -504,9 +595,11 @@ if (nextAdd) {
       }
     }
     const item = { days };
-    const other = form.elements.namedItem("other").value.trim();
+    const typed = other.value.trim();
     const what = form.querySelector('[name="what"]:checked').value;
-    if (other) item.label = other;
+    const pickedProc = other.dataset.proc && catalogue.get(Number(other.dataset.proc));
+    if (pickedProc && pickedProc.name === typed) item.procedure_id = pickedProc.id;
+    else if (typed) item.label = typed;
     else if (what.startsWith("proc:")) item.procedure_id = Number(what.slice(5));
     else item.label = what.slice(6);
     addNext({ items: [item] });
@@ -676,6 +769,7 @@ if (finishButton) {
     finishError.textContent = "";
     try {
       if (box.value !== saved && !(await flush())) { finishError.textContent = t("note_unsaved"); return; }
+      if (!(await flushMedical())) { finishError.textContent = t("medical_unsaved"); return; }
       const result = await save("POST", `/api/v1/appointments/${id}/finish`, { status: "in_room" },
         { label: t("finish"), auto: true });  // carries the status it expects: a resend is harmless
       if (!result.settled) { renderPending(); finishError.textContent = t("finish_unknown"); return; }

@@ -107,6 +107,23 @@ export function initWalkIn({ onBooked } = {}) {
   const qty = () => countOf(qtyBox);
   // The main services (Saged, 2026-11-22): the consultation always shows, a main service's kinds once it is picked.
   const families = wireFamilies(form, field("service"));
+  // The consultation as the first chip (Saged, 2026-11-23): picked by default, pressed while it is the service.
+  const consults = form.querySelector("[data-consults]");
+  function markConsult() {
+    if (!consults) return;
+    for (const chip of consults.querySelectorAll("[data-consult]")) {
+      const option = [...field("service").options].find((o) => o.value === chip.dataset.consult);
+      chip.hidden = !option || Boolean(option.dataset.off);
+      chip.setAttribute("aria-pressed", String(field("service").value === chip.dataset.consult));
+    }
+  }
+  if (consults) consults.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-consult]");
+    if (!chip) return;
+    families.reset();
+    field("service").value = chip.dataset.consult;
+    quote();
+  });
 
   // Only the services of the chosen doctor's sections (a doctor's sections are those of their sessions today).
   function filterServices() {
@@ -128,8 +145,10 @@ export function initWalkIn({ onBooked } = {}) {
     const usable = [...select.options].filter((o) => o.value && !o.disabled);
     const want = preferred && usable.find((o) => o.value === String(preferred));
     const current = usable.find((o) => o.value === select.value);
-    const choice = want || current || usable.find((o) => o.value === String(defaults.service_id || "")) || usable[0];
+    const choice = want || current || usable.find((o) => o.value === String(defaults.service_id || ""))
+      || usable.find((o) => o.dataset.kind === "consultation") || usable[0];
     select.value = choice ? choice.value : "";
+    markConsult();
   }
 
   // A visit that goes on with a treatment takes that treatment's service (Saged, 2026-11-22).
@@ -175,6 +194,7 @@ export function initWalkIn({ onBooked } = {}) {
     const doctor = doctorId();
     const service = serviceId();
     const seq = ++quoteSeq;
+    markConsult();
     showCount(qtyBox, field("service").selectedOptions[0]);
     if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;

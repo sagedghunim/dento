@@ -942,6 +942,13 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .flag-allergy strong { color: var(--red); }
 .flag-chronic { background: var(--amber-tint); border-color: var(--amber); color: var(--ink); }
 .flag-chronic strong { color: var(--amber); }
+/* The patient's medical file on the visit screen (Saged, 2026-11-23): three fields, a filled allergy in red. */
+.medical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.medical-grid textarea { width: 100%; min-height: 64px; resize: vertical; }
+.medical-card .field.flag-allergy, .medical-card .field.flag-chronic { background: none; border: 0; padding: 0; }
+.medical-card .flag-allergy textarea { border-color: var(--red); background: var(--red-tint); }
+.medical-card .flag-chronic textarea { border-color: var(--amber); background: var(--amber-tint); }
+@media (max-width: 760px) { .medical-grid { grid-template-columns: 1fr; } }
 .last-visit { margin-block-start: 12px; overflow-wrap: anywhere; }
 .last-note { display: block; color: var(--muted); font-size: .9rem; white-space: pre-line; margin-block-start: 2px; }
 .notes-box {
@@ -1039,8 +1046,8 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 
 /* ---------- the visit's small bill, "what comes next" and the Follow-ups list (Saged, 2026-11-13) ---------- */
 .proc-search { margin-block-start: 12px; max-width: 420px; }
-[data-proc-results] { margin-block-start: 8px; }
-[data-proc-results]:empty, [data-rx-medicines]:empty { display: none; }
+[data-proc-results], [data-next-suggest] { margin-block-start: 8px; }
+[data-proc-results]:empty, [data-next-suggest]:empty, [data-rx-medicines]:empty { display: none; }
 [data-rx-medicines] { margin-block-start: 8px; }
 .proc-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-block-start: 12px; }
 .proc-confirm[hidden] { display: none; }
