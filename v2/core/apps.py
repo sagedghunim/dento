@@ -33,3 +33,26 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         post_migrate.connect(set_sequence_ranges, dispatch_uid="core.set_sequence_ranges")
+        _no_stale_scripts_in_development()
+
+
+def _no_stale_scripts_in_development():
+    """runserver's static files say "ask me again" (Saged, 2026-11-23): the browser kept an old room.js after a change,
+    and the module imports can't carry a version. Unchanged files still answer 304. Production has hashed names."""
+    from django.conf import settings
+
+    if not settings.DEBUG:
+        return
+    from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
+
+    if getattr(StaticFilesHandlerMixin.serve, "no_cache", False):
+        return
+    serve = StaticFilesHandlerMixin.serve
+
+    def serve_no_cache(self, request):
+        response = serve(self, request)
+        response["Cache-Control"] = "no-cache"
+        return response
+
+    serve_no_cache.no_cache = True
+    StaticFilesHandlerMixin.serve = serve_no_cache
