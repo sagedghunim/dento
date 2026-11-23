@@ -195,6 +195,11 @@ if not DEBUG:
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "core.storage.ModuleManifestStaticFilesStorage"},
     }
+else:  # a version on each URL, so a browser never keeps an old script after a change (Saged, 2026-11-23)
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "core.storage.DevelopmentStaticFilesStorage"},
+    }
 APP_VERSION = env("HAMADA_APP_VERSION", "2.0.0-dev")
 # Seconds between Today polls; operations raise it to slow every screen at once (design 5.11).
 POLL_AFTER_SECONDS = int(env("HAMADA_POLL_AFTER", "5"))
