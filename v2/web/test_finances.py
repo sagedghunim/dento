@@ -87,6 +87,8 @@ class FinancesPageTests(FinancesCase):
 
     def test_the_register_lists_drawer_expenses_by_category_and_other_stays(self):
         items = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
+        # Cash in the drawer first: nothing leaves it beyond what it holds (Saged, 2026-11-23).
+        call(self.owner, "POST", "/api/v1/register/movements", {"kind": "in", "amount": 20000, "reason": "float"})
         r = call(self.owner, "POST", "/api/v1/expenses", {"category_id": items["lab"]["id"], "amount": 7000,
                                                           "from_shift": True, "note": "تركيبة"})
         self.assertEqual(r.status_code, 201, r.content)
@@ -110,6 +112,8 @@ class FinancesPageTests(FinancesCase):
 
     def test_the_desk_pays_an_expense_out_of_the_drawer_only(self):
         categories = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
+        # Cash in the drawer first: nothing leaves it beyond what it holds (Saged, 2026-11-23).
+        call(self.owner, "POST", "/api/v1/register/movements", {"kind": "in", "amount": 20000, "reason": "float"})
         r = call(self.desk, "POST", "/api/v1/drawer-expenses", {"category_id": categories["rent"]["id"], "amount": 5000})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertIsNotNone(r.json()["expense"]["shift_id"])

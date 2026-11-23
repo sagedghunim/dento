@@ -507,8 +507,12 @@ def void(ctx, invoice_id):
     return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
 
 
-def refund(ctx, payment_id, amount, method=None, note=""):
+def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False):
     """Refund part or all of a payment (design 5.3). Audited.
+
+    `lower_bill` (Saged, 2026-11-23: money given back never leaves the patient owing it): the bill goes down by what
+    the refund would otherwise leave owed, as a discount named for it. Off for a cash slip that is paid again, and for
+    money paid over the bill (give_back), which owes nothing anyway.
 
     Returns (refund row, invoice, version of the visit's day).
     """
@@ -529,12 +533,24 @@ def refund(ctx, payment_id, amount, method=None, note=""):
     patient_id, doctor_id, original_method, original_amount, refunded, section_id, was_deposit = updated
     today = business_day(ctx.clinic)
     method = method or original_method
+    if method == "cash":  # cash never leaves the drawer beyond what is in it (Saged, 2026-11-23)
+        from finance.services import require_cash, shift_for
+
+        require_cash(ctx, shift_for(ctx, "cash"), amount)
     row = _insert_payment(ctx, invoice, patient_id, doctor_id, "refund", method, amount, today, note,
                           refund_of=payment_id, section_id=section_id)
     # A refunded deposit is no longer held: the bill's allowance to hold more than its total shrinks with it.
     invoice = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid - %s, deposit = deposit - %s '
                                     f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
                                [amount, amount if was_deposit else 0, ctx.clinic_id, invoice["id"]]))
+    if lower_bill and invoice["status"] == "open":
+        owed_before = max(0, invoice["total"] - (invoice["paid"] + amount))
+        lower = min(amount, max(0, invoice["total"] - invoice["paid"]) - owed_before)
+        if lower > 0:
+            before = invoice["discount"]
+            invoice = write_discount(ctx, invoice["id"], before + lower)
+            record_change(ctx, "invoice.discount", "invoice", invoice["id"], before={"discount": before},
+                          after={"discount": invoice["discount"]}, reason="refund", patient_id=invoice["patient_id"])
     record_change(ctx, "payment.refund", "payment", payment_id, before={"refunded": refunded - amount},
                   after={"refunded": refunded}, amount=amount, refund_id=row["id"], patient_id=invoice["patient_id"])
     deltas = Deltas()

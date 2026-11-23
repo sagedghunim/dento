@@ -53,6 +53,8 @@ def clean_fields(data, today, *, partial=False):
             raise ApiError("invalid", _("Enter the patient's name."), fields={"full_name": "required"})
         if len(name.split()) < 3:
             raise ApiError("invalid", _("Enter the full three-part name."), fields={"full_name": "three_names"})
+        if sum(any(ch.isalpha() for ch in word) for word in name.split()) < 2:  # "123 456 789" (Saged, 2026-11-23)
+            raise ApiError("invalid", _("A name is written in letters."), fields={"full_name": "letters"})
         values["full_name"] = name
         values["name_norm"] = normalize_name(name)[:240]
     if not partial or "phone" in data:
@@ -215,6 +217,20 @@ def delete(ctx, patient_id):
                        "AND archived_at IS NULL FOR UPDATE", [ctx.clinic_id, patient_id])
     if row is None:
         raise ApiError("not_found", _("This patient wasn't found."), 404)
+    # Never while the patient is being seen, is booked ahead, owes money or holds money paid over a bill, or has
+    # installments running (Saged, 2026-11-23): those would go on with nobody to see them.
+    going_on = ["booked", "waiting", "with_assistant", "ready", "in_room"]
+
+    busy = sql.row(ctx, """
+        SELECT EXISTS (SELECT 1 FROM "scheduling_appointment" WHERE clinic_id = %s AND patient_id = %s
+                        AND status = ANY(%s)),
+               EXISTS (SELECT 1 FROM "billing_invoice" WHERE clinic_id = %s AND patient_id = %s AND status = 'open'
+                        AND paid <> total),
+               EXISTS (SELECT 1 FROM "billing_installment_plan" WHERE clinic_id = %s AND patient_id = %s
+                        AND status = 'active')""",
+                   [ctx.clinic_id, patient_id, going_on, ctx.clinic_id, patient_id, ctx.clinic_id, patient_id])
+    if any(busy):
+        raise ApiError("patient_busy", _("This patient has a visit not finished, money owed or given, or installments running. Finish those first."), 409)  # noqa: E501
     has_history = any(sql.row(ctx, f'SELECT 1 FROM "{table}" WHERE clinic_id = %s AND patient_id = %s LIMIT 1',
                               [ctx.clinic_id, patient_id]) for table in HISTORY_TABLES)
     before = {"full_name": row[1], "file_no": row[2]}

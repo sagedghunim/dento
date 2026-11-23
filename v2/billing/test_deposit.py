@@ -514,14 +514,15 @@ class ArrivalTests(DepositTestCase):
             later = self.book(patient_id=patient, doctor_id=self.owner_id, day=(DAY + dt.timedelta(days=3)).isoformat(),
                               payment=self.deposit()).json()["appointment"]
             self.assertEqual((later["fee"], later["is_follow_up"], later["due"]), (CONSULT, False, 200_00))
-            self.assertEqual(self.act(first["id"], "arrive", "booked").status_code, 200)  # now it starts a window
+            self.assertEqual(self.act(first["id"], "arrive", "booked").status_code, 200)  # no window any more
         with self.on(3, hour=10):
             self.assertEqual(self.act(later["id"], "arrive", "booked").status_code, 200)
             row = self.appointment(later["id"])
-            self.assertEqual((row.fee, row.is_follow_up), (FOLLOW, True))
-            self.assertEqual(self.figures(later["id"]), {"total": FOLLOW, "paid": DEPOSIT, "due": 50_00, "credit": 0,
-                                                         "deposit": DEPOSIT})
-            self.assertEqual([line["amount"] for line in self.bill(later["id"])["lines"]], [FOLLOW])
+            # No follow-up window (Saged, 2026-11-23): the visit keeps its own price.
+            self.assertEqual((row.fee, row.is_follow_up), (CONSULT, False))
+            self.assertEqual(self.figures(later["id"]), {"total": CONSULT, "paid": DEPOSIT, "due": CONSULT - DEPOSIT,
+                                                         "credit": 0, "deposit": DEPOSIT})
+            self.assertEqual([line["amount"] for line in self.bill(later["id"])["lines"]], [CONSULT])
 
     def test_a_fee_paid_beyond_the_deposit_is_not_recomputed(self):
         with self.on(0):

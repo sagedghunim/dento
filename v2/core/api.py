@@ -56,7 +56,13 @@ def client_ip(request):
 
 
 def _json_body(request):
-    if not request.body:
+    from django.core.exceptions import RequestDataTooBig
+
+    try:
+        body = request.body
+    except RequestDataTooBig:  # a clear answer, not Django's HTML page (Saged, 2026-11-23)
+        raise ApiError("too_big", _("That is too long to save. Shorten it."), 413)
+    if not body:
         return {}
     try:
         data = json.loads(request.body)

@@ -150,6 +150,21 @@ def expected_cash(opening_float, totals):
     return opening_float + cash + totals["cash_in"] - totals["cash_out"] - totals["expenses"] - totals["payouts"]
 
 
+def require_cash(ctx, shift_id, amount):
+    """Cash never leaves the drawer beyond what is in it (Saged, 2026-11-23): the shift is locked, then summed, so two
+    takings at once can't both pass. 409 not_enough_cash with what the drawer holds."""
+    found = sql.row(ctx, 'SELECT opening_float FROM "finance_shift" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+                    [ctx.clinic_id, shift_id])
+    if found is None:
+        raise not_found("shift")
+    held = expected_cash(found[0], shift_totals(ctx, shift_id))
+    if amount > held:
+        from web.format import money_plain
+
+        raise ApiError("not_enough_cash", _("The drawer has only %(amount)s in cash.") % {"amount": money_plain(max(held, 0))},
+                       409, fields={"amount": "over_drawer"}, extra={"in_drawer": held})
+
+
 def close_shift(ctx, shift_id, counted, note=""):
     """Lock the shift, then sum it, then close it with the count and the difference. A repeat is 409 shift_closed."""
     found = sql.row(ctx, f'SELECT {SHIFT_COLUMNS} FROM "finance_shift" WHERE clinic_id = %s AND id = %s '
@@ -175,6 +190,8 @@ def close_shift(ctx, shift_id, counted, note=""):
 def cash_movement(ctx, kind, amount, reason):
     """Cash in or out of the open shift's drawer, with a reason (F1). Audited."""
     shift_id = shift_for(ctx, "cash")
+    if kind == "out":
+        require_cash(ctx, shift_id, amount)
     movement_id = sql.row(ctx, """
         INSERT INTO "finance_cash_movement" (clinic_id, shift_id, kind, amount, reason, at, by_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
@@ -305,9 +322,13 @@ def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False,
     today = business_day(ctx.clinic)
     if day > today:
         raise ApiError("invalid", _("An expense can't be dated after today."), fields={"day": "future"})
+    if day < today - dt.timedelta(days=366):  # 1990 is a typing slip (Saged, 2026-11-23)
+        raise ApiError("invalid", _("An expense can't be dated more than a year back."), fields={"day": "past"})
     if not purchase and _active_category(ctx, category_id) == "other" and not note.strip():
         raise ApiError("invalid", _("Write what this money was for."), fields={"note": "required"})
     shift_id = shift_for(ctx, "cash") if from_shift else None
+    if shift_id is not None:
+        require_cash(ctx, shift_id, amount)
     found = sql.row(ctx, f"""
         INSERT INTO "finance_expense" (clinic_id, category_id, amount, day, note, shift_id, purchase, created_at,
                                        created_by_id)
@@ -470,10 +491,21 @@ def statement(ctx, membership_id, month):
 def payout(ctx, membership_id, month, amount, method, note):
     """A payout against a month's statement. Cash comes out of the open shift (opened if none is). Audited.
 
-    Payouts aren't capped at the balance: an advance on next month's pay is a payout too.
+    Capped at what the month's statement still owes (Saged, 2026-11-23), never for a month still to come, and cash
+    never beyond what the drawer holds.
     """
     _member(ctx, membership_id)
+    if month > business_day(ctx.clinic).replace(day=1):
+        raise ApiError("invalid", _("A month that hasn't come yet can't be paid."), fields={"month": "future"})
+    left = statement(ctx, membership_id, month)["balance"]
+    if amount > left:
+        from web.format import money_plain
+
+        raise ApiError("over_balance", _("That is more than this month still owes: %(amount)s.")
+                       % {"amount": money_plain(max(left, 0))}, 409, fields={"amount": "over_balance"})
     shift_id = shift_for(ctx, method) if method == "cash" else None
+    if shift_id is not None:
+        require_cash(ctx, shift_id, amount)
     payout_id = sql.row(ctx, """
         INSERT INTO "finance_payout" (clinic_id, membership_id, month, amount, method, shift_id, day, note, created_at,
                                       created_by_id)

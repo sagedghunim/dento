@@ -699,6 +699,7 @@ def add_attachment(ctx, patient_id, appointment_id, title, upload):
 
 # --- Procedure catalogue (design E3) ---------------------------------------------------------------------------
 
+MIN_PRICE = 1000  # 10 EGP: the least a priced procedure costs
 PROCEDURE_TEXT = {"name_ar": 160, "name_en": 160, "category": 40, "description": 500, "description_en": 500, "family": 40}
 PROCEDURE_COLUMNS = ("id, section_id, name_ar, name_en, category, unit, price, typical_min, typical_max, description, "
                      "internal_cost, condition, is_active, sort, description_en, follow_up, family")
@@ -731,6 +732,8 @@ def clean_procedure(data, partial=False):
     for name in ("price", "internal_cost"):
         if not partial or name in data:
             values[name] = parse_money(data.get(name) or 0, name)
+    if 0 < values.get("price", 0) < MIN_PRICE:  # 0.01 EGP is a typing slip (Saged, 2026-11-23)
+        raise ApiError("invalid", _("A price is at least 10 EGP."), fields={"price": "too_low"})
     for name in ("typical_min", "typical_max"):
         if not partial or name in data:
             values[name] = parse_money(data[name], name) if data.get(name) not in (None, "") else None
@@ -740,6 +743,13 @@ def clean_procedure(data, partial=False):
         if not isinstance(data["is_active"], bool):
             raise ApiError("invalid", "is_active must be true or false", fields={"is_active": "boolean"})
         values["is_active"] = data["is_active"]
+    if values.get("family"):  # a main service of the clinic's own: never one of the list's inner keys (2026-11-23)
+        from clinics.specialties import FAMILY_LABELS
+
+        family = " ".join(values["family"].split())
+        if family not in FAMILY_LABELS and (family.startswith(("c-", "+")) or family.lower() in FAMILY_LABELS):
+            raise ApiError("invalid", _("Pick another name for this main service."), fields={"family": "reserved"})
+        values["family"] = family
     if "follow_up" in data:
         from psycopg.types.json import Jsonb
 
@@ -931,6 +941,51 @@ def _not_added_yet(ctx, appointment_id, procedure_id, tooth):
                        fields={"procedure_id": "already_added"})
 
 
+# What needs the natural tooth there (Saged, 2026-11-23): never on a tooth taken out, in this visit or before.
+NEEDS_THE_TOOTH = ("caries", "pulp_caries", "filling", "crown", "root_canal", "open_root_canal")
+GONE = ("extracted", "missing", "implant")
+# FDI: permanent molars are 6-8 in each quarter, primary molars 4-5 (quarters 5-8).
+MOLAR_ONLY = (", molar",)
+
+
+def _is_molar(tooth):
+    quarter, place = divmod(tooth, 10)
+    return place >= 6 if quarter <= 4 else place >= 4
+
+
+def _fits_the_tooth(ctx, appointment, procedure, tooth):
+    """A procedure for a molar only on a molar; a filling, crown or root canal never on a tooth already taken out
+    (an implant or graft after an extraction is fine). Saged, 2026-11-23."""
+    if any(mark in (procedure["name_en"] or "").lower() for mark in MOLAR_ONLY) and not _is_molar(tooth):
+        raise ApiError("wrong_tooth", _("This procedure is for a molar. Tooth %(tooth)s isn't one.") % {"tooth": tooth},
+                       fields={"tooth": "not_molar"})
+    if procedure["condition"] not in NEEDS_THE_TOOTH:
+        return
+    gone = sql.row(ctx, """
+        SELECT EXISTS (SELECT 1 FROM "clinical_visit_procedure" v
+                         JOIN "clinical_procedure" p ON p.clinic_id = v.clinic_id AND p.id = v.procedure_id
+                        WHERE v.clinic_id = %s AND v.appointment_id = %s AND v.tooth = %s AND p.condition = ANY(%s)
+                          AND EXISTS (SELECT 1 FROM "billing_invoice_line" l WHERE l.clinic_id = v.clinic_id
+                                       AND l.id = v.invoice_line_id))
+            OR EXISTS (SELECT 1 FROM "clinical_tooth" t WHERE t.clinic_id = %s AND t.patient_id = %s AND t.tooth = %s
+                        AND t.condition = ANY(%s))""",
+                   [ctx.clinic_id, appointment["id"], tooth, list(GONE), ctx.clinic_id, appointment["patient_id"], tooth,
+                    list(GONE)])[0]
+    if gone:
+        raise ApiError("tooth_gone", _("Tooth %(tooth)s was taken out. It can't take this procedure.") % {"tooth": tooth},
+                       409, fields={"tooth": "gone"})
+
+
+def _fits_the_count(procedure, tooth, qty):
+    """How many one recording takes, by the price list's unit, as a booking counts it (clinics.booking_services):
+    teeth or units up to 20, quadrants 4, arches 2; a case or a session is one; a named tooth is one tooth."""
+    from clinics.booking_services import COUNTED
+
+    most = 1 if tooth is not None and procedure["unit"] == "tooth" else COUNTED.get(procedure["unit"], 1)
+    if qty > most:
+        raise ApiError("invalid", _("At most %(n)s for this procedure.") % {"n": most}, fields={"qty": "too_many"})
+
+
 def record_procedure(ctx, appointment_id, request):
     """POST appointments/{id}/procedures: an invoice line, the record, and the tooth's new state with its history.
 
@@ -974,7 +1029,10 @@ def record_procedure(ctx, appointment_id, request):
     if surfaces and procedure["condition"] and procedure["condition"] not in SURFACE_CONDITIONS:
         raise ApiError("invalid", _("Only caries and fillings take surfaces."), fields={"surfaces": "not_allowed"})
     _not_added_yet(ctx, appointment_id, procedure["id"], tooth)
+    if tooth is not None:
+        _fits_the_tooth(ctx, appointment, procedure, tooth)
     qty = request["qty"]
+    _fits_the_count(procedure, tooth, qty)
     package = None
     if qty == 1 and request.get("use_package", True) and request["unit_price"] is None:
         # A prepaid session of this procedure (F7): the oldest package with sessions left, used at no charge.

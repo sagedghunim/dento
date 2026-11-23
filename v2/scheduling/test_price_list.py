@@ -121,7 +121,7 @@ class TreatmentGoesOnTests(PriceListCase):
         self.assertRegex(courses["today"], r"^\d{4}-\d{2}-\d{2}$")
         doctor = self.a.membership("owner").id
         quote = f"/api/v1/appointments/quote?doctor={doctor}&service={consultation.id}&patient={patient}"
-        self.assertTrue(call(self.desk, "GET", quote).json()["is_follow_up"])  # inside the follow-up window
+        self.assertFalse(call(self.desk, "GET", quote).json()["is_follow_up"])  # no follow-up window (2026-11-23)
         r = call(self.desk, "GET", quote + "&continues=1").json()
         self.assertEqual((r["fee"], r["is_follow_up"]), (consultation.price, False))
         self.assertEqual(self.act(first["id"], "call", "waiting", client=self.owner).status_code, 200)

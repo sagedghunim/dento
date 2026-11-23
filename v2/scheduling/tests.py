@@ -162,7 +162,8 @@ class FollowUpTests(M1TestCase):
     def test_a_consultation_within_the_window_after_an_arrived_one_takes_the_follow_up_price(self):
         first = self._visit(today(self.a), arrive=True)
         second = self._visit(today(self.a) + dt.timedelta(days=14), patient_id=first["patient"]["id"])
-        self.assertEqual((second["fee"], second["is_follow_up"], second["is_new"]), (10000, True, False))
+        # No follow-up window (Saged, 2026-11-23): a return visit costs its own price.
+        self.assertEqual((second["fee"], second["is_follow_up"], second["is_new"]), (self.consult.price, False, False))
         late = self._visit(today(self.a) + dt.timedelta(days=15), patient_id=first["patient"]["id"])
         self.assertEqual((late["fee"], late["is_follow_up"]), (self.consult.price, False))
 
@@ -179,14 +180,14 @@ class FollowUpTests(M1TestCase):
         # The quote agrees with the rule.
         q = call(self.desk, "GET", f"/api/v1/appointments/quote?patient={pid}&doctor={self.a.membership('owner').id}"
                                    f"&service={self.consult.id}&day={today(self.a) + dt.timedelta(days=10)}").json()
-        self.assertEqual((q["fee"], q["is_follow_up"]), (10000, True))
+        self.assertEqual((q["fee"], q["is_follow_up"]), (self.consult.price, False))
 
     def test_a_paid_consultation_counts_and_an_unpaid_no_show_doesnt(self):
         unpaid = self._visit(today(self.a))
         pid = unpaid["patient"]["id"]
         self.assertFalse(self._visit(today(self.a) + dt.timedelta(days=2), patient_id=pid)["is_follow_up"])
         call(self.desk, "POST", f"/api/v1/appointments/{unpaid['id']}/payments", {"amount": 100, "method": "cash"})
-        self.assertTrue(self._visit(today(self.a) + dt.timedelta(days=3), patient_id=pid)["is_follow_up"])
+        self.assertFalse(self._visit(today(self.a) + dt.timedelta(days=3), patient_id=pid)["is_follow_up"])
 
     def test_zero_days_turns_the_rule_off(self):
         call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"follow_up_days": 0}, "expected": {}})
@@ -212,7 +213,7 @@ class FollowUpTests(M1TestCase):
             self.assertEqual(self.act(first["id"], "arrive", "booked", client=desk).status_code, 200)
         with frozen(cairo("2026-11-11T12:00")):
             arrived = self.act(second["id"], "arrive", "booked", client=self.a.client("assistant")).json()["appointment"]
-        self.assertEqual((arrived["fee"], arrived["is_follow_up"]), (10000, True))
+        self.assertEqual((arrived["fee"], arrived["is_follow_up"]), (self.consult.price, False))
         with frozen(cairo("2026-11-12T12:00")):
             kept = self.act(third["id"], "arrive", "booked", client=self.a.client("assistant")).json()["appointment"]
         self.assertEqual((kept["fee"], kept["is_follow_up"], kept["invoice"]["total"]), (self.consult.price, False,

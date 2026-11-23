@@ -34,6 +34,14 @@ class DeletePatientTests(M2TestCase):
     def test_a_file_with_visits_is_hidden_and_comes_back(self):
         visit = self.in_room()
         patient = visit["patient"]["id"]
+        # Not while being seen or owing (Saged, 2026-11-23): finished and paid first.
+        r = call(self.owner, "POST", f"/api/v1/patients/{patient}/delete")
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "patient_busy"))
+        self.assertEqual(self.act(visit["id"], "finish", "in_room").status_code, 200)
+        due = call(self.owner, "GET", f"/api/v1/appointments/{visit['id']}").json()["appointment"]["due"]
+        if due:
+            self.assertEqual(call(self.owner, "POST", f"/api/v1/appointments/{visit['id']}/payments",
+                                  {"amount": due, "method": "card"}).status_code, 201)
         r = call(self.owner, "POST", f"/api/v1/patients/{patient}/delete")
         self.assertEqual((r.status_code, r.json()["result"]), (200, "hidden"))
         self.assertIsNotNone(self.rows(id=patient)[0]["archived_at"])

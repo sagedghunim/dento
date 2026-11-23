@@ -70,8 +70,9 @@ def make(ctx, patient_id, request):
     owed = _owed(ctx, patient_id)
     if owed <= 0:
         raise ApiError("nothing_owed", _("This patient owes nothing to split."), 409)
-    if sql.row(ctx, 'SELECT 1 FROM "billing_installment_plan" WHERE clinic_id = %s AND patient_id = %s AND status = %s',
-               [ctx.clinic_id, patient_id, "active"]):
+    running = sql.row(ctx, 'SELECT id FROM "billing_installment_plan" WHERE clinic_id = %s AND patient_id = %s '
+                           "AND status = 'active'", [ctx.clinic_id, patient_id])
+    if running and not close_if_paid(ctx, running[0]):
         raise ApiError("plan_exists", _("This patient already has installments. Cancel them first."), 409)
     today = business_day(ctx.clinic)
     if request.get("parts"):
@@ -172,7 +173,20 @@ def pay(ctx, patient_id, amount, method):
             record_change(ctx, "installment_plan.respread", "installment_plan", plan["id"],
                           before={"parts": [[p["due_on"].isoformat(), p["amount"]] for p in before]},
                           after={"parts": [[d.isoformat(), a] for d, a in parts]}, patient_id=patient_id)
+    close_if_paid(ctx, plan["id"])
     return read(ctx, patient_id), payments
+
+
+def close_if_paid(ctx, plan_id):
+    """A running plan paid in full is done (Saged, 2026-11-23), so a new one can start. True when it is closed."""
+    total = sql.row(ctx, 'SELECT total FROM "billing_installment_plan" WHERE clinic_id = %s AND id = %s '
+                         "AND status = 'active'", [ctx.clinic_id, plan_id])
+    if total is None or _covered(ctx, [plan_id]).get(plan_id, 0) < total[0]:
+        return False
+    sql.run(ctx, 'UPDATE "billing_installment_plan" SET status = %s, ended_at = %s WHERE clinic_id = %s AND id = %s '
+                 "AND status = 'active'", ["done", timezone.now(), ctx.clinic_id, plan_id])
+    record_change(ctx, "installment_plan.done", "installment_plan", plan_id)
+    return True
 
 
 def cancel(ctx, patient_id):

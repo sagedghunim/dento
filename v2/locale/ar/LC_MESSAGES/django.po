@@ -4632,3 +4632,42 @@ msgstr "الفاتورة"
 
 msgid "Done in a visit"
 msgstr "اتعمل"
+
+msgid "The drawer has only %(amount)s in cash."
+msgstr "الدرج فيه %(amount)s كاش بس."
+
+msgid "A month that hasn't come yet can't be paid."
+msgstr "مينفعش تصرف عن شهر لسه مجاش."
+
+msgid "That is more than this month still owes: %(amount)s."
+msgstr "ده أكتر من الباقي له عن الشهر ده: %(amount)s."
+
+msgid "The bill goes down by the same amount, so the patient doesn't owe it"
+msgstr "الفاتورة تقل بنفس المبلغ، فالمريض ميبقاش عليه حاجة"
+
+msgid "This patient has a visit not finished, money owed or given, or installments running. Finish those first."
+msgstr "المريض ده عنده زيارة لسه مخلصتش، أو فلوس عليه أو ليه، أو تقسيط شغال. خلّصهم الأول."
+
+msgid "This procedure is for a molar. Tooth %(tooth)s isn't one."
+msgstr "الإجراء ده للضروس بس، والسنة %(tooth)s مش ضرس."
+
+msgid "Tooth %(tooth)s was taken out. It can't take this procedure."
+msgstr "السنة %(tooth)s اتخلعت، مينفعش يتعمل عليها الإجراء ده."
+
+msgid "At most %(n)s for this procedure."
+msgstr "أقصى عدد للإجراء ده %(n)s."
+
+msgid "A name is written in letters."
+msgstr "الاسم لازم يتكتب بحروف."
+
+msgid "An expense can't be dated more than a year back."
+msgstr "مينفعش تاريخ المصروف يبقى أقدم من سنة."
+
+msgid "Pick another name for this main service."
+msgstr "اختار اسم تاني للخدمة الرئيسية دي."
+
+msgid "That is too long to save. Shorten it."
+msgstr "الكلام ده طويل أوي. قصّره شوية."
+
+msgid "A price is at least 10 EGP."
+msgstr "أقل سعر 10 جنيه."

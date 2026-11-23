@@ -93,6 +93,11 @@ class RegisterTests(M2TestCase):
         payment = self.pay(visit, 1000, "cash").json()["payment"]
         closed = current_shift(self.a)
         self.close(1000)
+        # The new shift's drawer is empty: cash can't go back from it (Saged, 2026-11-23) until some is put in.
+        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_enough_cash"))
+        self.assertEqual(call(self.owner, "POST", "/api/v1/register/movements",
+                              {"kind": "in", "amount": 500, "reason": "float"}).status_code, 201)
         r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500})
         self.assertEqual(r.status_code, 201, r.content)  # into a shift that opened by itself
         self.assertNotIn(current_shift(self.a), (None, closed))
@@ -213,6 +218,13 @@ class StaffPayTests(M2TestCase):
         closed = current_shift(self.a)
         call(self.owner, "POST", f"/api/v1/register/shifts/{closed}/close", {"counted": 0})
         month = today(self.a).isoformat()[:7]
+        # A payout is capped at what the month owes and cash at the drawer (Saged, 2026-11-23).
+        self.assertEqual(call(self.owner, "PUT", f"/api/v1/finances/pay/{doctor}",
+                              {"monthly_salary": 100000, "version": 0}).status_code, 200)
+        r = call(self.owner, "POST", f"/api/v1/finances/pay/{doctor}/payouts", {"month": month, "amount": 1, "method": "cash"})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_enough_cash"))
+        self.assertEqual(call(self.owner, "POST", "/api/v1/register/movements",
+                              {"kind": "in", "amount": 100, "reason": "float"}).status_code, 201)
         r = call(self.owner, "POST", f"/api/v1/finances/pay/{doctor}/payouts", {"month": month, "amount": 1, "method": "cash"})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertNotIn(current_shift(self.a), (None, closed))

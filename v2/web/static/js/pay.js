@@ -250,7 +250,7 @@ export function initPay({ onChanged } = {}) {
       const option = field("refund_of").selectedOptions[0];
       const amount = parsePiastres(field("refund_amount").value);
       if (!option || !amount) { submitter.say(t("bad_amount")); return; }
-      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
+      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount, lower_bill: !field("refund_lower") || field("refund_lower").checked }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
       if (result && isOk(result)) { toast(t("refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
     } else if (name === "give-back") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/give-back`, {}, [t("give_back"), visit.name].join(" · "));

@@ -24,6 +24,7 @@ from django.utils import timezone
 from accounts.models import User
 from billing import services as billing
 from clinical import services as clinical
+from clinical.services import MOLAR_ONLY, _is_molar
 from clinics.models import Clinic, Membership, Schedule, Section, Service
 from clinics.permissions import effective_codes
 from core import sql
@@ -96,7 +97,7 @@ class Place:
         for service in Service.objects.filter(clinic_id=entry.id, is_active=True, kind="consultation").order_by("sort", "id"):
             self.consultation.setdefault(service.section_id, service)
         self.procedures = {}
-        for row in sql.dicts(self.owner, 'SELECT id, section_id, unit, condition, price FROM "clinical_procedure" '
+        for row in sql.dicts(self.owner, 'SELECT id, section_id, unit, condition, price, name_en FROM "clinical_procedure" '
                                          "WHERE clinic_id = %s AND is_active ORDER BY sort, id", [entry.id]):
             self.procedures.setdefault(row["section_id"], []).append(row)
         self.sessions = {}  # weekday -> [schedule]
@@ -235,6 +236,9 @@ class Place:
             self.counts["teeth"] += 1
             condition = weighted(rng, (("filling", 60), ("root_canal", 25), ("crown", 10), ("extracted", 5)))
             choice = by_condition.get(condition) or by_condition.get("filling")
+            # A molar procedure only on a molar (clinical.services._fits_the_tooth).
+            choice = [p for p in choice or [] if _is_molar(tooth)
+                      or not any(mark in (p.get("name_en") or "").lower() for mark in MOLAR_ONLY)]
             if choice:
                 items.append({"procedure_id": rng.choice(choice)["id"], "tooth": tooth})
         if rng.random() < 0.3:
@@ -350,11 +354,12 @@ class Place:
                 free = finished + dt.timedelta(minutes=1)
                 self.treat(appointment, patient, arrived, called, finished, first_visit)
 
-        if rng.random() < 0.25:
+        amount = rng.choice((3000, 5000, 7500, 10000))
+        held = finance.expected_cash(shift["opening_float"], finance.shift_totals(self.desk, shift["id"]))
+        if rng.random() < 0.25 and amount <= held:  # cash never beyond the drawer (2026-11-23)
             self.at(closes - dt.timedelta(minutes=30))
-            finance.add_expense(self.desk, finance.category_by_code(self.desk, "other"),
-                                rng.choice((3000, 5000, 7500, 10000)), day, rng.choice(("مياه وبوفيه", "أدوات نظافة")),
-                                from_shift=True)
+            finance.add_expense(self.desk, finance.category_by_code(self.desk, "other"), amount, day,
+                                rng.choice(("مياه وبوفيه", "أدوات نظافة")), from_shift=True)
             self.counts["expenses"] += 1
         self.at(closes)
         totals = finance.shift_totals(self.desk, shift["id"])
@@ -398,7 +403,7 @@ class Place:
                 continue
             earned = finance.statement(owner, rule["id"], previous)["balance"]
             if earned > 0:
-                method = "cash" if rule["role"] == "assistant" else "transfer"
+                method = "transfer"  # the drawer rarely holds a month's pay (cash never beyond it, 2026-11-23)
                 finance.payout(owner, rule["id"], previous, earned, method, "")
                 self.counts["payouts"] += 1
 

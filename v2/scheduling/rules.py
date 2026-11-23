@@ -255,8 +255,9 @@ def fee_for(service, eligible, visit_price=""):
         if visit_price == "follow_up" and service.follow_up_price is not None:
             return service.follow_up_price, True
         return service.price, False
-    if service.kind == "consultation" and eligible and service.follow_up_price is not None:
-        return service.follow_up_price, True
+    # No follow-up window (Saged, 2026-11-23): a return visit is never cheaper or free by itself. The doctor sets what
+    # a session after a procedure costs (its follow-up recipe, `visit_price` above); visits of one treatment are
+    # numbered, so "follow-up" is never written on a bill. `eligible` stays for the callers and is ignored.
     return service.price, service.kind == "follow_up"
 
 

@@ -69,6 +69,7 @@
         <label class="field">{% translate "Amount (EGP)" %}<input name="refund_amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
         <button type="button" class="btn danger" data-run="refund">{% translate "Refund" %}</button>
       </div>
+      <label class="check"><input type="checkbox" name="refund_lower" checked> {% translate "The bill goes down by the same amount, so the patient doesn't owe it" %}</label>
     </section>
     <section class="subsection" data-void hidden>
       <button type="button" class="btn danger" data-run="void">{% translate "Void the bill" %}</button>

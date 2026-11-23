@@ -35,7 +35,7 @@ def objects(test, fixture):
     rx = call(doc, "POST", "/api/v1/prescriptions", {"patient_id": patient, "appointment_id": visit["id"],
                                                      "items": [{"name": "Panadol"}]}).json()["prescription"]
     attachment = upload(fixture.client("assistant"), f"/api/v1/patients/{patient}/attachments", PNG).json()["attachment"]
-    own = call(owner, "POST", "/api/v1/procedures", {"name_ar": f"إجراء {uuid.uuid4().hex[:6]}", "price": 100}).json()
+    own = call(owner, "POST", "/api/v1/procedures", {"name_ar": f"إجراء {uuid.uuid4().hex[:6]}", "price": 1000}).json()
     section = call(owner, "GET", "/api/v1/clinic").json().get("sections", [{}])[0].get("id")
     follow = call(doc, "POST", f"/api/v1/appointments/{visit['id']}/follow-ups",
                   {"items": [{"label": "متابعة", "days": 7}, {"label": "متابعة", "days": 14}]}).json()["upcoming"]
@@ -83,10 +83,10 @@ def mutating(o):
                           {"name": "T2", "items": [{"name": "a"}]}, ["settings.medicines"], o.template_version),
         "template remove": ("DELETE", f"/api/v1/prescription-templates/{o.template}", {}, {"x": 1},
                             ["settings.medicines"], None),
-        "procedure add": ("POST", "/api/v1/procedures", {"name_ar": "مصفوفة", "price": 1}, {"name_ar": "مصفوفة 2"},
+        "procedure add": ("POST", "/api/v1/procedures", {"name_ar": "مصفوفة", "price": 1000}, {"name_ar": "مصفوفة 2"},
                           ["settings.manage", "procedures.manage"], None),
-        "procedure edit": ("PATCH", f"/api/v1/procedures/{o.own_procedure}", {"changes": {"price": 5}},
-                           {"changes": {"price": 6}}, ["settings.manage", "prices.edit"], None),
+        "procedure edit": ("PATCH", f"/api/v1/procedures/{o.own_procedure}", {"changes": {"price": 5000}},
+                           {"changes": {"price": 6000}}, ["settings.manage", "prices.edit"], None),
         "procedure remove": ("DELETE", f"/api/v1/procedures/{o.own_procedure}", {}, {"x": 1}, ["settings.manage", "procedures.manage"],
                              None),
         "follow-ups add": ("POST", f"/api/v1/appointments/{v}/follow-ups", {"items": [{"label": "a", "days": 7}]},

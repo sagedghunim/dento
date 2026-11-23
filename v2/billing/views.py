@@ -77,11 +77,16 @@ def add_line_view(request, ctx, data, invoice_id):
     invoice_id = _invoice_id(invoice_id)
     service_id = data.get("service_id")
     unit_price = data.get("unit_price")
+    service_id = validate.ident(service_id, "service_id") if service_id is not None else None
+    most = 1000
+    if service_id is not None:  # a service counts as a booking does: 4 quadrants, 2 arches, 20 teeth (2026-11-23)
+        from clinics.booking_services import count_limit
+
+        most = count_limit(ctx, service_id, "procedure") or 20
     _, version = services.add_line(
-        ctx, invoice_id, validate.choice(data, "kind", ADDABLE_KINDS),
-        validate.ident(service_id, "service_id") if service_id is not None else None,
+        ctx, invoice_id, validate.choice(data, "kind", ADDABLE_KINDS), service_id,
         validate.text(data, "description", 200, required=False),
-        parse_int(data.get("qty", 1), "qty", 1, 1000),
+        parse_int(data.get("qty", 1), "qty", 1, most),
         parse_money(unit_price, "unit_price") if unit_price is not None else None)
     return Result(_invoice_answer(ctx, invoice_id, next(iter(version.values()))), status=201, target_type="invoice",
                   target_id=invoice_id)
@@ -120,7 +125,7 @@ def refund_view(request, ctx, data, payment_id):
     refund, invoice, version = services.refund(
         ctx, payment_id, parse_money(data.get("amount"), "amount", low=1),
         validate.choice(data, "method", METHODS) if method is not None else None,
-        validate.text(data, "note", 200, required=False))
+        validate.text(data, "note", 200, required=False), validate.boolean(data, "lower_bill", True))
     return Result(_payment_answer(ctx, refund, invoice, version), status=201, target_type="payment",
                   target_id=refund["id"])
 

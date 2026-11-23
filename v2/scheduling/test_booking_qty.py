@@ -40,7 +40,7 @@ class BookingQtyTests(M2TestCase):
     def test_the_doctor_records_a_count(self):
         self.sees_money()
         visit = self.in_room()
-        exam = self.procedure("Full examination")
+        exam = self.procedure("Periapical X-ray")  # counted by the tooth; a case is one (Saged, 2026-11-23)
         r = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures", {"procedure_id": exam["id"], "qty": 3})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual((r.json()["procedure"]["qty"], r.json()["procedure"]["amount"]), (3, 3 * exam["price"]))
