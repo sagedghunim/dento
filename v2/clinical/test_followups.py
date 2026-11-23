@@ -257,7 +257,7 @@ class VisitScreenPlanTests(M2TestCase):
         self.assertIn("الشكوى، الفحص، اللي اتعمل، الجاي…", html)
         self.assertEqual(html.count("data-proc="), 6)  # six one-tap procedures
         self.assertIn(f'data-proc="{scaling["id"]}"', html)  # the one this doctor used comes first
-        self.assertLess(html.index(f'data-proc="{scaling["id"]}"'), html.index("data-proc-search"))
+        self.assertLess(html.index("data-proc-search"), html.index("data-top-procedures"))  # the field first (2026-11-23)
         self.assertIn('"upcoming": [{"id":', html)
         self.assertIn('"follow_up": [{"days": 7', html)
         self.assertNotIn('name="unit_price"', html)  # no price field for the doctor

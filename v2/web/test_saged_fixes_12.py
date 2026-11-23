@@ -4,7 +4,8 @@
 2. The visit screen writes the file's chronic conditions, allergies and notes; they show in the patient file.
    The desk still fills them when it opens a new file.
 3. The count next to "Another procedure" says "العدد", never "جرد" (the stock count).
-4. "Something else" under "What comes next" suggests from the price list as the doctor types.
+4. "Something else" under "What comes next" suggests from the price list as the doctor types. Replaced on the same day
+   by the plan (test_saged_fixes_13): each session has the same drop-down procedure field.
 """
 
 from django.utils import translation
@@ -71,8 +72,8 @@ class VisitWordsTests(M2TestCase):
         label = html.split('class="field proc-count">')[1].split("<input")[0]
         self.assertNotIn("جرد", label)
 
-    def test_something_else_has_a_suggestion_row(self):
+    def test_each_planned_session_has_a_procedure_field(self):
         visit = self.in_room()
         html = self.doc.get(f"/visits/{visit['id']}").content.decode()
-        self.assertIn("data-next-other", html)
-        self.assertIn("data-next-suggest", html)
+        self.assertNotIn("data-next-other", html)
+        self.assertIn("data-plan-what", html)

@@ -119,27 +119,34 @@ async function runInArabic() {
     const monthOn = new Date(Date.parse(`${data.today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
     check(!items.some((i) => i.due_on === firstDue) && items.some((i) => i.due_on === monthOn), `the session moved to a month on (${monthOn})`);
 
-    // A manual follow-up: "what" is already picked, one tap on "when" adds it. Double-clicked: once.
-    await page.eval(`(() => { const b = document.querySelector('[data-next-when] [data-days="7"]'); b.click(); b.click(); })()`);
-    await page.until(`${nextCount} === 3`, 10000, "a manual follow-up in one tap");
+    // A plan (Saged, 2026-11-23): none by default; "Make a plan", two sessions a week apart, saved once on a double click.
+    await page.eval(`document.querySelector("[data-plan-start]").click()`);
+    await page.eval(`document.querySelector('[data-plan-count] [data-n="2"]').click()`);
+    check((await page.eval(`document.querySelectorAll("[data-plan-rows] li").length`)) === 2, "two session rows");
+    await page.eval(`(() => { const w = document.querySelector("[data-plan-rows] [data-plan-what]"); w.focus(); })()`);
+    check(await page.eval(`document.querySelectorAll("[data-plan-rows] .picker-list:not([hidden]) [role=option]").length > 2`), "a tap shows the whole list");
+    await page.eval(`(() => { const b = document.querySelector("[data-plan-save]"); b.click(); b.click(); })()`);
+    await page.until(`${nextCount} === 4`, 10000, "the plan is added");
     await sleep(600);
-    check((await planned()).length === 3, "a double click added one");
+    check((await planned()).length === 4, "a double click added it once");
 
     // A dropped connection: it waits for "Try again" and is added once.
     await offline(page, true);
-    await page.eval(`document.querySelector('[data-next-when] [data-days="2"]').click()`);
+    await page.eval(`document.querySelector("[data-plan-start]").click()`);
+    await page.eval(`document.querySelector('[data-plan-count] [data-n="1"]').click()`);
+    await page.eval(`document.querySelector("[data-plan-save]").click()`);
     await page.until(`!document.querySelector("[data-next-add] [data-submit]").hidden`, 45000, "offline: it offers Try again");
     await offline(page, false);
     await page.eval(`document.querySelector("[data-next-add] [data-submit]").click()`);
-    await page.until(`${nextCount} === 4`, 20000, "added after the connection is back");
+    await page.until(`${nextCount} === 5`, 20000, "added after the connection is back");
     await sleep(600);
-    check((await planned()).length === 4, "added once after the drop");
+    check((await planned()).length === 5, "added once after the drop");
     check(await page.eval(`document.querySelector("[data-next-add] [data-submit]").hidden`), "Try again hides");
 
     // The doctor takes one back.
     await page.eval(`document.querySelector("[data-upcoming] li .icon-btn").click()`);
-    await page.until(`${nextCount} === 3`, 10000, "a removed follow-up leaves the list");
-    check((await planned()).length === 3, "dropped on the server");
+    await page.until(`${nextCount} === 4`, 10000, "a removed follow-up leaves the list");
+    check((await planned()).length === 4, "dropped on the server");
 
     // Not on the desk's list before the finish.
     const early = await (await fetch((await page.eval("location.origin")) + "/follow-ups", { headers: { Cookie: `hamada_session=${desk.session}` } })).text();

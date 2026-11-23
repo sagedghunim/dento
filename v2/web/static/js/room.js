@@ -213,6 +213,89 @@ const procTotal = document.querySelector("[data-procs-total]");
 const offers = document.querySelector("[data-offers]");
 const catalogue = new Map((data.procedures || []).map((p) => [p.id, p]));
 
+// The search (Saged, 2026-11-17, 2026-11-23): from one letter, Arabic or English, either name or the section's name
+// ("تج" finds the cosmetic ones). Spelling variants match (أ إ آ ا, ة ه, ى ي); a word that starts with what was typed
+// comes first. Nothing typed is the whole list.
+const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+  .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+const haystack = new Map([...catalogue.values()].map((p) => [p.id, plain(`${p.name} ${p.find || ""}`)]));
+function rankText(text, q) {
+  if (!text.includes(q)) return -1;
+  return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
+}
+function findProcedures(query) {
+  const q = plain(query.trim());
+  if (!q) return [...catalogue.values()];
+  return [...catalogue.values()].map((p) => [rankText(haystack.get(p.id), q), p]).filter(([r]) => r >= 0)
+    .sort((a, b) => a[0] - b[0]).map(([, p]) => p);
+}
+
+// A field that drops down a list (Saged, 2026-11-23): a tap shows every choice, typing narrows it, arrows and Enter
+// pick. `options(q)` answers [{proc} | {label}]; `decorate(button, option)` adds what the caller needs; `onPick`
+// runs on a pick (the done-today adder records through its own click handler instead).
+let pickerCount = 0;
+function picker(input, list, options, decorate, onPick) {
+  const box = input.closest(".picker");
+  list.id = list.id || `picker-${++pickerCount}`;
+  input.setAttribute("aria-controls", list.id);
+  let active = -1;
+  const buttons = () => [...list.querySelectorAll("[role=option]")];
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+  const mark = (i) => {
+    const all = buttons();
+    active = all.length ? (i + all.length) % all.length : -1;
+    all.forEach((b, n) => b.classList.toggle("active", n === active));
+    if (active >= 0) { all[active].scrollIntoView({ block: "nearest" }); input.setAttribute("aria-activedescendant", all[active].id); }
+  };
+  const open = () => {
+    const found = options(input.value);
+    list.replaceChildren(...found.map((o, n) => {
+      const b = el("button", "picker-option");
+      b.type = "button";
+      b.id = `${list.id}-${n}`;
+      b.setAttribute("role", "option");
+      b.tabIndex = -1;
+      const name = el("bdi", null, o.proc ? o.proc.name : o.label);
+      name.dir = "auto";
+      b.append(name);
+      if (o.proc) {
+        b.dataset.proc = o.proc.id;
+        if (o.proc.price != null) b.append(el("span", "count num", moneyText(o.proc.price)));
+      }
+      if (decorate) decorate(b, o);
+      b.addEventListener("mousedown", (event) => event.preventDefault());  // the field keeps the focus
+      b.addEventListener("click", () => { close(); if (onPick) onPick(o); });
+      return b;
+    }));
+    if (!found.length) list.replaceChildren(el("p", "muted picker-none", t("proc_none")));
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    active = -1;
+  };
+  input.addEventListener("focus", open);
+  input.addEventListener("click", () => { if (list.hidden) open(); });
+  input.addEventListener("input", () => { open(); if (input.value.trim()) mark(0); });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (list.hidden) open();
+      mark(active + (event.key === "ArrowDown" ? 1 : -1));
+    } else if (event.key === "Enter") {
+      if (list.hidden) return;
+      event.preventDefault();
+      const all = buttons();
+      const b = all[active] || all[0];
+      if (b) b.click();
+    } else if (event.key === "Escape" && !list.hidden) {
+      event.preventDefault();
+      close();
+    }
+  });
+  box.addEventListener("focusout", (event) => { if (!box.contains(event.relatedTarget)) close(); });
+  document.addEventListener("pointerdown", (event) => { if (!box.contains(event.target)) close(); });
+  return { close };
+}
+
 function removeButton(name) {
   const b = el("button", "icon-btn danger-icon");
   b.type = "button";
@@ -353,40 +436,8 @@ if (adder) {
     record(body);
   });
 
-  // The search (Saged, 2026-11-17): from two letters, Arabic or English, either name or the section's name
-  // ("تج" finds the cosmetic ones). Spelling variants match (أ إ آ ا, ة ه, ى ي); a word that starts with what was
-  // typed comes first. The quick chips above are searched too.
-  const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
-    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
-  const haystack = new Map([...catalogue.values()].map((p) => [p.id, plain(`${p.name} ${p.find || ""}`)]));
-  search.addEventListener("input", () => {
-    const q = plain(search.value.trim());
-    const rank = (p) => {
-      const text = haystack.get(p.id);
-      if (!text.includes(q)) return -1;
-      return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
-    };
-    const found = q.length >= 2 ? [...catalogue.values()].map((p) => [rank(p), p]).filter(([r]) => r >= 0)
-      .sort((a, b) => a[0] - b[0]).slice(0, 12).map(([, p]) => p) : [];
-    results.replaceChildren(...found.map((p) => {
-      const b = el("button", "chip-btn");
-      b.type = "button";
-      b.dataset.run = "";
-      b.dataset.proc = p.id;
-      const name = el("bdi", null, p.name);
-      name.dir = "auto";
-      b.append(name);
-      if (p.price != null) b.append(" ", el("span", "count num", moneyText(p.price)));
-      return b;
-    }));
-    if (q.length >= 2 && !found.length) results.replaceChildren(el("span", "muted", t("proc_none")));
-  });
-  search.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    const first = results.querySelector("[data-proc]");
-    if (first) first.click();
-  });
+  // The whole price list drops down on a tap; the adder's click handler above records the one picked.
+  picker(search, results, (q) => findProcedures(q).map((p) => ({ proc: p })), (b) => { b.dataset.run = ""; });
 }
 
 // --- "Suggest a discount": one tap suggests one of the clinic's discount types, a second tap clears it. ---
@@ -499,6 +550,7 @@ function renderUpcoming(items) {
   nextEmpty.hidden = items.length > 0;
   const send = document.querySelector("[data-next-send]");  // the plan by WhatsApp: only with something to send
   if (send) send.hidden = !items.length;
+  window.dispatchEvent(new CustomEvent("hamada:upcoming"));  // "Make a plan" or "Add to the plan"
 }
 if (nextList) renderUpcoming(data.upcoming || []);
 
@@ -536,76 +588,155 @@ function offerRecipe(p, recorded) {
 
 const nextAdd = document.querySelector("[data-next-add]");
 if (nextAdd) {
-  const form = nextAdd.querySelector("form");
+  const form = nextAdd.querySelector("[data-plan-form]");
+  const start = nextAdd.querySelector("[data-plan-start]");
+  const rowsBox = form.querySelector("[data-plan-rows]");
+  const gaps = form.querySelector("[data-plan-gaps]");
+  const saveButton = form.querySelector("[data-plan-save]");
+  const error = form.querySelector("[data-error]");
+  const rowTemplate = nextAdd.querySelector("[data-plan-row]");
   const adding = new Submitter(nextAdd, { label: t("fu_title") });
-  const retry = nextAdd.querySelector("[data-submit]");
-  // "Something else" suggests from the price list as the doctor types (Saged, 2026-11-23): from one letter, spelling
-  // variants match, a word that starts with it first. A tap picks that procedure; any other text still goes as typed.
-  const other = form.elements.namedItem("other");
-  const suggest = nextAdd.querySelector("[data-next-suggest]");
-  const plainName = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
-    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
-  const named = [...catalogue.values()].map((p) => [p, plainName(`${p.name} ${p.find || ""}`)]);
-  const clearOther = () => { other.value = ""; delete other.dataset.proc; suggest.replaceChildren(); };
-  other.addEventListener("input", () => {
-    delete other.dataset.proc;
-    const q = plainName(other.value.trim());
-    const rank = (text) => (!text.includes(q) ? -1 : text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2);
-    const found = q ? named.map(([p, text]) => [rank(text), p]).filter(([r]) => r >= 0)
-      .sort((a, b) => a[0] - b[0]).slice(0, 8).map(([, p]) => p) : [];
-    suggest.replaceChildren(...found.map((p) => {
-      const b = el("button", "chip-btn");
-      b.type = "button";
-      const name = el("bdi", null, p.name);
-      name.dir = "auto";
-      b.append(name);
-      b.addEventListener("click", () => { other.value = p.name; other.dataset.proc = p.id; suggest.replaceChildren(); });
-      return b;
-    }));
-  });
-  other.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") { const first = suggest.querySelector("button"); if (first) { event.preventDefault(); first.focus(); } }
-  });
+  const retry = form.querySelector("[data-submit]");
+  const fixed = [form.dataset.followLabel, form.dataset.continueLabel];
+  const dateFormat = new Intl.DateTimeFormat(document.documentElement.lang === "en" ? "en-GB" : "ar-EG-u-nu-latn",
+    { weekday: "long", day: "numeric", month: "long" });
+  let gap = { n: 1, unit: 7 };
+
+  const startText = () => { start.textContent = nextList && nextList.children.length ? t("plan_more") : t("plan_make"); };
+  startText();
+  const rows = () => [...rowsBox.children];
+  const rowDays = (li) => {
+    const n = Number(asciiDigits(li.querySelector("[data-plan-n]").value.trim()));
+    return Number.isInteger(n) && n >= 1 ? n * Number(li.querySelector("[data-plan-unit]").value) : null;
+  };
+  // Each row's date: the days add up from this visit, session after session.
+  function dates() {
+    let total = 0;
+    rows().forEach((li, i) => {
+      li.querySelector(".plan-n").textContent = t("plan_session", { n: localDigits(i + 1) });
+      li.querySelector("[data-after-first]").hidden = i > 0;
+      li.querySelector("[data-after-prev]").hidden = i === 0;
+      const days = rowDays(li);
+      const out = li.querySelector("[data-plan-date]");
+      if (days === null || total === null) { total = null; out.textContent = ""; return; }
+      total += days;
+      const day = new Date();
+      day.setDate(day.getDate() + total);
+      out.textContent = `← ${localDigits(dateFormat.format(day))}`;
+    });
+  }
+  function newRow(copyFrom) {
+    const li = rowTemplate.content.firstElementChild.cloneNode(true);
+    const what = li.querySelector("[data-plan-what]");
+    const n = li.querySelector("[data-plan-n]");
+    const unit = li.querySelector("[data-plan-unit]");
+    n.value = gap.n;
+    unit.value = String(gap.unit);
+    if (copyFrom) {  // a new session is what the one before was, at the same gap
+      const was = copyFrom.querySelector("[data-plan-what]");
+      what.value = was.value;
+      if (was.dataset.proc) what.dataset.proc = was.dataset.proc;
+      n.value = copyFrom.querySelector("[data-plan-n]").value;
+      unit.value = copyFrom.querySelector("[data-plan-unit]").value;
+    }
+    const list = li.querySelector(".picker-list");
+    what.id = `plan-what-${++pickerCount}`;
+    li.querySelector(".plan-what label").htmlFor = what.id;
+    picker(what, list, (q) => [
+      ...fixed.filter((label) => !plain(q.trim()) || plain(label).includes(plain(q.trim()))).map((label) => ({ label })),
+      ...findProcedures(q).map((p) => ({ proc: p })),
+    ], null, (o) => {
+      what.value = o.proc ? o.proc.name : o.label;
+      if (o.proc) what.dataset.proc = o.proc.id; else delete what.dataset.proc;
+    });
+    what.addEventListener("input", () => { delete what.dataset.proc; });
+    n.addEventListener("input", dates);
+    unit.addEventListener("change", dates);
+    return li;
+  }
+  function setCount(count) {
+    form.querySelectorAll("[data-plan-count] [data-n]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.n) === count)));
+    while (rows().length > count) rowsBox.lastElementChild.remove();
+    while (rows().length < count) rowsBox.append(newRow(rowsBox.lastElementChild));
+    gaps.hidden = false;
+    saveButton.hidden = Boolean(adding.unknown);
+    error.textContent = "";
+    dates();
+  }
+  function reset() {
+    rowsBox.replaceChildren();
+    form.querySelectorAll("[data-plan-count] [data-n]").forEach((b) => b.setAttribute("aria-pressed", "false"));
+    gaps.hidden = true;
+    saveButton.hidden = true;
+    error.textContent = "";
+  }
   const settle = () => {
     retry.hidden = !adding.unknown;
-    nextAdd.querySelectorAll("[data-run]").forEach((b) => { b.disabled = Boolean(adding.unknown); });
+    saveButton.hidden = Boolean(adding.unknown) || !rows().length;
   };
 
-  async function addNext(body) {
+  start.addEventListener("click", () => {
+    reset();
+    form.hidden = false;
+    start.hidden = true;
+    form.querySelector("[data-plan-count] [data-n]").focus();
+  });
+  form.querySelector("[data-plan-cancel]").addEventListener("click", () => {
+    if (adding.unknown) return;  // an unconfirmed plan: "Try again" or "Discard" first
+    reset();
+    form.hidden = true;
+    start.hidden = false;
+    start.focus();
+  });
+  form.querySelector("[data-plan-count]").addEventListener("click", (event) => {
+    const b = event.target.closest("[data-n]");
+    if (b && !adding.unknown) setCount(Number(b.dataset.n));
+  });
+  form.querySelector("[data-plan-gap]").addEventListener("click", (event) => {
+    const b = event.target.closest("[data-n]");
+    if (!b || adding.unknown) return;
+    gap = { n: Number(b.dataset.n), unit: Number(b.dataset.unit) };
+    form.querySelectorAll("[data-plan-gap] [data-n]").forEach((c) => c.setAttribute("aria-pressed", String(c === b)));
+    rows().forEach((li) => { li.querySelector("[data-plan-n]").value = gap.n; li.querySelector("[data-plan-unit]").value = String(gap.unit); });
+    dates();
+  });
+
+  function items() {
+    let total = 0;
+    const out = [];
+    for (const li of rows()) {
+      const days = rowDays(li);
+      if (days === null) { error.textContent = t("fu_bad_days"); li.querySelector("[data-plan-n]").focus(); return null; }
+      total += days;
+      if (total > 730) { error.textContent = t("plan_too_far"); li.querySelector("[data-plan-n]").focus(); return null; }
+      const what = li.querySelector("[data-plan-what]");
+      const typed = what.value.trim();
+      const proc = what.dataset.proc && catalogue.get(Number(what.dataset.proc));
+      if (proc && proc.name === typed) out.push({ procedure_id: proc.id, days: total });
+      else out.push({ label: typed || fixed[0], days: total });
+    }
+    return out;
+  }
+  async function send(body) {
     const result = await adding.run("POST", `/api/v1/appointments/${id}/follow-ups`, body);
     settle();
     if (!result || !isOk(result)) return;
     renderUpcoming(result.data.upcoming);
-    clearOther();
-    toast(t("fu_added"));
+    reset();
+    form.hidden = true;
+    start.hidden = false;
+    startText();
+    toast(t("plan_saved"));
   }
-  nextAdd.addEventListener("click", (event) => {
-    const chip = event.target.closest("[data-next-when] [data-days], [data-days-custom]");
-    if (!chip || chip.disabled || adding.unknown) return;
-    let days = Number(chip.dataset.days);
-    const error = form.querySelector("[data-error]");
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (adding.unknown) { send(adding.unknown.body); return; }
     error.textContent = "";
-    if (chip.hasAttribute("data-days-custom")) {  // "or after 3 days / 3 weeks / 2 months"
-      const n = Number(form.elements.namedItem("n").value);
-      days = n * Number(form.elements.namedItem("unit").value);
-      if (!Number.isInteger(n) || n < 1 || days > 730) {
-        error.textContent = t("fu_bad_days");
-        form.elements.namedItem("n").focus();
-        return;
-      }
-    }
-    const item = { days };
-    const typed = other.value.trim();
-    const what = form.querySelector('[name="what"]:checked').value;
-    const pickedProc = other.dataset.proc && catalogue.get(Number(other.dataset.proc));
-    if (pickedProc && pickedProc.name === typed) item.procedure_id = pickedProc.id;
-    else if (typed) item.label = typed;
-    else if (what.startsWith("proc:")) item.procedure_id = Number(what.slice(5));
-    else item.label = what.slice(6);
-    addNext({ items: [item] });
+    const list = items();
+    if (list && list.length) send({ items: list });
   });
-  form.addEventListener("submit", (event) => { event.preventDefault(); if (adding.unknown) addNext(adding.unknown.body); });
-  nextAdd.querySelector("[data-discard]").addEventListener("click", settle);
+  form.querySelector("[data-discard]").addEventListener("click", settle);
+  window.addEventListener("hamada:upcoming", startText);
 }
 
 // --- the dental chart, loaded when first opened (the teeth page's part and script) ---

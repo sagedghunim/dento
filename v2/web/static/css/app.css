@@ -1046,8 +1046,7 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 
 /* ---------- the visit's small bill, "what comes next" and the Follow-ups list (Saged, 2026-11-13) ---------- */
 .proc-search { margin-block-start: 12px; max-width: 420px; }
-[data-proc-results], [data-next-suggest] { margin-block-start: 8px; }
-[data-proc-results]:empty, [data-next-suggest]:empty, [data-rx-medicines]:empty { display: none; }
+[data-rx-medicines]:empty { display: none; }
 [data-rx-medicines] { margin-block-start: 8px; }
 .proc-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-block-start: 12px; }
 .proc-confirm[hidden] { display: none; }
@@ -1068,7 +1067,6 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .next-custom { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-block-start: 8px; }
 .next-custom input { width: 5em; }
 .next-add { display: grid; gap: 12px; margin-block-start: 12px; }
-.next-other { margin-block-start: 8px; max-width: 420px; }
 .fu-list, .fu-items, .recipe-steps { list-style: none; margin: 0; padding: 0; }
 .fu-row {
   display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 8px 16px; align-items: center;
@@ -1200,3 +1198,35 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .history-changes dl div { display: flex; gap: 8px; flex-wrap: wrap; }
 .history-changes dt { font-weight: 600; }
 .history-changes dd { margin: 0; white-space: pre-wrap; }
+
+/* A field that drops down a list (Saged, 2026-11-23): a tap shows every choice, a letter narrows it. */
+.picker { position: relative; }
+.picker-list {
+  position: absolute; inset-inline: 0; inset-block-start: 100%; z-index: 20; margin-block-start: 4px;
+  max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / .14);
+}
+.picker-list[hidden] { display: none; }
+.picker-option {
+  display: flex; justify-content: space-between; gap: 12px; align-items: center; width: 100%; min-height: 44px;
+  padding: 8px 12px; border: 0; border-block-end: 1px solid var(--line); background: none; color: var(--ink);
+  font: inherit; text-align: start; cursor: pointer;
+}
+.picker-option:last-child { border-block-end: 0; }
+.picker-option:hover, .picker-option.active { background: var(--teal-tint); }
+.picker-none { margin: 0; padding: 10px 12px; }
+.top-title { margin: 10px 0 6px; font-size: .9rem; }
+/* The follow-up plan: how many sessions, the gap, then one row for each. */
+.plan-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.plan-row {
+  display: grid; grid-template-columns: auto minmax(0, 1.3fr) auto minmax(0, 1fr); gap: 8px 12px; align-items: end;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+}
+.plan-n { align-self: center; white-space: nowrap; }
+.plan-after { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.plan-after input { width: 4.5em; }
+.plan-date { align-self: center; }
+@media (max-width: 760px) {
+  .plan-row { grid-template-columns: 1fr; }
+}

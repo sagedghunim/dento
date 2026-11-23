@@ -74,17 +74,20 @@
           <p class="muted">{% translate "Planned for this session" %}</p>
           <div class="chips">{% for o in plan_offer %}<button type="button" class="chip-btn" data-run data-proc="{{ o.procedure_id }}" data-plan-item="{{ o.plan_item_id }}"><bdi dir="auto">{{ o.name }}</bdi>{% if perms.money %} <span class="count num">{{ o.price|money }}</span>{% endif %}</button>{% endfor %}</div>
         </div>{% endif %}
-        <div class="chips" data-top-procedures>
-          {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi>{% if perms.money %} <span class="count num">{{ p.price|money }}</span>{% endif %}</button>{% endfor %}
-        </div>
+        {# The procedure field comes first (Saged, 2026-11-23): a tap opens the whole price list, a letter narrows it. #}
         <div class="proc-search-row">
-          <label class="field proc-search">{% translate "Another procedure" %}
-            <input type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Type part of its name" %}" data-proc-search>
-          </label>
+          <div class="field proc-search picker">
+            <label for="proc-search">{% translate "Procedure" %}</label>
+            <input id="proc-search" type="search" name="q" dir="auto" autocomplete="off" maxlength="60" enterkeyhint="search" placeholder="{% translate "Tap to see all, or type a letter" %}" role="combobox" aria-expanded="false" aria-controls="proc-results" data-proc-search>
+            <div class="picker-list" id="proc-results" role="listbox" data-proc-results hidden></div>
+          </div>
           {# How many of the next procedure tapped (Saged, 2026-11-19): 3 fillings at once. A tooth number makes it one. #}
           <label class="field proc-count">{% translate "How many" %}<input name="count" type="number" inputmode="numeric" min="1" max="20" value="1" dir="ltr" data-proc-count></label>
         </div>
-        <div class="chips" data-proc-results aria-live="polite"></div>
+        <p class="muted top-title">{% translate "Most used" %}</p>
+        <div class="chips" data-top-procedures>
+          {% for p in top %}<button type="button" class="chip-btn" data-run data-proc="{{ p.id }}"><bdi dir="auto">{{ p.name }}</bdi>{% if perms.money %} <span class="count num">{{ p.price|money }}</span>{% endif %}</button>{% endfor %}
+        </div>
         <div class="proc-confirm" data-proc-confirm hidden>
           <strong><bdi dir="auto" data-proc-name></bdi></strong>
           <label class="field tooth-field" data-tooth-field hidden>{% translate "Tooth number (optional)" %}<input name="tooth" dir="ltr" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="36"></label>
@@ -123,43 +126,58 @@
     </div>
     <ul class="proc-list next-list" data-upcoming></ul>
     {% if patient.phone|whatsapp %}<p class="next-send" data-next-send hidden><a class="btn ghost" href="/follow-ups/whatsapp/{{ patient.id }}" target="_blank" rel="noopener noreferrer">{% translate "Send the plan by WhatsApp" %}</a></p>{% endif %}
-    <p class="empty-note" data-no-upcoming hidden>{% translate "Nothing planned yet." %}</p>
-    <div data-next-add><form class="next-add" novalidate>
-      <fieldset class="group">
-        <legend>{% translate "What" %}</legend>
-        <div class="chips" data-next-what>
-          <label class="chip"><input type="radio" name="what" value="label:{% translate "Follow-up visit" %}" checked><span>{% translate "Follow-up visit" %}</span></label>
-          <label class="chip"><input type="radio" name="what" value="label:{% translate "Continue the treatment" %}"><span>{% translate "Continue the treatment" %}</span></label>
-          {% for p in top %}<label class="chip"><input type="radio" name="what" value="proc:{{ p.id }}"><span><bdi dir="auto">{{ p.name }}</bdi></span></label>{% endfor %}
+    <p class="empty-note" data-no-upcoming hidden>{% translate "No follow-up plan." %}</p>
+    {# A plan, not one date (Saged, 2026-11-23): none by default; "Make a plan" asks how many sessions, then the gap #}
+    {# between them, then what each one is. The days count from the session before; each row shows its date. #}
+    <div data-next-add>
+      <button type="button" class="btn ghost" data-plan-start>{% translate "Make a plan" %}</button>
+      <form class="next-add plan-form" novalidate data-plan-form data-follow-label="{% translate "Follow-up visit" %}" data-continue-label="{% translate "Continue the treatment" %}" hidden>
+        <fieldset class="group">
+          <legend>{% translate "How many sessions?" %}</legend>
+          <div class="chips" data-plan-count>{% for n in "123456" %}<button type="button" class="chip-btn num" data-n="{{ n }}" aria-pressed="false">{{ n|digits }}</button>{% endfor %}</div>
+        </fieldset>
+        <fieldset class="group" data-plan-gaps hidden>
+          <legend>{% translate "The gap between sessions" %}</legend>
+          <div class="chips" data-plan-gap>
+            <button type="button" class="chip-btn" data-n="2" data-unit="1" aria-pressed="false">{% translate "2 days" %}</button>
+            <button type="button" class="chip-btn" data-n="3" data-unit="1" aria-pressed="false">{% translate "3 days" %}</button>
+            <button type="button" class="chip-btn" data-n="1" data-unit="7" aria-pressed="true">{% translate "A week" %}</button>
+            <button type="button" class="chip-btn" data-n="2" data-unit="7" aria-pressed="false">{% translate "2 weeks" %}</button>
+            <button type="button" class="chip-btn" data-n="1" data-unit="30" aria-pressed="false">{% translate "A month" %}</button>
+          </div>
+          <p class="muted">{% translate "Each session can have its own gap below." %}</p>
+        </fieldset>
+        <ol class="plan-rows" data-plan-rows></ol>
+        <p class="form-error" data-error role="alert"></p>
+        <div class="appt-actions">
+          <button type="submit" class="btn" data-plan-save hidden>{% translate "Save the plan" %}</button>
+          <button type="button" class="btn ghost" data-plan-cancel>{% translate "Cancel" %}</button>
+          <button type="submit" class="btn" data-submit hidden>{% translate "Try again" %}</button>
+          <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
         </div>
-        <label class="field next-other">{% translate "Something else (optional)" %}<input name="other" dir="auto" autocomplete="off" maxlength="80" data-next-other></label>
-        <div class="chips" data-next-suggest aria-live="polite"></div>
-      </fieldset>
-      <fieldset class="group">
-        <legend>{% translate "When: one tap adds it" %}</legend>
-        <div class="chips" data-next-when>
-          <button type="button" class="chip-btn" data-run data-days="2">{% translate "In 2 days" %}</button>
-          <button type="button" class="chip-btn" data-run data-days="7">{% translate "In a week" %}</button>
-          <button type="button" class="chip-btn" data-run data-days="14">{% translate "In 2 weeks" %}</button>
-          <button type="button" class="chip-btn" data-run data-days="30">{% translate "In a month" %}</button>
-        </div>
-        <div class="next-custom" role="group" aria-label="{% translate "Another time" %}">
-          <span class="muted">{% translate "Or after" %}</span>
-          <input name="n" type="number" inputmode="numeric" min="1" max="730" dir="ltr" aria-label="{% translate "How many" %}" placeholder="3">
-          <select name="unit" aria-label="{% translate "Unit" %}">
-            <option value="1">{% translate "days" %}</option>
-            <option value="7">{% translate "weeks" %}</option>
-            <option value="30">{% translate "months" %}</option>
-          </select>
-          <button type="button" class="chip-btn" data-run data-days-custom>{% translate "Add" %}</button>
-        </div>
-      </fieldset>
-      <p class="form-error" data-error role="alert"></p>
-      <div class="appt-actions">
-        <button type="submit" class="btn" data-submit hidden>{% translate "Try again" %}</button>
-        <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
-      </div>
-    </form></div>
+      </form>
+      <template data-plan-row>
+        <li class="plan-row">
+          <strong class="plan-n"></strong>
+          <div class="field picker plan-what">
+            <label>{% translate "Procedure" %}</label>
+            <input type="search" dir="auto" autocomplete="off" maxlength="80" placeholder="{% translate "Follow-up visit" %}" role="combobox" aria-expanded="false" data-plan-what>
+            <div class="picker-list" role="listbox" hidden></div>
+          </div>
+          <div class="plan-after" role="group">
+            <span class="muted" data-after-first>{% translate "After this visit by" %}</span>
+            <span class="muted" data-after-prev hidden>{% translate "After the one before by" %}</span>
+            <input type="number" inputmode="numeric" min="1" max="730" dir="ltr" aria-label="{% translate "How many" %}" data-plan-n>
+            <select aria-label="{% translate "Unit" %}" data-plan-unit>
+              <option value="1">{% translate "days" %}</option>
+              <option value="7">{% translate "weeks" %}</option>
+              <option value="30">{% translate "months" %}</option>
+            </select>
+          </div>
+          <span class="plan-date muted" data-plan-date></span>
+        </li>
+      </template>
+    </div>
   </section>
   {% endif %}
 

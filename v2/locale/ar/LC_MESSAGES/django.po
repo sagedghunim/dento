@@ -3312,8 +3312,6 @@ msgstr "اليوم: {day}"
 msgid "Done today"
 msgstr "اللي اتعمل النهارده"
 
-msgid "Another procedure"
-msgstr "إجراء تاني"
 
 msgid "Type part of its name"
 msgstr "اكتب جزء من اسمه"
@@ -3333,11 +3331,7 @@ msgstr "الجاي"
 msgid "The desk books these when the visit is finished."
 msgstr "الاستقبال بيحجزها أول ما الكشف يخلص."
 
-msgid "Nothing planned yet."
-msgstr "مفيش حاجة جاية لسه."
 
-msgid "What"
-msgstr "إيه"
 
 msgid "Follow-up visit"
 msgstr "متابعة"
@@ -3345,11 +3339,7 @@ msgstr "متابعة"
 msgid "Continue the treatment"
 msgstr "استكمال العلاج"
 
-msgid "Something else (optional)"
-msgstr "حاجة تانية (اختياري)"
 
-msgid "When: one tap adds it"
-msgstr "إمتى: ضغطة واحدة تضيفها"
 
 msgid "In 2 days"
 msgstr "بعد يومين"
@@ -3731,11 +3721,7 @@ msgstr "الخصومات والمرتجع والمصاريف والباقات و
 msgid "Give discounts"
 msgstr "عمل خصومات"
 
-msgid "Another time"
-msgstr "مدة أخرى"
 
-msgid "Or after"
-msgstr "أو بعد"
 
 msgid "How many"
 msgstr "العدد"
@@ -4692,3 +4678,54 @@ msgstr "لسه ما اتحفظش في الملف: مفيش نت. بنحاول ت
 
 msgid "The patient's medical file isn't saved yet. Check the connection and try again."
 msgstr "ملف المريض الطبي لسه ما اتحفظش. اتأكد من النت وجرّب تاني."
+
+msgid "Tap to see all, or type a letter"
+msgstr "دوس تشوف الكل، أو اكتب أول حرف"
+
+msgid "Most used"
+msgstr "الأكتر استخدامًا"
+
+msgid "No follow-up plan."
+msgstr "مفيش خطة متابعة."
+
+msgid "Make a plan"
+msgstr "اعمل خطة"
+
+msgid "Add sessions to the plan"
+msgstr "زوّد جلسات على الخطة"
+
+msgid "How many sessions?"
+msgstr "كام جلسة؟"
+
+msgid "The gap between sessions"
+msgstr "الفرق بين كل جلسة والتانية"
+
+msgid "2 days"
+msgstr "يومين"
+
+msgid "3 days"
+msgstr "تلات أيام"
+
+msgid "2 weeks"
+msgstr "أسبوعين"
+
+msgid "Each session can have its own gap below."
+msgstr "وتقدر تغيّر الفرق لكل جلسة لوحدها تحت."
+
+msgid "Save the plan"
+msgstr "احفظ الخطة"
+
+msgid "After this visit by"
+msgstr "بعد الزيارة دي بـ"
+
+msgid "After the one before by"
+msgstr "بعد اللي قبلها بـ"
+
+msgid "Session {n}"
+msgstr "الجلسة {n}"
+
+msgid "The plan goes past two years. Make the gaps shorter."
+msgstr "الخطة بتعدّي سنتين. قصّر الفروق."
+
+msgid "The plan is saved. The desk books it when the visit is finished."
+msgstr "الخطة اتحفظت. المكتب هيحجزها لما الكشف يخلص."
