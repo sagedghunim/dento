@@ -1,10 +1,19 @@
-{% extends "web/base.html" %}{% load i18n hamada %}
+{% extends "web/base.html" %}{% load i18n static hamada %}
 {% block title %}{% translate "Alerts" %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>{% translate "Alerts" %}</h1>
   <p>{% translate "What the team did with money and records in the last two months: removed procedures and bill lines, discounts, refunds, voided bills, the register short or over, price changes, stock counts, and a patient's file changed after the visit ended." %}</p>
 </div>
+{# The owner picks which kinds reach them (Saged, 2026-11-24); each switch saves at once. #}
+<details class="card alert-settings" data-alert-settings>
+  <summary>{% translate "Which alerts reach you" %}{% if some_off %} <span class="pill grey">{% translate "Some are off" %}</span>{% endif %}</summary>
+  <p class="muted">{% translate "Turn off what you don't want to hear about. It is still kept in the patient's file and the records." %}</p>
+  <div class="switch-list">
+    {% for k in kinds %}<label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% endfor %}
+  </div>
+  <p class="muted" role="status" data-settings-status></p>
+</details>
 <section class="card">
   {% if items %}
   <ul class="alert-list">
@@ -27,3 +36,4 @@
   {% else %}<p class="empty-note">{% translate "Nothing to report. The team hasn't removed, discounted or refunded anything lately." %}</p>{% endif %}
 </section>
 {% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/alerts.js' %}"></script>{% endblock %}

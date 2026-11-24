@@ -89,6 +89,8 @@ class Membership(models.Model):
     role = models.CharField(max_length=10, choices=Role.choices)
     # The owner opened their alerts up to here (web/alerts.py, Saged 2026-11-19); newer ones are counted.
     alerts_seen_at = models.DateTimeField(null=True, blank=True)
+    # The kinds of alerts the owner turned off (web/alerts.py KINDS, Saged 2026-11-24); null: all on.
+    alerts_off = models.JSONField(null=True, blank=True)
     display_name = models.CharField(max_length=120)
     display_name_en = models.CharField(max_length=120, blank=True, default="", db_default="")
     title = models.CharField(max_length=120, blank=True, default="")

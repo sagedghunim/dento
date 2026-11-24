@@ -5,6 +5,8 @@ a price change, a voided expense and a stock count that changed. The change log 
 one with who and when, so nothing new is written when they happen: this reads it on its index (clinic, at DESC).
 
 The owner only. Opening the page marks them seen (Membership.alerts_seen_at); the side bar counts the newer ones.
+The owner turns kinds of alerts off and on (Membership.alerts_off, Saged 2026-11-24): an off kind is neither listed
+nor counted.
 """
 
 import datetime as dt
@@ -16,20 +18,61 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET
 
+from audit.services import record_change
 from core import sql
-from core.api import page
+from core.api import Result, api, page
 from core.days import local_iso
+from core.errors import ApiError
 
 from .http import clinic_page
 
-ACTIONS = ("visit_procedure.remove", "invoice.line_remove", "invoice.discount", "payment.refund", "invoice.void",
-           "shift.close", "procedure.price", "expense.void", "item.count", "patient.hide", "patient.delete")
+# The kinds the owner can turn off, in the settings' order: (key, the change-log actions, the label's msgid).
+# "late" is any change to a file after its visit had finished (Saged, 2026-11-22: web.file_history).
+KINDS = (
+    ("procedure", ("visit_procedure.remove",), "Removed a recorded procedure"),
+    ("line", ("invoice.line_remove",), "Removed a line from a bill"),
+    ("discount", ("invoice.discount",), "Gave a discount"),
+    ("refund", ("payment.refund",), "Refunded money to a patient"),
+    ("void", ("invoice.void",), "Voided a bill"),
+    ("register", ("shift.close",), "The register was short or over"),
+    ("cash", ("cash.in", "cash.out"), "Money added to or taken from the drawer"),
+    ("price", ("procedure.price",), "Changed a price"),
+    ("expense", ("expense.void",), "Voided an expense"),
+    ("stock", ("item.count",), "A stock count changed the quantity"),
+    ("patient", ("patient.hide", "patient.delete"), "Deleted a patient"),
+    ("late", (), "A file changed after its visit ended"),
+)
+KEYS = tuple(k for k, _a, _l in KINDS)
+ACTIONS = tuple(a for _k, actions, _l in KINDS for a in actions)
 DAYS = 60
 LIMIT = 150
-# A register closed with the count matching is not news.
-# Plus any change to a file after its visit had finished (Saged, 2026-11-22: web.file_history).
-_WHERE = ("clinic_id = %s AND (action = ANY(%s) OR details->>'late' = 'true') AND at >= %s "
-          "AND NOT (action = 'shift.close' AND coalesce((details->'after'->>'difference')::bigint, 0) = 0)")
+# A register closed with the count matching is not news, nor a bill line the doctor's removed procedure took with it
+# (that procedure's own alert says it).
+_WHERE = ("clinic_id = %s AND (action = ANY(%s){late}) AND at >= %s "
+          "AND NOT (action = 'shift.close' AND coalesce((details->'after'->>'difference')::bigint, 0) = 0) "
+          "AND NOT (action = 'invoice.line_remove' AND details->>'from_procedure' = 'true')")
+
+
+def _labels():
+    # Written out so the string catalogue finds them (core.i18n reads the gettext calls).
+    return {"procedure": _("Removed a recorded procedure"), "line": _("Removed a line from a bill"),
+            "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"), "void": _("Voided a bill"),
+            "register": _("The register was short or over"), "cash": _("Money added to or taken from the drawer"),
+            "price": _("Changed a price"), "expense": _("Voided an expense"),
+            "stock": _("A stock count changed the quantity"), "patient": _("Deleted a patient"),
+            "late": _("A file changed after its visit ended")}
+
+
+def off_kinds(ctx):
+    return set(ctx.membership.alerts_off or ()) & set(KEYS)
+
+
+def _where(ctx):
+    """(sql, actions) for the kinds still on."""
+    off = off_kinds(ctx)
+    actions = [a for key, kind_actions, _l in KINDS if key not in off for a in kind_actions]
+    late = "" if "late" in off else " OR details->>'late' = 'true'"
+    return _WHERE.format(late=late), actions
 
 
 def _since():
@@ -46,16 +89,18 @@ def unseen(ctx):
         return 0
     seen = ctx.membership.alerts_seen_at
     since = max(seen, _since()) if seen else _since()
-    found = sql.row(ctx, f'SELECT count(*) FROM (SELECT 1 FROM "audit_change" WHERE {_WHERE} LIMIT 100) a',
-                    [ctx.clinic_id, list(ACTIONS), since])
+    where, actions = _where(ctx)
+    found = sql.row(ctx, f'SELECT count(*) FROM (SELECT 1 FROM "audit_change" WHERE {where} LIMIT 100) a',
+                    [ctx.clinic_id, actions, since])
     return found[0]
 
 
 def items(ctx):
     """The latest alerts, newest first, each with who, when, what and the patient when there is one."""
+    where, actions = _where(ctx)
     rows = sql.dicts(ctx, f'SELECT id, action, membership_id, target_id, patient_id, details, at FROM "audit_change" '
-                          f"WHERE {_WHERE} ORDER BY at DESC, id DESC LIMIT %s",
-                     [ctx.clinic_id, list(ACTIONS), _since(), LIMIT])
+                          f"WHERE {where} ORDER BY at DESC, id DESC LIMIT %s",
+                     [ctx.clinic_id, actions, _since(), LIMIT])
     if not rows:
         return []
     for r in rows:  # jsonb read as text by the raw cursor
@@ -137,6 +182,12 @@ def items(ctx):
             item["what"] = _("The register was short") if difference < 0 else _("The register was over")
             item["amount"] = abs(difference)
             item["level"] = "bad" if difference < 0 else "info"
+        elif action in ("cash.in", "cash.out"):
+            # Cash the desk put in or took out that is no patient's payment nor an expense (Saged, 2026-11-24).
+            item["what"] = _("Added money to the drawer") if action == "cash.in" else _("Took money out of the drawer")
+            item["detail"] = d.get("reason", "")
+            item["amount"] = d.get("amount")
+            item["level"] = "info" if action == "cash.in" else "warn"
         elif action == "procedure.price":
             item["what"] = _("Changed a price")
             item["detail"] = procedures.get(r["target_id"], "")
@@ -190,4 +241,27 @@ def alerts_page(request, ctx):
         ctx.membership.alerts_seen_at = now  # the side bar on this page counts none
     except OperationalError:
         pass
-    return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS})
+    off = off_kinds(ctx)
+    labels = _labels()
+    kinds = [{"key": key, "label": labels[key], "on": key not in off} for key in KEYS]
+    return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS,
+                                               "kinds": kinds, "some_off": bool(off)})
+
+
+@api("PUT", key=False)
+def alert_settings_view(request, ctx, data):
+    """PUT {off: [kind, ...]}: the kinds of alerts the owner doesn't want (absolute: a resend changes nothing)."""
+    if not sees(ctx):
+        raise ApiError("forbidden", _("Only the account's owner can change this."), 403)
+    off = data.get("off")
+    if not isinstance(off, list) or not all(isinstance(k, str) and k in KEYS for k in off):
+        raise ApiError("invalid", "off must list alert kinds", fields={"off": "invalid"})
+    off = sorted(set(off))
+    from clinics.models import Membership
+
+    before = sorted(off_kinds(ctx))
+    Membership.objects.filter(clinic_id=ctx.clinic_id, id=ctx.membership_id).update(alerts_off=off or None)
+    if before != off:
+        record_change(ctx, "alerts.settings", "membership", ctx.membership_id, before={"off": before},
+                      after={"off": off})
+    return Result({"off": off})

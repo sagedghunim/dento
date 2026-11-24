@@ -7,6 +7,7 @@ from . import alerts, file_history, finance_pages, price_pages, followup_pages, 
 urlpatterns = [
     path("today", pages.today_page, name="today"),
     path("alerts", alerts.alerts_page, name="alerts"),
+    path("api/v1/alerts/settings", alerts.alert_settings_view),
     path("today/queue", pages.today_queue, name="today-queue"),
     path("today/walk-in", pages.walk_in_defaults, name="walk-in-defaults"),
     path("patients", pages.patients_page, name="patients"),

@@ -56,7 +56,7 @@ class FinancesPageTests(FinancesCase):
             self.assertIn(marker, expenses, marker)
         register = self.owner.get("/finances?tab=register").content.decode()
         for marker in ("data-new-expense data-from-drawer", 'id="expense-dialog"', 'name="category_id"',
-                       'data-cash="in"', 'id="cash-dialog"', 'id="close-dialog"', "دفع مصروف", "حركة أخرى للخزنة"):
+                       'data-cash="in"', 'id="cash-dialog"', 'id="close-dialog"', "دفع مصروف", "زوّد فلوس في الخزنة"):
             self.assertIn(marker, register, marker)
         # No generic cash in / cash out buttons: money out is an expense by its category.
         self.assertNotIn('data-cash="out"', register)

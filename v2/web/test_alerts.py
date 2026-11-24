@@ -43,3 +43,47 @@ class AlertTests(M2TestCase):
         # Opened: no count any more, and the row is no longer new.
         self.assertNotIn('class="nav-count', self.owner.get("/patients").content.decode())
         self.assertNotIn("is-new", self.owner.get("/alerts").content.decode())
+
+
+class AlertChoiceTests(AlertTests):
+    """Saged, 2026-11-24: one alert for the doctor's removed procedure, drawer money in and out, and the owner turning
+    kinds of alerts off."""
+
+    def rows(self):
+        page = self.owner.get("/alerts").content.decode()
+        return page.split('class="alert-list"', 1)[1].split("</ul>", 1)[0] if 'class="alert-list"' in page else ""
+
+    def test_the_doctors_removed_procedure_is_one_alert_not_two(self):
+        self.remove_a_procedure()
+        rows = self.rows()
+        self.assertIn("شال إجراء", rows)
+        self.assertNotIn("شال بند من فاتورة", rows)
+
+    def test_money_put_in_or_taken_out_of_the_drawer_is_an_alert_with_its_reason(self):
+        call(self.desk, "POST", "/api/v1/register/open", {"opening_float": 0})
+        r = call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": "200", "reason": "فكة من البنك"})
+        self.assertEqual(r.status_code, 201, r.content)
+        rows = self.rows()
+        self.assertIn("حط فلوس في الخزنة", rows)
+        self.assertIn("فكة من البنك", rows)
+        page = self.desk.get("/finances?tab=register").content.decode()
+        self.assertIn('data-cash="in"', page)
+        self.assertNotIn('data-cash="out"', page)  # money out is an expense, by its category
+
+    def test_the_owner_turns_a_kind_off_and_it_is_neither_listed_nor_counted(self):
+        self.remove_a_procedure()
+        self.owner.get("/alerts")  # seen
+        r = call(self.owner, "PUT", "/api/v1/alerts/settings", {"off": ["procedure"]})
+        self.assertEqual((r.status_code, r.json()["off"]), (200, ["procedure"]), r.content)
+        self.remove_a_procedure()
+        self.assertNotIn('class="nav-count', self.owner.get("/patients").content.decode())
+        page = self.owner.get("/alerts").content.decode()
+        self.assertNotIn("شال إجراء", self.rows())
+        self.assertIn('value="procedure">', page)  # its switch shows off
+        self.assertIn('value="line" checked', page)
+        # Back on: they are listed again.
+        self.assertEqual(call(self.owner, "PUT", "/api/v1/alerts/settings", {"off": []}).status_code, 200)
+        self.assertIn("شال إجراء", self.rows())
+        # The owner only, and only known kinds.
+        self.assertEqual(call(self.desk, "PUT", "/api/v1/alerts/settings", {"off": []}).status_code, 403)
+        self.assertEqual(call(self.owner, "PUT", "/api/v1/alerts/settings", {"off": ["nope"]}).status_code, 400)

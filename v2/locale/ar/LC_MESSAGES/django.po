@@ -4843,3 +4843,33 @@ msgstr "كان معادها {day}"
 
 msgid "Nearest free day: {day}"
 msgstr "أقرب يوم فاضي: {day}"
+
+msgid "The register was short or over"
+msgstr "الخزنة كان فيها عجز أو زيادة"
+
+msgid "Money added to or taken from the drawer"
+msgstr "فلوس اتحطت في الخزنة أو اتسحبت منها"
+
+msgid "A file changed after its visit ended"
+msgstr "ملف مريض اتعدّل بعد ما الكشف خلص"
+
+msgid "Added money to the drawer"
+msgstr "حط فلوس في الخزنة"
+
+msgid "Took money out of the drawer"
+msgstr "سحب فلوس من الخزنة"
+
+msgid "Which alerts reach you"
+msgstr "التنبيهات اللي توصلك"
+
+msgid "Some are off"
+msgstr "فيه حاجات مقفولة"
+
+msgid "Turn off what you don't want to hear about. It is still kept in the patient's file and the records."
+msgstr "اقفل اللي مش عايز يوصلك عنه تنبيه. هيفضل متسجل في ملف المريض والسجلات عادي."
+
+msgid "Add money to the drawer"
+msgstr "زوّد فلوس في الخزنة"
+
+msgid "Alert settings"
+msgstr "إعدادات التنبيهات"

@@ -412,7 +412,7 @@ def remove_visit_line(ctx, appointment, line_id):
     if found is None or found[2] != "open":
         return None
     invoice = _invoice(found)
-    return drop_line(ctx, invoice, appointment, invoice_line(ctx, invoice["id"], line_id))
+    return drop_line(ctx, invoice, appointment, invoice_line(ctx, invoice["id"], line_id), from_procedure=True)
 
 
 def invoice_line(ctx, invoice_id, line_id):
@@ -421,7 +421,7 @@ def invoice_line(ctx, invoice_id, line_id):
     return dict(zip(LINE_FIELDS, found)) if found else None
 
 
-def drop_line(ctx, invoice, appointment, line):
+def drop_line(ctx, invoice, appointment, line, from_procedure=False):
     """Take a line off an open invoice, under the appointment's and the invoice's locks. The caller decided who may.
 
     Shared by remove_line (the desk) and a doctor removing a procedure recorded by mistake (clinical
@@ -449,7 +449,9 @@ def drop_line(ctx, invoice, appointment, line):
                   before={"line": line["id"], "kind": line["kind"], "service_id": line["service_id"],
                           "description": line["description"], "qty": line["qty"], "unit_price": line["unit_price"],
                           "amount": amount, "from_list": line["from_list"]},
-                  after={"discount": discount} if percent is not None else None)
+                  after={"discount": discount} if percent is not None else None,
+                  # The doctor removed the procedure (its own alert says so): the owner hears of it once (Saged, 2026-11-24).
+                  **({"from_procedure": True} if from_procedure else {}))
     return updated
 
 
