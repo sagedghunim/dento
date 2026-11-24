@@ -33,11 +33,13 @@ export function soundKeys(text) {
     .map((word) => (HAS_ARABIC.test(word) ? arabicKey(word) : latinKey(word))).filter(Boolean);
 }
 
-/** Does Arabic typed text sound like the start of a word of a Latin text? The typed words in order, from any word. */
+/** Does Arabic typed text sound like the start of a word of a Latin text? The typed words in order, from any word.
+ *  One letter is enough (Saged, 2026-11-24: "ب" lists Brufen, Panadol...), but then only the text's first word counts. */
 export function soundsLike(typed, text) {
   if (!HAS_ARABIC.test(typed || "")) return false;
   const q = soundKeys(typed).join("");
-  if (q.length < 2) return false;
+  if (!q) return false;
   const words = soundKeys(text);
+  if (q.length < 2) return Boolean(words[0] && words[0].startsWith(q));
   return words.some((_, i) => words.slice(i).join("").startsWith(q));
 }

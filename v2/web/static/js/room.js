@@ -895,7 +895,10 @@ if (rxDialog) {
     const rank = (m) => {
       const text = plainText(`${m.name} ${m.generic || ""}`);
       if (!q) return -1;
-      if (!text.includes(q)) return soundsLike(medInput.value, m.name) ? 3 : soundsLike(medInput.value, m.generic) ? 4 : -1;
+      // One letter looks at the names only, so "ب" lists Brufen and Panadol, not every ingredient with a B in it.
+      if (!text.includes(q)) {
+        return soundsLike(medInput.value, m.name) ? 3 : q.length > 1 && soundsLike(medInput.value, m.generic) ? 4 : -1;
+      }
       return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
     };
     const found = medicines.map((m) => [rank(m), m]).filter(([r]) => r >= 0)
