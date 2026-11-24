@@ -86,3 +86,25 @@ class CodeStepTests(ShardTestCase):
         self.assertEqual({(r.status_code, r.json()["error"]["code"]) for r in answers}, {(400, "code_used")})
         # Still in the half sign-in: a wrong code is the first strike, not the sixth.
         self.assertEqual(post(other, "/api/v1/auth/code", {"code": "000000"}).json()["error"]["code"], "invalid_code")
+
+
+class PatientListStatusTests(M2TestCase):
+    """The patient list said "Booked today · Turn 6" for a patient the doctor had already seen (Saged, 2026-11-24)."""
+
+    def search(self, name):
+        r = self.desk.get("/patients/search", {"q": name}, headers={"X-Membership": str(self.desk.membership_id)})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        return r.content.decode()
+
+    def badge(self, name):
+        html = self.search(name)
+        return html.split('data-today-status="')[1].split('"')[0] if 'data-today-status="' in html else None
+
+    def test_the_list_shows_what_todays_visit_is_now(self):
+        visit = self.in_room()
+        name = visit["patient"]["name"]
+        self.assertEqual(self.badge(name), "in_room")
+        self.assertEqual(self.act(visit["id"], "finish", "in_room", client=self.doc).status_code, 200)
+        self.assertEqual(self.badge(name), "done")
+        html = self.search(name)
+        self.assertNotIn("Booked today", html)

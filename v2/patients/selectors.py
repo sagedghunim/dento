@@ -154,7 +154,8 @@ def _with_details(ctx, hits, today):
           LEFT JOIN LATERAL (
               SELECT a.id, a.queue_no, a.doctor_id, a.status FROM "scheduling_appointment" a
                WHERE a.clinic_id = p.clinic_id AND a.patient_id = p.id AND a.day = %s AND a.status <> 'cancelled'
-               ORDER BY a.id LIMIT 1) t ON true
+               -- a visit still open first, else the latest: a finished one never reads "booked" (Saged, 2026-11-24)
+               ORDER BY a.status IN ('done', 'no_show'), a.id DESC LIMIT 1) t ON true
           LEFT JOIN LATERAL (
               SELECT a.day FROM "scheduling_appointment" a
                WHERE a.clinic_id = p.clinic_id AND a.patient_id = p.id AND a.day < %s AND a.status = 'done'
