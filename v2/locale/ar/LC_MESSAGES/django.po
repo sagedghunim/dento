@@ -4873,3 +4873,6 @@ msgstr "زوّد فلوس في الخزنة"
 
 msgid "Alert settings"
 msgstr "إعدادات التنبيهات"
+
+msgid "Take money out for something that isn't an expense"
+msgstr "طلّع فلوس لحاجة مش مصروف"

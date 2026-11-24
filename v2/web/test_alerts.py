@@ -68,7 +68,12 @@ class AlertChoiceTests(AlertTests):
         self.assertIn("فكة من البنك", rows)
         page = self.desk.get("/finances?tab=register").content.decode()
         self.assertIn('data-cash="in"', page)
-        self.assertNotIn('data-cash="out"', page)  # money out is an expense, by its category
+        self.assertIn('data-cash="out"', page)  # the spare way out
+        r = call(self.desk, "POST", "/api/v1/register/movements", {"kind": "out", "amount": "50", "reason": "تصليح طارئ"})
+        self.assertEqual(r.status_code, 201, r.content)
+        rows = self.rows()
+        self.assertIn("سحب فلوس من الخزنة", rows)
+        self.assertIn("تصليح طارئ", rows)
 
     def test_the_owner_turns_a_kind_off_and_it_is_neither_listed_nor_counted(self):
         self.remove_a_procedure()

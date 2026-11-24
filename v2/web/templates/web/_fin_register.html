@@ -37,7 +37,9 @@
   {# Money the desk puts in or takes out that is no patient's payment nor an expense (Saged, 2026-11-24). #}
   {% if perms.cash_moves %}<div class="shift-actions">
     <button type="button" class="btn ghost" data-cash="in"><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add money to the drawer" %}</button>
-  </div>{% endif %}
+  </div>
+  {# A spare way out for the odd case that is no expense (Saged, 2026-11-24): quiet, with a reason, and the owner is told. #}
+  <p class="quiet-link"><button type="button" class="link-btn" data-cash="out">{% translate "Take money out for something that isn't an expense" %}</button></p>{% endif %}
 
   {% if current and current.movements %}
   <h3 class="sub-title">{% translate "Drawer movements in this shift" %}</h3>

@@ -58,8 +58,8 @@ class FinancesPageTests(FinancesCase):
         for marker in ("data-new-expense data-from-drawer", 'id="expense-dialog"', 'name="category_id"',
                        'data-cash="in"', 'id="cash-dialog"', 'id="close-dialog"', "دفع مصروف", "زوّد فلوس في الخزنة"):
             self.assertIn(marker, register, marker)
-        # No generic cash in / cash out buttons: money out is an expense by its category.
-        self.assertNotIn('data-cash="out"', register)
+        # Money out is an expense by its category; a quiet spare way out stays for the odd case (Saged, 2026-11-24).
+        self.assertIn('data-cash="out"', register)
         self.assertTrue("data-open-shift" in register or "data-close-shift" in register)  # one, by the shift's state
         self.assertIn("تُفتح تلقائيًا مع أول دفعة نقدية", register)  # says plainly that it opens by itself
         pay = self.owner.get("/finances?tab=pay").content.decode()
