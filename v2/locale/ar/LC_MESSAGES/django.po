@@ -4891,3 +4891,9 @@ msgstr "ما اتعدّتش"
 
 msgid "closed by itself"
 msgstr "اتقفلت لوحدها"
+
+msgid "Tap to pick a ready prescription"
+msgstr "دوس واختار روشتة جاهزة"
+
+msgid "Type or tap to pick a medicine"
+msgstr "اكتب اسم الدوا أو دوس واختار"

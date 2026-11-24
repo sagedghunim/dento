@@ -798,9 +798,11 @@ if (rxDialog) {
   const form = rxDialog.querySelector("form");
   const lines = rxDialog.querySelector("[data-rx-lines]");
   const picks = rxDialog.querySelector("[data-rx-templates]");
+  const chosen = rxDialog.querySelector("[data-rx-chosen]");
   const list = rxDialog.querySelector("[data-rx-medicines]");
   const writing = new Submitter(rxDialog, { label: t("rx_number", { n: "" }) });
   let medicines = [];
+  let templates = [];
   let library = false;
   wireClose(rxDialog);
 
@@ -825,15 +827,85 @@ if (rxDialog) {
     lines.append(li);
   }
 
-  // A ready prescription is one tap on, one tap off (Saged, 2026-11-24): its medicines come in together and go out
-  // together, it is never added twice, and its chip says it is in (a tick, and an x to take it out).
+  // A field that drops a list under it (Saged, 2026-11-25): a tap opens it, typing filters it, arrows and Enter pick.
+  // Our own list, not the browser's <datalist>, whose drop-down froze on Windows (2026-11-19).
+  function combo(input, listEl, options, onEnter) {
+    let active = -1;
+    let shown = [];
+    const close = () => {
+      listEl.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      active = -1;
+    };
+    const mark = () => {
+      [...listEl.children].forEach((li, i) => li.classList.toggle("active", i === active));
+      const li = listEl.children[active];
+      if (li) { input.setAttribute("aria-activedescendant", li.id); li.scrollIntoView({ block: "nearest" }); }
+      else input.removeAttribute("aria-activedescendant");
+    };
+    const choose = (item) => { if (rxDialog.dataset.busy || writing.unknown) return; item.pick(); };
+    function open() {
+      shown = options(input.value);
+      active = -1;
+      listEl.replaceChildren(...shown.map((item, i) => {
+        const li = el("li", item.on ? "on" : null);
+        li.id = `${listEl.id}-${i}`;
+        li.setAttribute("role", "option");
+        li.setAttribute("aria-selected", item.on ? "true" : "false");
+        const name = el("bdi", null, item.label);
+        name.dir = "auto";
+        li.append(name);
+        if (item.on) { const tick = el("span", "combo-tick", "✓"); tick.setAttribute("aria-hidden", "true"); li.append(tick); }
+        li.addEventListener("mousedown", (event) => event.preventDefault());  // the field keeps the focus
+        li.addEventListener("click", () => choose(item));
+        return li;
+      }));
+      listEl.hidden = !shown.length;
+      input.setAttribute("aria-expanded", shown.length ? "true" : "false");
+    }
+    input.addEventListener("focus", open);
+    input.addEventListener("click", () => { if (listEl.hidden) open(); });
+    input.addEventListener("input", open);
+    input.addEventListener("blur", close);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (listEl.hidden) { open(); return; }
+        if (!shown.length) return;
+        active = (active + (event.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length;
+        mark();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (active >= 0 && !listEl.hidden) choose(shown[active]); else if (onEnter) onEnter();
+      } else if (event.key === "Escape" && !listEl.hidden) {
+        event.preventDefault();   // closes the list, not the sheet
+        event.stopPropagation();
+        close();
+      }
+    });
+    return { open, close };
+  }
+
+  const plainText = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+
+  // A ready prescription is one pick on, one pick off (Saged, 2026-11-24): its medicines come in together and go out
+  // together, it is never added twice; the chosen ones show under the field, each with an x to take it out.
   const linesOf = (rxId) => [...lines.children].filter((li) => li.dataset.fromRx === String(rxId));
   function markPicks() {
-    picks.querySelectorAll("[data-rx-pick]").forEach((b) => {
-      const on = linesOf(b.dataset.rxPick).length > 0;
-      b.setAttribute("aria-pressed", on ? "true" : "false");
-      b.classList.toggle("on", on);
-    });
+    chosen.replaceChildren(...templates.filter((r) => linesOf(r.id).length).map((r) => {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      b.dataset.run = "";
+      b.setAttribute("aria-pressed", "true");
+      b.setAttribute("aria-label", `${t("remove")}: ${r.name}`);
+      const name = el("bdi", null, r.name);
+      name.dir = "auto";
+      b.append(name, " ×");
+      b.addEventListener("click", () => takeOut(r));
+      return b;
+    }));
   }
   function takeOut(r) {
     linesOf(r.id).forEach((li) => li.remove());
@@ -846,8 +918,19 @@ if (rxDialog) {
                                         dose: item.dose, note: item.note }, r.id));
     const notes = form.elements.namedItem("notes");
     if (r.notes && !notes.value) notes.value = r.notes;
-    markPicks();  // its chip shows a tick and an x; a tap on it takes it out again (a toast hides behind the sheet)
+    markPicks();
   }
+
+  const readyInput = form.elements.namedItem("ready");
+  readyInput.addEventListener("blur", () => { readyInput.value = ""; });   // it only filters the list
+  const ready = combo(readyInput, picks, (typed) => {
+    const q = plainText(typed.trim());
+    return templates.filter((r) => !q || plainText(r.name).includes(q)).map((r) => ({
+      label: r.name,
+      on: linesOf(r.id).length > 0,
+      pick: () => { if (linesOf(r.id).length) takeOut(r); else putIn(r); readyInput.value = ""; ready.open(); },
+    }));
+  });
 
   async function loadLibrary() {
     if (library) return;
@@ -856,30 +939,14 @@ if (rxDialog) {
     if (!isOk(rx) || !isOk(meds)) { writing.say(errorMessage(isOk(rx) ? meds : rx, t("failed"))); return; }
     library = true;
     medicines = meds.data.items;
-    picks.replaceChildren(...rx.data.items.map((r) => {
-      const b = el("button", "btn ghost rx-pick");
-      b.type = "button";
-      b.dataset.run = "";
-      b.dataset.rxPick = String(r.id);
-      b.setAttribute("aria-pressed", "false");
-      const tick = el("span", "rx-pick-tick", "✓");
-      tick.setAttribute("aria-hidden", "true");
-      const off = el("span", "rx-pick-off", "×");
-      off.setAttribute("aria-hidden", "true");
-      b.append(tick, el("bdi", null, r.name), off);
-      b.title = r.name;
-      b.addEventListener("click", () => { if (linesOf(r.id).length) takeOut(r); else putIn(r); });
-      return b;
-    }));
+    templates = rx.data.items;
+    readyInput.closest(".combo").hidden = !templates.length;
     markPicks();
   }
 
-  // Suggestions as the doctor types (Saged, 2026-11-19): our own list, not the browser's <datalist>, whose
-  // drop-down froze on Windows. From one letter; name or active ingredient; spelling variants match; a word that
-  // starts with what was typed comes first; at most 8. A tap adds the medicine.
+  // Medicines: a tap lists the section's medicines; typing filters from one letter, by name or active ingredient,
+  // spelling variants and Arabic letters for a Latin name match; a word that starts with what was typed comes first.
   const medInput = form.elements.namedItem("medicine");
-  const plainText = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
-    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
   const lineOf = (m) => ({ medicine_id: m.id, name: m.name, strength: m.strength, dose: m.default_dose, note: m.default_note });
   function addTyped(m) {
     const typed = medInput.value.trim();
@@ -887,37 +954,24 @@ if (rxDialog) {
     m = m || medicines.find((x) => plainText(x.name) === plainText(typed));
     addLine(m ? lineOf(m) : { name: typed });
     medInput.value = "";
-    list.replaceChildren();
+    meds.close();
     medInput.focus();
   }
-  medInput.addEventListener("input", () => {
-    const q = plainText(medInput.value.trim());
+  const meds = combo(medInput, list, (typed) => {
+    const q = plainText(typed.trim());
     const rank = (m) => {
+      if (!q) return 0;
       const text = plainText(`${m.name} ${m.generic || ""}`);
-      if (!q) return -1;
       // One letter looks at the names only, so "ب" lists Brufen and Panadol, not every ingredient with a B in it.
       if (!text.includes(q)) {
-        return soundsLike(medInput.value, m.name) ? 3 : q.length > 1 && soundsLike(medInput.value, m.generic) ? 4 : -1;
+        return soundsLike(typed, m.name) ? 3 : q.length > 1 && soundsLike(typed, m.generic) ? 4 : -1;
       }
       return text.startsWith(q) ? 0 : text.split(/[\s(),/-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
     };
-    const found = medicines.map((m) => [rank(m), m]).filter(([r]) => r >= 0)
-      .sort((a, b) => a[0] - b[0]).slice(0, 8).map(([, m]) => m);
-    list.replaceChildren(...found.map((m) => {
-      const b = el("button", "chip-btn");
-      b.type = "button";
-      const name = el("bdi", null, [m.name, m.strength].filter(Boolean).join(" "));
-      name.dir = "auto";
-      b.append(name);
-      b.addEventListener("click", () => addTyped(m));
-      return b;
-    }));
-  });
+    return medicines.map((m) => [rank(m), m]).filter(([r]) => r >= 0).sort((a, b) => a[0] - b[0])
+      .map(([, m]) => ({ label: [m.name, m.strength].filter(Boolean).join(" "), pick: () => addTyped(m) }));
+  }, () => addTyped(null));
   rxDialog.querySelector("[data-rx-add]").addEventListener("click", () => addTyped(null));
-  medInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); addTyped(null); }
-    if (event.key === "ArrowDown") { const first = list.querySelector("button"); if (first) { event.preventDefault(); first.focus(); } }
-  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

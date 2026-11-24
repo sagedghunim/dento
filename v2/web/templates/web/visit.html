@@ -212,12 +212,21 @@
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body">
-    <div class="rx-picks" data-rx-templates></div>
-    <div class="rx-add">
-      <label class="field grow-field">{% translate "Medicine" %}<input name="medicine" dir="auto" autocomplete="off" maxlength="120"></label>
-      <button type="button" class="btn ghost" data-rx-add>{% translate "Add" %}</button>
+    {# Two fields that drop a list on a tap (Saged, 2026-11-25): pick ready prescriptions, then medicines. #}
+    <div class="combo">
+      <label class="field">{% translate "Ready prescriptions" %}<input name="ready" dir="auto" autocomplete="off" maxlength="60"
+        role="combobox" aria-expanded="false" aria-controls="rx-ready-list" aria-autocomplete="list"
+        placeholder="{% translate "Tap to pick a ready prescription" %}"></label>
+      <ul class="combo-list" id="rx-ready-list" role="listbox" data-rx-templates hidden></ul>
     </div>
-    <div class="chips" data-rx-medicines aria-live="polite"></div>
+    <div class="chips" data-rx-chosen></div>
+    <div class="rx-add combo">
+      <label class="field grow-field">{% translate "Medicine" %}<input name="medicine" dir="auto" autocomplete="off" maxlength="120"
+        role="combobox" aria-expanded="false" aria-controls="rx-med-list" aria-autocomplete="list"
+        placeholder="{% translate "Type or tap to pick a medicine" %}"></label>
+      <button type="button" class="btn ghost" data-rx-add>{% translate "Add" %}</button>
+      <ul class="combo-list" id="rx-med-list" role="listbox" data-rx-medicines hidden></ul>
+    </div>
     <ol class="rx-write-lines" data-rx-lines></ol>
     <label class="field">{% translate "Notes (optional)" %}<textarea name="notes" maxlength="1000" dir="auto" rows="2"></textarea></label>
   </div>

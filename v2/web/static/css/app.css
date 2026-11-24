@@ -992,19 +992,20 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
   padding-block-end: max(12px, env(safe-area-inset-bottom)); background: var(--bg);
 }
 .finish-btn { width: 100%; min-height: 56px; font-size: 1.1rem; }
-.rx-picks { display: flex; flex-wrap: wrap; gap: 8px; }
-.rx-picks:empty { display: none; }
-/* The ready prescriptions stay at the top while the body scrolls (Saged, 2026-11-24): one row that slides sideways,
-   so the sheet has one scroll and the picks never scroll away or hold the wheel. */
-.rx-picks { position: sticky; top: 0; z-index: 2; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
-  background: var(--surface); padding-block: 4px 8px; margin-block-start: -4px; scrollbar-width: thin; }
-/* The body is a grid; a scrolling row's least height there is 0, so many lines squeezed the picks away (2026-11-24). */
-.rx-picks { min-height: max-content; }
-.rx-picks .rx-pick { flex: 0 0 auto; white-space: nowrap; gap: 6px; }
-.rx-pick .rx-pick-tick, .rx-pick .rx-pick-off { display: none; font-weight: 700; }
-.rx-pick.on { background: var(--teal-tint); border-color: var(--teal-dark); color: var(--teal-dark); }
-.rx-pick.on .rx-pick-tick, .rx-pick.on .rx-pick-off { display: inline; }
 #rx-dialog .dialog-body { overflow-y: auto; overscroll-behavior: contain; }
+/* A field that drops a list under it (Saged, 2026-11-25): ready prescriptions and medicines. */
+.combo { position: relative; }
+.combo[hidden] { display: none; }
+.combo-list { position: absolute; inset-inline: 0; top: 100%; z-index: 6; margin: 4px 0 0; padding: 4px; list-style: none;
+  max-height: 280px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .18); }
+.combo-list[hidden] { display: none; }
+.combo-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px;
+  padding-inline: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.combo-list li:hover, .combo-list li.active { background: var(--teal-tint); }
+.combo-list li.on { color: var(--teal-dark); font-weight: 800; }
+.combo-tick { font-weight: 800; }
+[data-rx-chosen]:empty { display: none; }
 .rx-add { display: flex; gap: 8px; align-items: flex-end; margin-block-start: 12px; }
 .rx-add .grow-field { flex: 1 1 auto; min-width: 0; }
 .rx-write-lines { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
@@ -1060,8 +1061,6 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 
 /* ---------- the visit's small bill, "what comes next" and the Follow-ups list (Saged, 2026-11-13) ---------- */
 .proc-search { margin-block-start: 12px; max-width: 420px; }
-[data-rx-medicines]:empty { display: none; }
-[data-rx-medicines] { margin-block-start: 8px; }
 .proc-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-block-start: 12px; }
 .proc-confirm[hidden] { display: none; }
 .proc-confirm > strong { align-self: center; flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
