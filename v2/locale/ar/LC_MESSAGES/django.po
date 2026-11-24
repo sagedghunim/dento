@@ -4796,7 +4796,7 @@ msgid "Write the visit notes or mark the dental chart before finishing."
 msgstr "اكتب ملاحظات الكشف أو علّم على رسمة الأسنان قبل ما تخلّص."
 
 msgid "Tooth {n}: {what}"
-msgstr "سنة {n}: {what}"
+msgstr "سن {n}: {what}"
 
 msgid "More than five minutes passed since the visit was finished."
 msgstr "عدّى أكتر من ٥ دقايق من ساعة ما الكشف خلص."

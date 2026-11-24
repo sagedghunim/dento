@@ -6,7 +6,7 @@
     <p class="muted"><a href="/patients">{% translate "Patients" %}</a></p>
     <h1><bdi dir="auto">{{ patient.full_name }}</bdi></h1>
     <p>{% translate "File" %} {{ patient.file_no|num }}{% if patient.phone %} · {{ patient.phone|phone }}{% if patient.phone_owner == "guardian" %} ({% if patient.guardian_relation == "father" %}{% translate "the father's" %}{% elif patient.guardian_relation == "mother" %}{% translate "the mother's" %}{% else %}{% translate "a guardian's" %}{% endif %}){% endif %}{% endif %}{% if patient.age is not None %} · {% translate "Age:" %} {{ patient.age|digits }}{% endif %}{% if patient.sex == "m" %} · {% translate "Male" %}{% elif patient.sex == "f" %} · {% translate "Female" %}{% endif %}</p>
-    <p class="file-tags" data-file-tags>{% for t in patient_tags.mine %}<span class="pill tag-pill" style="--tag: {{ t.color|default:'#607D8B' }}"><bdi dir="auto">{{ t.name }}</bdi></span>{% endfor %}{% if patient_tags.edit %}<button type="button" class="chip-btn" data-open-tags>{% if patient_tags.mine %}{% translate "Change tags" %}{% else %}{% translate "Add a tag" %}{% endif %}</button>{% endif %}</p>
+    <p class="file-tags" data-file-tags>{% for t in patient_tags.mine %}<span class="pill tag-pill" data-tag-color="{{ t.color|default:'#607D8B' }}"><bdi dir="auto">{{ t.name }}</bdi></span>{% endfor %}{% if patient_tags.edit %}<button type="button" class="chip-btn" data-open-tags>{% if patient_tags.mine %}{% translate "Change tags" %}{% else %}{% translate "Add a tag" %}{% endif %}</button>{% endif %}</p>
     {% if summary.count %}<p class="file-summary">
       <span class="pill">{% translate "Visits:" %} {{ summary.count|digits }}</span>
       <span class="pill">{% translate "First visit:" %} {{ summary.first|shortday }}</span>
@@ -183,7 +183,7 @@
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
-    <div class="chips" data-tag-chips>{% for t in patient_tags.all %}<label class="chip"><input type="checkbox" name="tag" value="{{ t.id }}"{% if t.on %} checked{% endif %}><span><span class="tag-dot" style="--tag: {{ t.color|default:'#607D8B' }}"></span><bdi dir="auto">{{ t.name }}</bdi></span></label>{% endfor %}</div>
+    <div class="chips" data-tag-chips>{% for t in patient_tags.all %}<label class="chip"><input type="checkbox" name="tag" value="{{ t.id }}"{% if t.on %} checked{% endif %}><span><span class="tag-dot" data-tag-color="{{ t.color|default:'#607D8B' }}"></span><bdi dir="auto">{{ t.name }}</bdi></span></label>{% endfor %}</div>
     {% if patient_tags.manage %}<div class="grid-form new-tag">
       <label class="field">{% translate "A new tag" %}<input name="new_tag" maxlength="40" dir="auto" autocomplete="off" placeholder="{% translate "For example: comes with her mother" %}"></label>
       <button type="button" class="btn ghost" data-add-tag>{% translate "Add" %}</button>

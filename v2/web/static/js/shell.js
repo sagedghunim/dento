@@ -179,3 +179,15 @@ if (backButton) {
     if (url.pathname === path && linkKey === key) link.setAttribute("aria-current", "page");
   });
 }
+
+// Tag colours: the page's security policy blocks style attributes, so each tag carries its colour in
+// data-tag-color and gets it here, also in lists that arrive later (search results, the tags dialog).
+function paintTags(root) {
+  if (root.nodeType !== 1) return;
+  if (root.dataset.tagColor) root.style.setProperty("--tag", root.dataset.tagColor);
+  for (const el of root.querySelectorAll("[data-tag-color]")) el.style.setProperty("--tag", el.dataset.tagColor);
+}
+paintTags(document.body);
+new MutationObserver((changes) => {
+  for (const change of changes) for (const node of change.addedNodes) paintTags(node);
+}).observe(document.body, { childList: true, subtree: true });

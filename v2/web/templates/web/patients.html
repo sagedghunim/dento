@@ -17,7 +17,7 @@
   </form>
   {% if all_tags %}<nav class="tag-filter chips" aria-label="{% translate "Tags" %}">
     <a class="chip-btn" href="/patients"{% if not tag %} aria-pressed="true"{% endif %}>{% translate "All" %}</a>
-    {% for t in all_tags %}<a class="chip-btn" href="/patients?tag={{ t.id }}"{% if tag and tag.id == t.id %} aria-pressed="true"{% endif %}><span class="tag-dot" style="--tag: {{ t.color|default:'#607D8B' }}"></span><bdi dir="auto">{{ t.name }}</bdi></a>{% endfor %}
+    {% for t in all_tags %}<a class="chip-btn" href="/patients?tag={{ t.id }}"{% if tag and tag.id == t.id %} aria-pressed="true"{% endif %}><span class="tag-dot" data-tag-color="{{ t.color|default:'#607D8B' }}"></span><bdi dir="auto">{{ t.name }}</bdi></a>{% endfor %}
   </nav>{% endif %}
   <p class="muted" data-search-status role="status"></p>
   <div data-results>{% if results is not None %}{% include "web/_patient_results.html" %}{% elif tag %}<p class="empty-note">{% translate "No patient has this tag yet. Open a patient's file to add it." %}</p>{% elif recent %}<h2 class="list-title">{% translate "Seen lately" %}</h2>{% include "web/_patient_results.html" with results=recent %}{% else %}<p class="empty-note">{% translate "No patients yet. Add one with New patient, or book a visit." %}</p>{% endif %}</div>

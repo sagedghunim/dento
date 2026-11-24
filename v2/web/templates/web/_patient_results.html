@@ -11,7 +11,7 @@
       {% elif s == "booked" %}<span class="pill amber tag" data-today-status="booked"><svg class="icon"><use href="#i-calendar"/></svg>{% translate "Booked today" %} · {% translate "Turn" %} {{ p.today.queue_no|num }}</span>
       {% else %}<span class="pill amber tag" data-today-status="{{ s }}">{% translate "Waiting" %} · {% translate "Turn" %} {{ p.today.queue_no|num }}</span>{% endif %}
       {% endwith %}{% endif %}
-      {% for tag in p.tags %}<span class="pill tag tag-pill" style="--tag: {{ tag.color|default:'#607D8B' }}"><bdi dir="auto">{{ tag.name }}</bdi></span>{% endfor %}
+      {% for tag in p.tags %}<span class="pill tag tag-pill" data-tag-color="{{ tag.color|default:'#607D8B' }}"><bdi dir="auto">{{ tag.name }}</bdi></span>{% endfor %}
       {% if p.late %}<span class="pill red tag">{% translate "Late installment:" %} {{ p.late|money }}</span>{% endif %}
       {% if p.owed %}<span class="pill amber tag"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Owed from before:" %} {{ p.owed|money }}</span>{% endif %}
       {% if p.credit %}<span class="pill green tag"><svg class="icon"><use href="#i-cash"/></svg>{% translate "Credit:" %} {{ p.credit|money }}</span>{% endif %}
