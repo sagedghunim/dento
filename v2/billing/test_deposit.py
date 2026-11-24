@@ -899,3 +899,49 @@ class PercentDepositTests(DepositTestCase):
             r = call(self.desk, "PUT", "/api/v1/settings/clinic",
                      {"changes": {"booking_deposit_percent": 50}, "expected": {}})
             self.assertEqual(r.status_code, 403)
+
+
+class RegisterAutoCloseTests(DepositTestCase):
+    """Saged, 2026-11-24: a register nobody closed closes by itself after the day ends, not counted, and the next
+    shift starts with its cash (still in the drawer)."""
+
+    def shift(self, **filters):
+        from finance.models import Shift
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            return Shift.objects.filter(clinic_id=self.a.id, **filters).order_by("-opened_at").first()
+
+    def test_the_sweep_closes_yesterdays_register_and_the_next_one_starts_with_its_cash(self):
+        with self.on(0):
+            self.deposit_on()
+            self.book(payment=self.deposit(), doctor_id=self.owner_id)  # cash: opens the shift by itself
+            r = call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": "50", "reason": "فكة"})
+            self.assertEqual(r.status_code, 201, r.content)
+        held = DEPOSIT + 50_00
+        from finance.models import Shift
+
+        with clinic_transaction(self.a.id, self.a.shard):  # the shift's clock isn't the frozen one: it opened on DAY
+            Shift.objects.filter(clinic_id=self.a.id, status="open").update(
+                opened_at=dt.datetime(2026, 11, 10, 19, 0, tzinfo=CAIRO))
+        # Before the day ends (04:00 the next morning) nothing closes.
+        self.assertNotIn("register_closed", sweep_clinic(self.a.id, self.a.shard, dt.datetime(2026, 11, 11, 3, 0, tzinfo=CAIRO)))
+        self.assertEqual(self.shift().status, "open")
+        counts = sweep_clinic(self.a.id, self.a.shard, dt.datetime(2026, 11, 11, 4, 30, tzinfo=CAIRO))
+        self.assertEqual(counts.get("register_closed"), held, counts)
+        closed = self.shift()
+        self.assertEqual((closed.status, closed.auto_closed, closed.expected, closed.counted, closed.difference,
+                          closed.closed_by_id), ("closed", True, held, held, 0, None))
+        # Again: nothing more to close.
+        self.assertNotIn("register_closed", sweep_clinic(self.a.id, self.a.shard, dt.datetime(2026, 11, 11, 4, 40, tzinfo=CAIRO)))
+        # The next cash entry opens a shift that starts with that cash.
+        with self.on(1):
+            r = call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": "10", "reason": "فكة"})
+            self.assertEqual(r.status_code, 201, r.content)
+        now_open = self.shift(status="open")
+        self.assertEqual((now_open.auto_opened, now_open.opening_float), (True, held))
+        # The owner hears of it, and the register's history says it wasn't counted.
+        with self.on(1):
+            alerts = self.owner.get("/alerts").content.decode()
+            self.assertIn("الخزنة اتقفلت لوحدها من غير عد", alerts)
+            rows = self.owner.get("/finances/shifts", HTTP_X_MEMBERSHIP=str(self.owner.membership_id)).content.decode()
+            self.assertIn("ما اتعدّتش", rows)

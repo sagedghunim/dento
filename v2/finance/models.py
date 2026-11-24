@@ -47,6 +47,8 @@ class Shift(models.Model):
     difference = models.BigIntegerField(null=True, blank=True)  # counted - expected
     note = models.CharField(max_length=200, blank=True, default="")
     auto_opened = models.BooleanField(default=False, db_default=False)  # opened by a cash entry, float 0 (F1)
+    # Closed by the end-of-day sweep, not counted (Saged, 2026-11-24): counted = expected, difference 0.
+    auto_closed = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         db_table = "finance_shift"

@@ -2,8 +2,8 @@
 <li class="shift-row">
   <div class="row-main">
     <strong><span class="nowrap">{{ s.opened.day }}</span> {{ s.opened.time }}</strong>
-    {% if s.status == "open" %}<span class="pill teal">{% translate "Open" %}</span>{% elif s.difference == 0 %}<span class="pill grey">{% translate "Matched" %}</span>{% elif s.difference < 0 %}<span class="pill red">{% translate "Short" %} {{ s.difference|money }}</span>{% else %}<span class="pill amber">{% translate "Over" %} {{ s.difference|money }}</span>{% endif %}
-    <p class="muted">{% if s.opened_by %}<bdi dir="auto">{{ s.opened_by }}</bdi>{% endif %}{% if s.auto_opened %} · {% translate "opened by itself" %}{% endif %}{% if s.status == "closed" %} · {% translate "closed" %} {{ s.closed.time }}{% if s.closed.day != s.opened.day %} <span class="nowrap">{{ s.closed.day }}</span>{% endif %} · {% translate "counted" %} {{ s.counted|money }}{% endif %}</p>
+    {% if s.status == "open" %}<span class="pill teal">{% translate "Open" %}</span>{% elif s.auto_closed %}<span class="pill amber">{% translate "Not counted" %}</span>{% elif s.difference == 0 %}<span class="pill grey">{% translate "Matched" %}</span>{% elif s.difference < 0 %}<span class="pill red">{% translate "Short" %} {{ s.difference|money }}</span>{% else %}<span class="pill amber">{% translate "Over" %} {{ s.difference|money }}</span>{% endif %}
+    <p class="muted">{% if s.opened_by %}<bdi dir="auto">{{ s.opened_by }}</bdi>{% endif %}{% if s.auto_opened %} · {% translate "opened by itself" %}{% endif %}{% if s.status == "closed" %} · {% translate "closed" %} {{ s.closed.time }}{% if s.closed.day != s.opened.day %} <span class="nowrap">{{ s.closed.day }}</span>{% endif %} · {% if s.auto_closed %}{% translate "closed by itself" %}{% else %}{% translate "counted" %} {{ s.counted|money }}{% endif %}{% endif %}</p>
   </div>
   <button type="button" class="btn ghost" data-shift-report="{{ s.id }}">{% translate "Report" %}</button>
 </li>

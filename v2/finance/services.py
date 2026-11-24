@@ -21,7 +21,7 @@ from core.errors import ApiError
 from summaries.services import Deltas
 
 SHIFT_COLUMNS = ("id, status, opening_float, opened_at, opened_by_id, closed_at, closed_by_id, expected, counted, "
-                 "difference, note, auto_opened")
+                 "difference, note, auto_opened, auto_closed")
 CATEGORY_COLUMNS = "id, name, name_en, code, is_system, is_active, sort"
 EXPENSE_COLUMNS = "id, category_id, amount, day, note, shift_id, purchase, created_at, created_by_id, voided_at"
 RULE_COLUMNS = "membership_id, percent_bp, per_visit, per_procedure, monthly_salary, version"
@@ -89,9 +89,9 @@ def shift_for(ctx, method):
             return found[0]
         opened = sql.row(ctx, """
             INSERT INTO "finance_shift" (clinic_id, status, opening_float, opened_at, opened_by_id, note, auto_opened)
-            VALUES (%s, 'open', 0, %s, %s, '', true)
+            VALUES (%s, 'open', %s, %s, %s, '', true)
             ON CONFLICT (clinic_id) WHERE status = 'open' DO NOTHING RETURNING id""",
-                         [ctx.clinic_id, timezone.now(), ctx.membership_id])
+                         [ctx.clinic_id, carried_float(ctx), timezone.now(), ctx.membership_id])
         if opened:
             record_change(ctx, "shift.auto_open", "shift", opened[0])
             return opened[0]
@@ -101,6 +101,37 @@ def shift_for(ctx, method):
 
 def _shift(values):
     return dict(zip(_cols(SHIFT_COLUMNS), values))
+
+
+def carried_float(ctx):
+    """A shift that closed by itself was never counted, so its cash is still in the drawer (Saged, 2026-11-24): the
+    next shift opened by a cash entry starts with it. After a counted close it starts at 0, as before (F1)."""
+    last = sql.row(ctx, 'SELECT expected, auto_closed FROM "finance_shift" WHERE clinic_id = %s AND status = %s '
+                        "ORDER BY opened_at DESC, id DESC LIMIT 1", [ctx.clinic_id, "closed"])
+    return max(last[0] or 0, 0) if last and last[1] else 0
+
+
+def auto_close(ctx, today):
+    """A register left open past its business day closes by itself (Saged, 2026-11-24), from the end-of-day sweep.
+    Nobody counted it, so it closes at what it should hold (counted = expected, difference 0, auto_closed) and the
+    next shift starts with that cash (carried_float). Locks the shift, then sums it, as close_shift. Returns what it
+    held, or None when no shift of an earlier day was open."""
+    found = sql.row(ctx, f'SELECT {SHIFT_COLUMNS} FROM "finance_shift" WHERE clinic_id = %s AND status = %s '
+                         "FOR NO KEY UPDATE", [ctx.clinic_id, "open"])
+    if found is None:
+        return None
+    shift = _shift(found)
+    if business_day(ctx.clinic, shift["opened_at"]) >= today:
+        return None
+    expected = expected_cash(shift["opening_float"], shift_totals(ctx, shift["id"]))
+    counted = max(expected, 0)
+    sql.run(ctx, """
+        UPDATE "finance_shift" SET status = 'closed', closed_at = %s, closed_by_id = NULL, expected = %s, counted = %s,
+               difference = %s, auto_closed = true
+         WHERE clinic_id = %s AND id = %s AND status = 'open'""",
+            [timezone.now(), expected, counted, counted - expected, ctx.clinic_id, shift["id"]])
+    record_change(ctx, "shift.auto_close", "shift", shift["id"], after={"expected": expected})
+    return expected
 
 
 def open_shift(ctx, opening_float, note=""):

@@ -4876,3 +4876,18 @@ msgstr "إعدادات التنبيهات"
 
 msgid "Take money out for something that isn't an expense"
 msgstr "طلّع فلوس لحاجة مش مصروف"
+
+msgid "The register closed by itself without a count"
+msgstr "الخزنة اتقفلت لوحدها من غير عد"
+
+msgid "Nobody closed it before the day ended. This is what it should hold."
+msgstr "محدش قفلها قبل ما اليوم يخلص. ده المبلغ اللي المفروض يكون فيها."
+
+msgid "Closed by itself at the end of the day, not counted"
+msgstr "اتقفلت لوحدها آخر اليوم، من غير عد"
+
+msgid "Not counted"
+msgstr "ما اتعدّتش"
+
+msgid "closed by itself"
+msgstr "اتقفلت لوحدها"

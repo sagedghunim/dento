@@ -157,10 +157,12 @@ def _shift_rows(ctx, shifts, people):
         opened_by, closed_by = people.get(s["opened_by_id"], ""), people.get(s["closed_by_id"], "")
         line = (_("Opened by itself on the first cash entry, by %(name)s") if s["auto_opened"]
                 else _("Opened and counted by %(name)s"))
+        closed_line = (_("Closed by itself at the end of the day, not counted") if s.get("auto_closed")
+                       else _("Closed by %(name)s") % {"name": closed_by})
         rows.append({**s, "opened": _local(ctx, s["opened_at"]), "closed": _local(ctx, s["closed_at"]),
                      "opened_by": opened_by, "closed_by": closed_by, "opened_line": line % {"name": opened_by},
                      "opened_by_line": _("Opened by %(name)s") % {"name": opened_by},
-                     "closed_by_line": _("Closed by %(name)s") % {"name": closed_by}})
+                     "closed_by_line": closed_line})
     return rows
 
 

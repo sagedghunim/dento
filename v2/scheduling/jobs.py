@@ -81,6 +81,7 @@ def _sweep(clinic_id, alias, now):
              ORDER BY a.id FOR NO KEY UPDATE OF a""", [ctx.clinic_id, first, last])
         counts = {"carried": carried} if carried else {}
         if not rows:
+            _close_register(ctx, clinic, now, counts)
             return counts, last, clinic
         sql.run(ctx, """
             UPDATE "scheduling_appointment" SET status = 'no_show', updated_at = %s, updated_by_id = NULL
@@ -101,8 +102,19 @@ def _sweep(clinic_id, alias, now):
         deltas.write_doctors(ctx)
         deltas.write_clinics(ctx)
         counts["no_show"] = len(rows)
+        _close_register(ctx, clinic, now, counts)
         log.info("sweep clinic=%s days=%s..%s %s", clinic_id, first, last, counts)
         return counts, last, clinic
+
+
+def _close_register(ctx, clinic, now, counts):
+    """Last in the sweep's transaction (the shift comes after appointments and invoices in the lock order): a
+    register still open from an earlier business day closes by itself (Saged, 2026-11-24)."""
+    from finance.services import auto_close
+
+    held = auto_close(ctx, business_day(clinic, now))
+    if held is not None:
+        counts["register_closed"] = held
 
 
 def targets(job, now, shard=None, clinic_ids=None):

@@ -36,6 +36,7 @@ KINDS = (
     ("void", ("invoice.void",), "Voided a bill"),
     ("register", ("shift.close",), "The register was short or over"),
     ("cash", ("cash.in", "cash.out"), "Money added to or taken from the drawer"),
+    ("auto_close", ("shift.auto_close",), "The register closed by itself without a count"),
     ("price", ("procedure.price",), "Changed a price"),
     ("expense", ("expense.void",), "Voided an expense"),
     ("stock", ("item.count",), "A stock count changed the quantity"),
@@ -58,6 +59,7 @@ def _labels():
     return {"procedure": _("Removed a recorded procedure"), "line": _("Removed a line from a bill"),
             "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"), "void": _("Voided a bill"),
             "register": _("The register was short or over"), "cash": _("Money added to or taken from the drawer"),
+            "auto_close": _("The register closed by itself without a count"),
             "price": _("Changed a price"), "expense": _("Voided an expense"),
             "stock": _("A stock count changed the quantity"), "patient": _("Deleted a patient"),
             "late": _("A file changed after its visit ended")}
@@ -188,6 +190,10 @@ def items(ctx):
             item["detail"] = d.get("reason", "")
             item["amount"] = d.get("amount")
             item["level"] = "info" if action == "cash.in" else "warn"
+        elif action == "shift.auto_close":
+            item["what"] = _("The register closed by itself without a count")
+            item["detail"] = _("Nobody closed it before the day ended. This is what it should hold.")
+            item["amount"] = after.get("expected")
         elif action == "procedure.price":
             item["what"] = _("Changed a price")
             item["detail"] = procedures.get(r["target_id"], "")
