@@ -125,6 +125,17 @@ box.addEventListener("input", () => {
   timerId = setTimeout(flush, 1200);
 });
 box.addEventListener("blur", () => { if (box.value !== saved) flush(); });
+// The chart's findings, written into the notes and saved (Saged, 2026-11-24): the doctor needn't type them.
+let charted = Boolean(data.charted);
+window.addEventListener("hamada:teeth-noted", (event) => {
+  const lines = event.detail.lines || [];
+  if (!lines.length) return;
+  charted = true;
+  const text = box.value.replace(/\s+$/, "");
+  box.value = (text ? `${text}\n` : "") + lines.join("\n");
+  keepDraft();
+  flush();
+});
 window.addEventListener("online", () => { if (box.value !== saved) flush(); });
 if (box.value !== saved) flush(); else if (saved) say(t("note_saved"));
 
@@ -781,9 +792,10 @@ if (rxDialog) {
   let library = false;
   wireClose(rxDialog);
 
-  function addLine(line) {
+  function addLine(line, fromRx = null) {
     const li = el("li", "rx-write-line");
     li.line = line;
+    if (fromRx != null) li.dataset.fromRx = String(fromRx);
     const name = el("bdi", "rx-med", [line.name, line.strength].filter(Boolean).join(" "));
     name.dir = "auto";
     const dose = el("input");
@@ -796,9 +808,33 @@ if (rxDialog) {
     const remove = el("button", "icon-btn", "×");
     remove.type = "button";
     remove.setAttribute("aria-label", `${t("remove")}: ${line.name}`);
-    remove.addEventListener("click", () => li.remove());
+    remove.addEventListener("click", () => { li.remove(); markPicks(); });
     li.append(name, dose, remove);
     lines.append(li);
+  }
+
+  // A ready prescription is one tap on, one tap off (Saged, 2026-11-24): its medicines come in together and go out
+  // together, it is never added twice, and its chip says it is in (a tick, and an x to take it out).
+  const linesOf = (rxId) => [...lines.children].filter((li) => li.dataset.fromRx === String(rxId));
+  function markPicks() {
+    picks.querySelectorAll("[data-rx-pick]").forEach((b) => {
+      const on = linesOf(b.dataset.rxPick).length > 0;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.classList.toggle("on", on);
+    });
+  }
+  function takeOut(r) {
+    linesOf(r.id).forEach((li) => li.remove());
+    const notes = form.elements.namedItem("notes");
+    if (r.notes && notes.value === r.notes) notes.value = "";
+    markPicks();
+  }
+  function putIn(r) {
+    r.items.forEach((item) => addLine({ medicine_id: item.medicine_id, name: item.name, strength: item.strength,
+                                        dose: item.dose, note: item.note }, r.id));
+    const notes = form.elements.namedItem("notes");
+    if (r.notes && !notes.value) notes.value = r.notes;
+    markPicks();  // its chip shows a tick and an x; a tap on it takes it out again (a toast hides behind the sheet)
   }
 
   async function loadLibrary() {
@@ -809,16 +845,21 @@ if (rxDialog) {
     library = true;
     medicines = meds.data.items;
     picks.replaceChildren(...rx.data.items.map((r) => {
-      const b = el("button", "btn ghost", r.name);
+      const b = el("button", "btn ghost rx-pick");
       b.type = "button";
       b.dataset.run = "";
-      b.addEventListener("click", () => {
-        r.items.forEach((item) => addLine({ medicine_id: item.medicine_id, name: item.name, strength: item.strength,
-                                            dose: item.dose, note: item.note }));
-        if (r.notes && !form.elements.namedItem("notes").value) form.elements.namedItem("notes").value = r.notes;
-      });
+      b.dataset.rxPick = String(r.id);
+      b.setAttribute("aria-pressed", "false");
+      const tick = el("span", "rx-pick-tick", "✓");
+      tick.setAttribute("aria-hidden", "true");
+      const off = el("span", "rx-pick-off", "×");
+      off.setAttribute("aria-hidden", "true");
+      b.append(tick, el("bdi", null, r.name), off);
+      b.title = r.name;
+      b.addEventListener("click", () => { if (linesOf(r.id).length) takeOut(r); else putIn(r); });
       return b;
     }));
+    markPicks();
   }
 
   // Suggestions as the doctor types (Saged, 2026-11-19): our own list, not the browser's <datalist>, whose
@@ -890,7 +931,7 @@ if (rxDialog) {
   });
 
   document.querySelector("[data-open-rx]").addEventListener("click", (event) => {
-    if (!writing.holdsUnknown()) { form.reset(); lines.replaceChildren(); writing.reset(); }
+    if (!writing.holdsUnknown()) { form.reset(); lines.replaceChildren(); writing.reset(); markPicks(); }
     openDialog(rxDialog, event.currentTarget);
     loadLibrary();
   });
@@ -908,13 +949,21 @@ if (finishButton) {
     try {
       if (box.value !== saved && !(await flush())) { finishError.textContent = t("note_unsaved"); return; }
       if (!(await flushMedical())) { finishError.textContent = t("medical_unsaved"); return; }
-      const result = await save("POST", `/api/v1/appointments/${id}/finish`, { status: "in_room" },
+      // The least a visit holds before it ends (Saged, 2026-11-24): what was done, and notes or the chart.
+      if (!procList || !procList.querySelector("[data-record]")) { finishError.textContent = t("finish_need_done"); return; }
+      if (!box.value.trim() && !charted) { finishError.textContent = t("finish_need_notes"); box.focus(); return; }
+      const result = await save("POST", `/api/v1/appointments/${id}/finish`, { status: "in_room", check_record: true },
         { label: t("finish"), auto: true });  // carries the status it expects: a resend is harmless
       if (!result.settled) { renderPending(); finishError.textContent = t("finish_unknown"); return; }
       const code = result.data && result.data.error && result.data.error.code;
       if (isOk(result) || code === "status_changed") {  // done, or no longer in the room: Today shows where it is
         leaving = true;
-        try { sessionStorage.removeItem(draftKey); } catch (e) { /* none */ }
+        try {
+          sessionStorage.removeItem(draftKey);
+          // "Back to the visit" on Today for five minutes, the timer still running (Saged, 2026-11-24).
+          sessionStorage.setItem("hamada.finished", JSON.stringify({ id, name: data.patient_name, called_at: data.called_at,
+            finished_at: Date.now() + skew, skew }));
+        } catch (e) { /* none */ }
         window.location.assign("/");
         return;
       }

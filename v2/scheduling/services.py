@@ -517,6 +517,61 @@ def undo(ctx, appointment_id, action, seen):
     return Deltas().clinic_day(day).write_clinics(ctx)[day]
 
 
+REOPEN_SECONDS = 300  # "Back to the visit" after a finish tapped by mistake (Saged, 2026-11-24)
+
+
+def reopen(ctx, appointment_id, seen):
+    """POST appointments/{id}/reopen {status: "done"}: a visit finished in the last five minutes goes back to the
+    room, with its call-in time, so the timer goes on (Saged, 2026-11-24: a finish tapped by mistake).
+
+    Refused when it is later than that (too_late) or the doctor already has another patient in the room
+    (doctor_busy). The finish's counters are taken back: done, the timing, and the patient's visit count. The bill,
+    payments and a next visit booked with the finish stay. Lock order: the appointment, the doctor-days, the
+    clinic-days, then the patient's stats row (11a). Audited. Returns the version of the visit's day.
+    """
+    rules.guard(ctx, appointment_id)
+    if seen != "done":
+        raise ApiError("invalid_transition", _("This action doesn't apply to a visit in that status."), 400,
+                       fields={"status": "invalid"})
+    found = sql.row(ctx, 'SELECT status, day, doctor_id, patient_id, arrived_at, called_at, finished_at '
+                         'FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+                    [ctx.clinic_id, appointment_id])
+    if found is None:
+        raise rules.not_found("appointment")
+    status, day, doctor_id, patient_id, arrived_at, called_at, finished_at = found
+    if status == "in_room":
+        return None  # a harmless repeat
+    if status != "done":
+        raise ApiError("status_changed", _("This visit changed meanwhile."), 409, extra={"status": status})
+    now = timezone.now()
+    if finished_at is None or called_at is None or (now - finished_at).total_seconds() > REOPEN_SECONDS:
+        raise ApiError("too_late", _("More than five minutes passed since the visit was finished."), 409)
+    busy = sql.row(ctx, 'SELECT id FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s AND doctor_id = %s '
+                        "AND status = 'in_room' AND id <> %s LIMIT 1", [ctx.clinic_id, day, doctor_id, appointment_id])
+    if busy is not None:
+        raise ApiError("doctor_busy", _("The doctor already has a patient in the room. Finish that visit first."), 409,
+                       fields={"status": "doctor_busy"}, extra={"appointment_id": busy[0]})
+    sql.run(ctx, 'UPDATE "scheduling_appointment" SET status = \'in_room\', finished_at = NULL, updated_at = %s, '
+                 "updated_by_id = %s WHERE clinic_id = %s AND id = %s", [now, ctx.membership_id, ctx.clinic_id,
+                                                                         appointment_id])
+    deltas = Deltas().doctor_day(day, doctor_id, done=-1).clinic_day(day, done=-1)
+    if arrived_at is not None:  # the finish counted its timing (Deltas.timing): taken back the same way
+        wait = max(0, int((called_at - arrived_at).total_seconds()))
+        room = max(0, int((finished_at - called_at).total_seconds()))
+        deltas.doctor_day(day, doctor_id, timed=-1, wait_secs=-wait, room_secs=-room)
+    deltas.write_doctors(ctx)
+    version = deltas.write_clinics(ctx)[day]
+    # The patient's stats row (F6) counted this visit; the finish again counts it again.
+    if sql.row(ctx, 'UPDATE "summaries_patient" SET visits = visits - 1 WHERE clinic_id = %s AND patient_id = %s '
+                    "AND visits > 1 RETURNING visits", [ctx.clinic_id, patient_id]) is None:
+        sql.run(ctx, 'DELETE FROM "summaries_patient" WHERE clinic_id = %s AND patient_id = %s AND visits = 1',
+                [ctx.clinic_id, patient_id])
+    record_change(ctx, "appointment.reopen", "appointment", appointment_id,
+                  before={"status": "done", "finished_at": finished_at.isoformat()}, after={"status": "in_room"},
+                  patient_id=patient_id)
+    return version
+
+
 def _only_today():
     return ApiError("not_today", _("This can be done only on the visit's own day."), 409, fields={"day": "not_today"})
 

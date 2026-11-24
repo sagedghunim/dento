@@ -4785,3 +4785,21 @@ msgstr "من رصيده على فاتورة %(number)s"
 
 msgid "The patient's credit changed. Reload and try again."
 msgstr "رصيد المريض اتغيّر. حدّث الصفحة وجرّب تاني."
+
+msgid "Back to the visit"
+msgstr "رجوع للكشف"
+
+msgid "Add what was done today before finishing the visit."
+msgstr "سجّل اللي اتعمل النهارده قبل ما تخلّص الكشف."
+
+msgid "Write the visit notes or mark the dental chart before finishing."
+msgstr "اكتب ملاحظات الكشف أو علّم على رسمة الأسنان قبل ما تخلّص."
+
+msgid "Tooth {n}: {what}"
+msgstr "سنة {n}: {what}"
+
+msgid "More than five minutes passed since the visit was finished."
+msgstr "عدّى أكتر من ٥ دقايق من ساعة ما الكشف خلص."
+
+msgid "This visit changed meanwhile."
+msgstr "الكشف ده اتغيّر في الوقت ده."

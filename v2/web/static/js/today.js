@@ -10,6 +10,7 @@ import { alertMessage, renderPending, toast } from "./shell.js";
 import { t } from "./strings.js";
 import { initVisitDialogs } from "./visit.js";
 import { initWalkIn } from "./walkin.js";
+import { showReopen } from "./reopen.js";
 
 const card = document.querySelector("[data-queue-card]");
 const list = document.querySelector('[data-slot="groups"]');
@@ -626,6 +627,7 @@ document.addEventListener("click", (event) => {
 });
 
 const walkIn = initWalkIn({ onBooked: changed });
+showReopen();  // "Back to the visit" for five minutes after a finish (Saged, 2026-11-24)
 
 // --- start ---
 

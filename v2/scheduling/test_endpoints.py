@@ -39,6 +39,17 @@ def objects(test, fixture):
     with clinic_transaction(fixture.id, fixture.shard):
         Appointment.objects.filter(clinic_id=fixture.id, id=callable_["id"]).update(
             status="waiting", arrived_at=dt.datetime.now(dt.UTC))
+    # A visit finished just now, for "Back to the visit" (Saged, 2026-11-24): on another day, where the owner's room
+    # is free, with the finish's counters in place (done and its timing) for the reopen to take back.
+    finished = book(day=(today(fixture) + dt.timedelta(days=2)).isoformat())
+    now = dt.datetime.now(dt.UTC)
+    with clinic_transaction(fixture.id, fixture.shard):
+        from summaries.models import ClinicDay, DoctorDay
+
+        Appointment.objects.filter(clinic_id=fixture.id, id=finished["id"]).update(
+            status="done", arrived_at=now, called_at=now, finished_at=now)
+        DoctorDay.objects.filter(clinic_id=fixture.id, day=finished["day"], doctor_id=owner).update(done=1, timed=1)
+        ClinicDay.objects.filter(clinic_id=fixture.id, day=finished["day"]).update(done=1)
     assisted, readied = book(arrive=True), book(arrive=True)
     call(client, "POST", f"/api/v1/appointments/{assisted['id']}/assist", {"status": "waiting"})
     call(client, "POST", f"/api/v1/appointments/{readied['id']}/ready", {"status": "waiting"})
@@ -58,7 +69,7 @@ def objects(test, fixture):
     call(client, "POST", f"/api/v1/appointments/{no_show['id']}/no-show", {"status": "booked"})
     unpaid_invoice = call(client, "POST", f"/api/v1/appointments/{unpaid['id']}/invoice").json()["invoice"]
     return SimpleNamespace(booked=booked["id"], waiting=waiting["id"], in_room=in_room["id"], paid=paid["id"],
-                           callable=callable_["id"],
+                           callable=callable_["id"], finished=finished["id"],
                            assisted=assisted["id"], readied=readied["id"], no_show=no_show["id"],
                            invoice=invoice["id"], line=line["id"], payment=invoice["payments"][0]["id"],
                            credited_invoice=with_line["id"],
@@ -93,6 +104,8 @@ def mutating(test, o):
                         {"status": "waiting", "note": 1}, ["appointments.queue"]),
         "undo call": ("POST", f"/api/v1/appointments/{o.in_room}/undo-call", {"status": "in_room"},
                       {"status": "in_room", "note": 1}, ["appointments.queue"]),
+        "reopen": ("POST", f"/api/v1/appointments/{o.finished}/reopen", {"status": "done"},
+                   {"status": "done", "note": 1}, ["appointments.queue"]),
         "assist": ("POST", f"/api/v1/appointments/{o.waiting}/assist", {"status": "waiting"},
                    {"status": "waiting", "note": 1}, ["appointments.queue"]),
         "ready": ("POST", f"/api/v1/appointments/{o.waiting}/ready", {"status": "waiting"},

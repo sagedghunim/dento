@@ -182,6 +182,16 @@ if (saveBar) {
     updateBar();
     if (current != null && sent.includes(current)) loadHistory(false);
     toast(t("teeth_saved", { n: localDigits(sent.length) }));
+    // The findings go into the visit's notes by themselves (Saged, 2026-11-24): "Tooth 36: Caries (O M) · note".
+    if (data.appointment_id) {
+      const lines = body.teeth.map((item) => {
+        let what = labels[item.condition] || item.condition;
+        if (item.surfaces && item.surfaces.length) what += ` (${item.surfaces.join(" ")})`;
+        if (item.note) what += ` · ${item.note}`;
+        return t("tooth_note_line", { n: localDigits(item.tooth), what });
+      });
+      window.dispatchEvent(new CustomEvent("hamada:teeth-noted", { detail: { lines } }));
+    }
   });
   saveBar.querySelector("[data-undo-teeth]").addEventListener("click", () => {
     if (saveSubmitter.holdsUnknown() || saveBar.dataset.busy) return;
@@ -339,6 +349,7 @@ const historyMore = panel.querySelector("[data-history-more]");
 let historyController = null;
 
 async function loadHistory(more) {
+  if (!historyList) return;  // the visit's chart has no history (Saged, 2026-11-24)
   const n = current;
   if (historyController) historyController.abort();
   historyController = new AbortController();
@@ -355,7 +366,7 @@ async function loadHistory(more) {
   historyMore.dataset.next = next;
   historyStatus.textContent = historyList.children.length ? "" : t("no_history");
 }
-historyMore.addEventListener("click", () => loadHistory(true));
+if (historyMore) historyMore.addEventListener("click", () => loadHistory(true));
 
 // --- the visits by date above the chart (Saged, 2026-11-19): one open at a time; its teeth light up ---
 const dated = document.querySelector("[data-dated]");

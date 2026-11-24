@@ -63,6 +63,8 @@
           <p class="muted">{% translate "Change as many teeth as you need, then save them all at once under the chart." %}</p>
         </form>
       </section>
+      {# In the visit the chart is only the teeth and their findings (Saged, 2026-11-24): what was done and the plan have their own places on the visit screen. #}
+      {% if not visit %}
       {% if can_record %}
       <section class="panel-part" data-part="procedure" aria-labelledby="procedure-title">
         <form novalidate>
@@ -108,12 +110,15 @@
       </section>
       {% endif %}
       {% endif %}
+      {% endif %}
+      {% if not visit %}
       <section class="panel-part" aria-labelledby="history-title">
         <h3 id="history-title">{% translate "History" %}</h3>
         <ol class="history" data-history></ol>
         <p class="muted" data-history-status role="status"></p>
         <button type="button" class="btn ghost" data-history-more hidden>{% translate "Load more" %}</button>
       </section>
+      {% endif %}
     </div>
   </aside>
 </div>

@@ -247,6 +247,11 @@ def finish_view(request, ctx, data, appointment_id):
     payment, earlier = _payment(data), _payment(data, "earlier")
     if payment is not None or earlier is not None:
         ctx.require("billing.collect")
+    if validate.boolean(data, "check_record") and seen == "in_room":
+        # The visit screen's finish (Saged, 2026-11-24): what was done, and notes or the chart, before it ends.
+        from clinical.services import require_record
+
+        require_record(ctx, appointment_id)
     outcome = {}
     version = services.change_status(ctx, appointment_id, "finish", seen, payment=payment, earlier=earlier,
                                      next_visit=_next_visit(data), outcome=outcome)
@@ -267,6 +272,14 @@ def _undo_view(action):
 
     view.__name__ = view.__qualname__ = f"{action}_view"
     return api("POST", perm="appointments.queue", replay=_replay_appointment)(view)
+
+
+@api("POST", perm="appointments.queue", replay=_replay_appointment)
+def reopen_view(request, ctx, data, appointment_id):
+    """reopen {status: "done"}: back to the room within five minutes of the finish (Saged, 2026-11-24)."""
+    appointment_id = _appointment_id(appointment_id)
+    version = services.reopen(ctx, appointment_id, validate.choice(data, "status", STATUSES))
+    return Result(selectors.answer(ctx, appointment_id, version), target_type="appointment", target_id=appointment_id)
 
 
 undo_arrive_view = _undo_view("undo_arrive")

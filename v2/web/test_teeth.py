@@ -35,7 +35,10 @@ class TeethPageTests(M2TestCase):
         self.assertIn('data-shape="molar"', tooth_button(html, 16))
         self.assertIn('data-shape="incisor"', tooth_button(html, 11))
         self.assertIn('data-part="finding"', html)
-        self.assertIn('data-part="procedure"', html)
+        # In the visit the chart is only the teeth and their findings (Saged, 2026-11-24).
+        self.assertNotIn('data-part="procedure"', html)
+        self.assertNotIn('data-part="plan"', html)
+        self.assertNotIn("data-history", html)
         self.assertNotIn("Mohamed", re.search(r"<title>(.*?)</title>", html, re.S).group(1))
         self.assertEqual(access_count(self.a, AuditAccess.Action.HISTORY), before + 1)
 
@@ -73,7 +76,6 @@ class TeethPageTests(M2TestCase):
         html = self.doc.get(f"/visits/{visit['id']}/teeth").content.decode()
         self.assertIn('data-part="finding"', html)
         self.assertNotIn('data-part="procedure"', html)
-        self.assertIn("بعد وصول المريض", html)
 
     def test_the_patient_file_chart_has_no_procedures(self):
         visit = self.in_room()
@@ -110,7 +112,7 @@ class TeethPermissionTests(M2TestCase):
         html = r.content.decode()
         self.assertEqual(r.status_code, 200)
         self.assertNotIn("data-part=", html)
-        self.assertIn("data-history", html)
+        self.assertIn("dentition", html)  # the teeth, to read
 
     def test_another_clinics_visit_patient_and_history_are_not_found(self):
         theirs = self.in_room(fixture=self.b)

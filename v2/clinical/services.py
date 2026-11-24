@@ -1342,3 +1342,24 @@ def move_plan_item(ctx, item_id, status, expected):
         raise ApiError("status_changed", _("This plan item changed meanwhile."), 409, fields={"status": current[1]})
     raise ApiError("invalid_transition", _("This change doesn't apply to an item in that status."), 400,
                    fields={"status": "invalid"})
+
+
+def require_record(ctx, appointment_id):
+    """Before the visit screen finishes a visit (Saged, 2026-11-24): at least one thing done today, and the visit's
+    notes written or the dental chart worked on in this visit (its findings also go into the notes by themselves)."""
+    found = sql.row(ctx, """
+        SELECT EXISTS (SELECT 1 FROM "clinical_visit_procedure" WHERE clinic_id = a.clinic_id AND appointment_id = a.id),
+               EXISTS (SELECT 1 FROM "clinical_visit_note" WHERE clinic_id = a.clinic_id AND appointment_id = a.id
+                          AND btrim(notes || complaint || diagnosis) <> ''),
+               EXISTS (SELECT 1 FROM "clinical_tooth_history" WHERE clinic_id = a.clinic_id AND patient_id = a.patient_id
+                          AND appointment_id = a.id)
+          FROM "scheduling_appointment" a WHERE a.clinic_id = %s AND a.id = %s""", [ctx.clinic_id, appointment_id])
+    if found is None:
+        return  # the finish answers 404
+    done, noted, charted = found
+    if not done:
+        raise ApiError("record_needed", _("Add what was done today before finishing the visit."), 409,
+                       fields={"procedures": "required"})
+    if not (noted or charted):
+        raise ApiError("record_needed", _("Write the visit notes or mark the dental chart before finishing."), 409,
+                       fields={"notes": "required"})
