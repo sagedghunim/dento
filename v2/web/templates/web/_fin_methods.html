@@ -1,0 +1,6 @@
+{% load i18n hamada %}{# Each payment method on its own line, even at 0, then the shift's total (Saged, 2026-11-25). #}
+<h3 class="sub-title">{% translate "By payment method" %}</h3>
+<ul class="lines method-lines">
+  {% for m in r.by_method %}<li data-method="{{ m.code }}"><span>{{ m.label }}</span><span class="amt">{{ m.net|money }}</span></li>{% endfor %}
+  <li class="total-line" data-methods-total><span>{% translate "Total" %}</span><span class="amt">{{ r.methods_total|money }}</span></li>
+</ul>

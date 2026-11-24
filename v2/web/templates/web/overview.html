@@ -32,21 +32,25 @@
 <div class="grid-2 ov-grid">
   <section class="card" aria-labelledby="team-title">
     <h2 id="team-title">{% translate "The team" %} · {{ period_label }}</h2>
-    {% if team %}
+    {% if team.rows %}
     <div class="table-scroll">
       <table class="table ov-team">
-        <thead><tr><th>{% translate "Name" %}</th><th class="num">{% translate "Visits" %}</th><th class="num">{% translate "Procedures" %}</th>{% if money %}<th class="num">{% translate "Revenue" %}</th>{% endif %}<th class="num">{% translate "Avg. time" %}</th></tr></thead>
+        <thead><tr><th>{% translate "Name" %}</th><th class="num">{% translate "Visits" %}</th><th class="num">{% translate "Procedures" %}</th>{% if money %}<th class="num">{% translate "Revenue" %}</th><th class="num">{% translate "Per visit" %}</th>{% endif %}<th class="num">{% translate "Avg. time" %}</th></tr></thead>
         <tbody>
-          {% for m in team %}
-          <tr>
+          {% for m in team.rows %}
+          <tr data-member="{{ m.membership_id }}">
             <td><bdi dir="auto">{{ m.name }}</bdi><progress class="fin-bar" max="{{ m.bar_max }}" value="{{ m.bar }}" aria-hidden="true"></progress></td>
             <td class="num">{{ m.visits|num }}</td>
             <td class="num">{{ m.procedures|num }}</td>
-            {% if money %}<td class="num">{{ m.revenue|money }}</td>{% endif %}
+            {% if money %}<td class="num">{{ m.revenue|money }}</td>
+            <td class="num">{% if m.per_visit is not None %}{{ m.per_visit|money }}{% if m.trend == "up" %} <span class="trend up" data-up aria-label="{% translate "Higher than before" %}">▲</span>{% elif m.trend == "down" %} <span class="trend down" data-down aria-label="{% translate "Lower than before" %}">▼</span>{% endif %}{% if m.before is not None %}<small class="muted before">{% translate "before" %} {{ m.before|money }}</small>{% endif %}{% else %}–{% endif %}</td>{% endif %}
             <td class="num">{% if m.avg_room is not None %}{{ m.avg_room }} {% translate "min" %}{% else %}–{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
+        {% if money and team.average is not None %}
+        <tfoot><tr data-clinic-average><th scope="row">{% translate "Clinic average" %}</th><td></td><td></td><td></td><td class="num">{{ team.average|money }}</td><td></td></tr></tfoot>
+        {% endif %}
       </table>
     </div>
     {% else %}<p class="empty-note">{% translate "No visits in this period yet." %}</p>{% endif %}

@@ -438,6 +438,7 @@ body.embedded .main { padding-block: 14px 30px; padding-inline: 18px; }
 .lines li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding-block: 8px; border-block-end: 1px solid var(--line); }
 .lines li:last-child { border-block-end: 0; }
 .lines .amt { font-weight: 700; }
+.lines li.total-line { border-block-start: 2px solid var(--line); font-weight: 800; }
 .subsection { display: grid; gap: 10px; padding-block-start: 14px; border-block-start: 1px solid var(--line); }
 .subsection h3 { font-size: .95rem; font-weight: 800; }
 .fee-line { font-weight: 700; }
@@ -1245,3 +1246,11 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 @media (max-width: 760px) {
   .plan-row { grid-template-columns: 1fr; }
 }
+/* What one visit brings in, against the period before (Saged, 2026-11-25). */
+.ov-team .trend { font-size: .75rem; }
+.ov-team .trend.up { color: var(--teal-dark); }
+.ov-team .trend.down { color: var(--red, #b42318); }
+.ov-team small.before { display: block; font-size: .75rem; font-weight: 500; }
+.ov-team tfoot th, .ov-team tfoot td { border-block-start: 2px solid var(--line); font-weight: 800; }
+/* "Consultation only" is locked while a procedure is recorded (Saged, 2026-11-25). */
+.check.consult-only.off { opacity: .5; cursor: not-allowed; }

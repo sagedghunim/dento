@@ -2701,9 +2701,6 @@ msgstr "لا يوجد أعضاء في الفريق بعد."
 msgid "No work recorded in this month."
 msgstr "لا يوجد شغل مسجَّل في هذا الشهر."
 
-msgid "Not cash, so not in the drawer:"
-msgstr "غير نقدي، فليس في الدرج:"
-
 msgid "Note:"
 msgstr "ملاحظة:"
 
@@ -2747,9 +2744,6 @@ msgid ""
 "Optional. Without it the register opens by itself, at zero, on the first "
 "cash payment."
 msgstr "اختياري. بدونه تُفتح الخزنة تلقائيًا من صفر مع أول دفعة نقدية."
-
-msgid "Other payment methods"
-msgstr "طرق دفع أخرى"
 
 msgid "Out"
 msgstr "سحب"
@@ -4897,3 +4891,21 @@ msgstr "دوس واختار روشتة جاهزة"
 
 msgid "Type or tap to pick a medicine"
 msgstr "اكتب اسم الدوا أو دوس واختار"
+
+msgid "Only cash is in the drawer; the other methods go to the bank or the wallet."
+msgstr "الكاش بس اللي في الدرج؛ باقي الطرق بتروح البنك أو المحفظة."
+
+msgid "Higher than before"
+msgstr "أعلى من قبل"
+
+msgid "Lower than before"
+msgstr "أقل من قبل"
+
+msgid "before"
+msgstr "قبلها"
+
+msgid "Clinic average"
+msgstr "متوسط العيادة"
+
+msgid "A procedure was recorded, so this isn't a consultation only."
+msgstr "اتسجّل إجراء، فدي مش كشف بس."

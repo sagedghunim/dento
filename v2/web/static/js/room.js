@@ -1009,11 +1009,22 @@ if (rxDialog) {
 // --- "Consultation only" (Saged, 2026-11-24): the patient was seen and nothing else was done ---
 const consultBox = document.querySelector("[data-consult-only]");
 if (consultBox) {
+  // A procedure on the visit means it isn't a consultation only (Saged, 2026-11-25): the box is cleared and locked
+  // while any is recorded (the server clears it too), and comes back when the last one is removed.
+  const hasProcedure = () => Boolean(procList && procList.querySelector("[data-record]"));
+  const lockConsult = () => {
+    const done = hasProcedure();
+    if (done) consultBox.checked = false;
+    consultBox.disabled = done;
+    consultBox.closest("label").classList.toggle("off", done);
+  };
+  lockConsult();
+  if (procList) new MutationObserver(lockConsult).observe(procList, { childList: true });
   consultBox.addEventListener("change", async () => {
     const on = consultBox.checked;
     consultBox.disabled = true;
     const result = await save("POST", `/api/v1/appointments/${id}/consult-only`, { on }, { label: t("consult_only") });
-    consultBox.disabled = false;
+    lockConsult();
     if (result.settled && isOk(result)) return;
     if (result.settled) { consultBox.checked = !on; alertMessage(errorMessage(result, t("failed"))); }
   });

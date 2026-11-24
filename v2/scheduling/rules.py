@@ -343,11 +343,9 @@ def owner_mode(ctx):
 
 
 def queue_doctor(ctx):
-    """The doctor whose visits alone Today shows this member: a doctor, or an owner who treats in a shared place."""
-    doctor = own_doctor(ctx)
-    if doctor is None and owner_mode(ctx) == "doctor":
-        return ctx.membership_id
-    return doctor
+    """The doctor whose visits alone Today shows this member: a doctor only. The owner sees every doctor, also when
+    they treat patients themselves (Saged, 2026-11-25: the center's owner sees Ahmed's visits too)."""
+    return own_doctor(ctx)
 
 
 def may_book(ctx):

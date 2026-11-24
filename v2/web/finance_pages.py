@@ -40,6 +40,7 @@ MONTH_TABS = ("month", "expenses", "pay")
 PAGE = 30
 SHIFTS_PAGE = 10
 METHODS = ("cash", "card", "transfer", "wallet", "instapay", "other")
+ALWAYS_SHOWN = ("cash", "card", "wallet", "instapay", "transfer")  # the shift report lists these even at 0
 
 
 def _method_labels():
@@ -195,11 +196,17 @@ def _shift_report(ctx, shift):
                                 (_("Staff pay in cash"), totals["payouts"], "-")):
         if amount:
             lines.append((label, amount, sign))
-    other = [{"label": methods.get(m, m), "net": v["net"]} for m, v in sorted(totals["methods"].items()) if m != "cash"]
+    # Every method on its own line, even at 0, then the shift's total (an accountant's rule, Saged 2026-11-25);
+    # "other" and anything unusual only when it was used.
+    used = totals["methods"]
+    by_method = [{"code": m, "label": methods.get(m, m), "net": used.get(m, {"net": 0})["net"]} for m in ALWAYS_SHOWN]
+    by_method += [{"code": m, "label": methods.get(m, m), "net": v["net"]} for m, v in sorted(used.items())
+                  if m not in ALWAYS_SHOWN and v["net"]]
     movements = [{**m, "when": _local(ctx, m["at"]), "by": people.get(m["by_id"], "")} for m in rows]
     return {"shift": _shift_rows(ctx, [shift], people)[0], "expected": services.expected_cash(shift["opening_float"], totals),
             "lines": [{"label": label, "amount": -amount if sign == "-" else amount} for label, amount, sign in lines],
-            "other": other, "movements": movements}
+            "by_method": by_method, "methods_total": sum(m["net"] for m in by_method),
+            "movements": movements}
 
 
 def _shift_page(ctx, request=None):

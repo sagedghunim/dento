@@ -12,7 +12,7 @@ The platform is being rebuilt from scratch to grow to 250,000 doctors. Requireme
 - Python is 3.15 (`py -3.15`); `python` on PATH is the Microsoft Store stub. Use `v2\.venv\Scripts\python.exe`.
 - Tests run against PostgreSQL: `cd v2` then `.venv\Scripts\python manage.py test`.
 - Screens follow the first demo (`C:\work\hamada-app`, https://hamada-app-ghunim.vercel.app/): the same sections, layout and look, in Arabic right to left first (requirements 1).
-- Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout. A design or a milestone goes to the three seniors and the judge for review, then the chief judge decides.
+- Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout, simplifier (makes an idea simple and says where it belongs). A design or a milestone goes to the three seniors and the judge for review, then the chief judge decides.
 
 ## Commands (Windows)
 

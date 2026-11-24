@@ -85,6 +85,21 @@ class FinancesPageTests(FinancesCase):
         self.assertEqual(fragment(self.desk, "/finances/shifts").status_code, 403)
         self.assertEqual(fragment(self.owner, "/finances/shifts").status_code, 200)
 
+    def test_the_shift_report_lists_every_payment_method_even_at_zero_and_a_total(self):
+        # An accountant's rule (Saged, 2026-11-25): each method on its own line even when nothing came in, then the total.
+        call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": 5000, "reason": "فكة"})
+        register = fragment(self.owner, "/finances/part?tab=register").content.decode()
+        shift = register.split('data-shift-id="')[1].split('"')[0]
+        html = fragment(self.owner, f"/finances/shifts/{shift}").content.decode()
+        self.assertIn("حسب طريقة الدفع", html)
+        for method in ("cash", "card", "wallet", "instapay", "transfer"):
+            self.assertIn(f'data-method="{method}"', html, method)
+        self.assertNotIn('data-method="other"', html)  # "other" only when it was used
+        self.assertIn("data-methods-total", html)
+        total = html.split("data-methods-total")[1].split("</li>")[0]
+        self.assertIn("0", total)
+        self.assertIn("data-methods-total", register)  # the open shift on the register shows it too
+
     def test_the_register_lists_drawer_expenses_by_category_and_other_stays(self):
         items = {c["code"]: c for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
         # Cash in the drawer first: nothing leaves it beyond what it holds (Saged, 2026-11-23).

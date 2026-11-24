@@ -14,10 +14,7 @@
 <ul class="lines cash-lines">
   {% for line in report.lines %}<li><span>{{ line.label }}</span><span class="amt">{{ line.amount|money }}</span></li>{% endfor %}
 </ul>
-{% if report.other %}
-<h3 class="sub-title">{% translate "Other payment methods" %}</h3>
-<ul class="lines">{% for m in report.other %}<li><span>{{ m.label }}</span><span class="amt">{{ m.net|money }}</span></li>{% endfor %}</ul>
-{% endif %}
+{% include "web/_fin_methods.html" with r=report %}
 {% if report.movements %}
 <h3 class="sub-title">{% translate "Drawer movements" %}</h3>
 <ul class="lines">

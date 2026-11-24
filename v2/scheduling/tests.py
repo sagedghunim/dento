@@ -387,8 +387,11 @@ class TodayTests(M1TestCase):
         self.assertEqual([a["queue_no"] for a in queue["appointments"]], [1, 2])
         self.assertEqual(body["recent"][0]["appointment_id"], appt["id"])
         owner = call(self.owner, "GET", "/api/v1/today").json()
-        self.assertEqual(owner["totals"]["collected"], 5000)  # the place's money, though the owner sees their own queue
-        self.assertEqual([q["doctor"]["id"] for q in owner["queues"]], [self.a.membership("owner").id])
+        self.assertEqual(owner["totals"]["collected"], 5000)  # the place's money
+        # The owner who also treats sees every doctor, not only their own queue (Saged, 2026-11-25).
+        self.assertFalse(owner["own_only"])
+        self.assertEqual({q["doctor"]["id"] for q in owner["queues"]}, {q["doctor"]["id"] for q in body["queues"]})
+        self.assertIn(self.a.membership("doctor").id, [q["doctor"]["id"] for q in owner["queues"]])
         # The slot doctor works today, with no bookings yet.
         self.assertIn(self.a.membership("doctor").id, [q["doctor"]["id"] for q in body["queues"]])
 

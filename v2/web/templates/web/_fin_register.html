@@ -18,9 +18,8 @@
   <ul class="lines cash-lines">
     {% for line in current.lines %}<li><span>{{ line.label }}</span><span class="amt">{{ line.amount|money }}</span></li>{% endfor %}
   </ul>
-  {% if current.other %}
-  <p class="muted other-methods">{% translate "Not cash, so not in the drawer:" %} {% for m in current.other %}{{ m.label }} {{ m.net|money }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
-  {% endif %}
+  {% include "web/_fin_methods.html" with r=current %}
+  <p class="muted other-methods">{% translate "Only cash is in the drawer; the other methods go to the bank or the wallet." %}</p>
   {% endif %}
 
   {% if perms.expenses or perms.shift %}

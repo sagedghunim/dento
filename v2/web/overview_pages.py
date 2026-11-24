@@ -73,8 +73,27 @@ def _team(ctx, first, today, money):
     english = dict(Membership.objects.filter(clinic_id=ctx.clinic_id, id__in=[i["membership_id"] for i in items])
                    .values_list("id", "display_name_en"))
     top = max([i["visits"] for i in items] + [1])
-    return [{**i, "name": pick(i["name"], english.get(i["membership_id"], "")), "avg_room": _minutes(i["avg_doctor_secs"]),
+    rows = [{**i, "name": pick(i["name"], english.get(i["membership_id"], "")), "avg_room": _minutes(i["avg_doctor_secs"]),
              "bar": i["visits"], "bar_max": top} for i in items]
+    if not money:
+        return {"rows": rows}
+    # What one visit brings in, per doctor, beside the clinic's average and the same length of time just before
+    # (an accountant's advice, Saged 2026-11-25). A doctor alone has no one to compare with but their own past.
+    last = first - dt.timedelta(days=1)
+    before = {i["membership_id"]: _per_visit(i) for i in
+              selectors.staff_performance(ctx, last - (today - first), last)}
+    for r in rows:
+        r["per_visit"] = _per_visit(r)
+        r["before"] = before.get(r["membership_id"])
+        r["trend"] = None if r["per_visit"] is None or r["before"] is None else (
+            "up" if r["per_visit"] > r["before"] else "down" if r["per_visit"] < r["before"] else None)
+    visits = sum(r["visits"] for r in rows)
+    average = sum(r["revenue"] for r in rows) // visits if visits else None
+    return {"rows": rows, "average": average}
+
+
+def _per_visit(row):
+    return row["revenue"] // row["visits"] if row["visits"] else None
 
 
 def _insights(ctx, today):

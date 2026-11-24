@@ -129,6 +129,29 @@ class ConsultOnlyTests(M2TestCase):
         # Not after the visit is over.
         self.assertEqual(call(self.doc, "POST", f"{url}/consult-only", {"on": False}).status_code, 409)
 
+    def test_a_recorded_procedure_ends_consultation_only(self):
+        # Once something was done it is no longer a consultation only (Saged, 2026-11-25).
+        visit = self.in_room()
+        url = f"/api/v1/appointments/{visit['id']}"
+        call(self.doc, "POST", f"{url}/consult-only", {"on": True})
+        filling = self.procedure("Composite filling, one surface")["id"]
+        r = call(self.doc, "POST", f"{url}/procedures", {"procedure_id": filling, "tooth": 36})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertFalse(self.appointment(visit["id"]).consult_only)
+        r = call(self.doc, "POST", f"{url}/consult-only", {"on": True})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "has_procedures"))
+        self.assertFalse(self.appointment(visit["id"]).consult_only)
+
+    def test_consultation_only_repeats_replay(self):
+        import uuid
+
+        visit = self.in_room()
+        url, key = f"/api/v1/appointments/{visit['id']}/consult-only", uuid.uuid4()
+        first = call(self.doc, "POST", url, {"on": True}, key=key)
+        self.assertEqual(call(self.doc, "POST", url, {"on": True}, key=key).json(), first.json())
+        r = call(self.doc, "POST", url, {"on": False}, key=key)
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (422, "request_key_reused"))
+
 
 class DeskFinishTests(M2TestCase):
     def test_the_desk_finishes_only_after_the_doctor_wrote_and_the_doctor_may_go_back(self):

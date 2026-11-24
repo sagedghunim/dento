@@ -103,6 +103,30 @@ class OverviewPageTests(OverviewCase):
             self.assertIn("/finances?tab=owed", html)
         self.assertEqual(owner.get("/overview?period=nonsense").status_code, 200)
 
+    def test_the_team_shows_revenue_per_visit_the_clinic_average_and_the_period_before(self):
+        # An accountant's advice (Saged, 2026-11-25): a good doctor raises what one visit brings in.
+        from core.days import business_day
+        from summaries.models import DoctorDay
+
+        doctor = self.a.membership("doctor").id
+        with clinic_transaction(self.a.id, self.a.shard):
+            today = business_day(Clinic.objects.get(id=self.a.id))
+            yesterday = today - dt.timedelta(days=1)
+            for who, day, done, collected in ((doctor, today, 4, 200000), (self.owner_id, today, 2, 40000),
+                                              (doctor, yesterday, 2, 60000)):
+                DoctorDay.objects.create(clinic_id=self.a.id, doctor_id=who, day=day, done=done, collected=collected)
+        html = self.sessions(keep=False).get("/overview?period=today").content.decode()
+        team = html.split('id="team-title"')[1].split("</section>")[0]
+        self.assertIn("لكل زيارة", team)
+        row = team.split(f'data-member="{doctor}"')[1].split("</tr>")[0]
+        self.assertIn("500", row)          # 2,000 EGP over 4 visits
+        self.assertIn("300", row)          # the day before: 600 over 2
+        self.assertIn("data-up", row)      # better than before
+        average = team.split("data-clinic-average")[1].split("</tr>")[0]
+        self.assertIn("400", average)      # 2,400 over 6 visits
+        doctor_view = self.codes("doctor", granted=["reports.view"]).get("/overview").content.decode()
+        self.assertNotIn("لكل زيارة", doctor_view)  # money only with finances.view
+
     def test_reports_without_finances_shows_no_money(self):
         doctor = self.codes("doctor", granted=["reports.view"])
         r = doctor.get("/overview")

@@ -206,7 +206,7 @@ def today_data(ctx, day, state, section_id=None):
             doctor["sessions"] = [s for s in doctor["sessions"] if s["section_id"] == section_id]
     own_queue = rules.queue_doctor(ctx)
     if own_queue is not None:
-        # A doctor, or an owner who treats in a shared place, sees only their own queue (Saged, 2026-11-13).
+        # A doctor sees only their own queue (Saged, 2026-11-13); the owner sees every doctor's (2026-11-25).
         doctors = {own_queue: doctors[own_queue]} if own_queue in doctors else {}
         own, own_params = " AND a.doctor_id = %s", [own_queue]  # index appointment_turn_uniq (clinic, day, doctor, ...)
     else:

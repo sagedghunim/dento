@@ -57,7 +57,7 @@ def mutating(o):
         "vitals": ("PUT", f"/api/v1/appointments/{v}/vitals", {"pulse": 80}, {"pulse": 81}, ["visits.vitals"], 0),
         "record": ("POST", f"/api/v1/appointments/{v}/procedures", {"procedure_id": o.filling, "tooth": 36},
                    {"procedure_id": o.filling, "tooth": 37}, ["procedures.record"], None),
-        "consult only": ("POST", f"/api/v1/appointments/{v}/consult-only", {"on": True}, {"on": False},
+        "consult only": ("POST", f"/api/v1/appointments/{v}/consult-only", {"on": False}, {"on": True},
                          ["procedures.record"], None),
         "remove procedure": ("DELETE", f"/api/v1/appointments/{v}/procedures/{o.recorded}", {}, {"x": 1},
                              ["procedures.record"], None),
@@ -252,6 +252,8 @@ class ClinicalEndpointTests(M2TestCase):
     def test_t3_repeats_replay_and_a_reused_key_with_another_body_is_refused(self):
         self.set_codes("doctor", granted=EXTRA)
         for name in mutating(objects(self, self.a)):
+            if name == "consult only":  # its visit has a procedure, so it can only be off: see test_finish_rules
+                continue
             method, path, body, other, _codes, version = mutating(objects(self, self.a))[name]
             key = uuid.uuid4()
             start = snapshot(self.a)

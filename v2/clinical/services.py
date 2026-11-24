@@ -1059,6 +1059,9 @@ def record_procedure(ctx, appointment_id, request):
         ctx.clinic_id, appointment_id, appointment["patient_id"], procedure["id"], plan_item["id"] if plan_item else None,
         tooth, surfaces, request["area"], qty, unit_price, qty * unit_price, line_id, request["note"], now,
         ctx.membership_id, package["id"] if package else None, plan_item["status"] if plan_item else ""])[0]
+    # Something was done, so it is no longer a consultation only (Saged, 2026-11-25).
+    sql.run(ctx, 'UPDATE "scheduling_appointment" SET consult_only = false WHERE clinic_id = %s AND id = %s '
+                 "AND consult_only", [ctx.clinic_id, appointment_id])
     # Its materials come out of stock, and their average cost becomes the line's internal cost (F2).
     from inventory.services import deduct_materials
 
@@ -1350,6 +1353,10 @@ def set_consult_only(ctx, appointment_id, on):
     from scheduling import rules
 
     rules.guard(ctx, appointment_id)
+    if on and sql.row(ctx, 'SELECT 1 FROM "clinical_visit_procedure" WHERE clinic_id = %s AND appointment_id = %s LIMIT 1',
+                      [ctx.clinic_id, appointment_id]):
+        # A procedure was recorded: it isn't a consultation only any more (Saged, 2026-11-25).
+        raise ApiError("has_procedures", _("A procedure was recorded, so this isn't a consultation only."), 409)
     found = sql.row(ctx, 'UPDATE "scheduling_appointment" SET consult_only = %s, updated_at = %s, updated_by_id = %s '
                          "WHERE clinic_id = %s AND id = %s AND status = 'in_room' RETURNING OLD.consult_only, patient_id",
                     [on, timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id])
