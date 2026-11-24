@@ -421,11 +421,18 @@ def quote(ctx, doctor_id, service_id, day, patient_id=None, follow_up_id=None, g
             if services.visible_visit(ctx, visit):
                 same_day.append({**services.visit_extra(ctx, visit), "here": visit["status"] in services.HERE,
                                  "same_doctor": visit["doctor_id"] == doctor.doctor_id})
+    owed = credit = 0
+    if patient_id is not None and ctx.can("money.view"):
+        # What the patient owes from before and holds as credit, for the dialog's money line (Saged, 2026-11-24).
+        from billing.selectors import balances, credits
+
+        owed, credit = balances(ctx, [patient_id]).get(patient_id, 0), credits(ctx, [patient_id]).get(patient_id, 0)
     return visibility.fields(ctx, {
         "same_day": same_day,
         "fee": fee, "is_follow_up": is_follow_up, "visit_price": visit_price, "service_price": service.price,
         "follow_up_price": service.follow_up_price, "section_id": service.section_id,
-        "doctor_works": bool(doctor.sessions_in(service.section_id))}, "fee", "service_price", "follow_up_price")
+        "doctor_works": bool(doctor.sessions_in(service.section_id)), "owed": owed, "credit": credit},
+        "fee", "service_price", "follow_up_price", "owed", "credit")
 
 
 def future_bookings(ctx, doctor_id, weekdays, today, page=500):

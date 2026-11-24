@@ -162,8 +162,12 @@ def book(ctx, request, deltas=None):
         if payment["amount"] != asked:
             raise ApiError("deposit_changed", _("The deposit amount changed. Reload and try again."), 409,
                            fields={"payment.amount": "changed"}, extra={"amount": asked})
-    if payment is not None and payment["amount"] > fee and not is_deposit:
-        raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"})
+    money = None
+    if payment is not None and not is_deposit:
+        # The fee first, then the patient's older bills, then credit if the desk said so; credit held pays first
+        # (Saged, 2026-11-24). The patient's open bills are locked here, before the counters (billing lock order).
+        bills = billing.patient_money(ctx, patient["id"]) if fields is None else []
+        money = billing.plan_booking_money(bills, fee, payment["amount"], payment.get("keep_credit", False))
 
     # Writes, in the global lock order.
     if fields is not None:
@@ -176,7 +180,9 @@ def book(ctx, request, deltas=None):
         shift_id = shift_for(ctx, "cash")  # the open shift (8a), opened if none is, before the doctor-day
     deltas = (Deltas() if own else deltas).take_turn(day, doctor.doctor_id, doctor.cap)
     deltas.clinic_day(day)
-    if payment is not None:
+    if money is not None:
+        billing.booking_money_deltas(money, deltas, today, payment["method"], doctor.doctor_id, service.section_id, day)
+    elif payment is not None:
         deltas.doctor_day(today, doctor.doctor_id, collected=payment["amount"])
         deltas.money_day(today, service.section_id, payment["method"], collected=payment["amount"])
         deltas.clinic_day(today, collected=payment["amount"])
@@ -199,7 +205,12 @@ def book(ctx, request, deltas=None):
         raise
 
     invoice = None
-    if payment is not None:
+    if money is not None:
+        locked = {"id": appointment.id, "patient_id": patient["id"], "service_id": service.id, "fee": fee,
+                  "service_name": service.name, "qty": qty}
+        invoice = billing.pay_booking(ctx, money, locked, invoice_number, patient["id"], payment["method"], today,
+                                      shift_id, doctor.doctor_id, service.section_id)
+    elif payment is not None:
         locked = {"id": appointment.id, "status": appointment.status, "day": day, "doctor_id": doctor.doctor_id,
                   "patient_id": patient["id"], "service_id": service.id, "fee": fee, "service_name": service.name,
                   "section_id": service.section_id, "qty": qty}

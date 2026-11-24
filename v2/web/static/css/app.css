@@ -257,7 +257,8 @@ a.nav-btn:hover { background: var(--surface-2); }
 .form-row > .field { flex: 1; min-width: 140px; }
 .stack-form { display: grid; gap: 12px; margin-block-start: 12px; }
 .grid-form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: end; margin-block-start: 12px; }
-.grid-form .form-error, .grid-form .form-actions { grid-column: 1 / -1; }
+.grid-form .form-error, .grid-form .form-actions, .grid-form > .money-line, .grid-form > .notice { grid-column: 1 / -1; }
+.money-line { margin: 0; font-weight: 700; color: var(--amber); }
 .form-error { color: var(--red); min-height: 1.4em; margin: 0; font-weight: 600; }
 .form-error:empty { min-height: 0; }
 fieldset.group { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -358,6 +359,7 @@ button.chip-btn.suggested:not([aria-pressed="true"]) { background: var(--amber-t
 /* Desk review 3, 5, 7: the older balance, tappable phones and the folded finished rows. */
 .earlier { color: var(--amber); font-size: .875rem; font-weight: 600; }
 .owed { color: var(--amber); font-weight: 600; }
+.credit { color: var(--teal-dark); font-weight: 600; }
 .what a.tel { color: inherit; text-decoration: underline; text-underline-offset: 3px; display: inline-block;
   padding-block: 12px; margin-block: -12px; }  /* a 44 px tall target without a taller row */
 .what a.tel.wa { color: var(--teal-dark); font-weight: 600; }

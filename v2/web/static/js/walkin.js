@@ -5,6 +5,7 @@ import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
 import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, wireFamilies, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
 import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { moneyBox } from "./credit.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
 import { t } from "./strings.js";
@@ -23,6 +24,7 @@ export function initWalkIn({ onBooked } = {}) {
   const note = dialog.querySelector("[data-defaults-note]");
   const fee = dialog.querySelector("[data-fee]");
   const collectFields = dialog.querySelector("[data-collect-fields]");
+  const money = moneyBox(dialog, form);
   let patient = null;
   let searchTimer = null;
   let searchController = null;
@@ -196,7 +198,7 @@ export function initWalkIn({ onBooked } = {}) {
     const seq = ++quoteSeq;
     markConsult();
     showCount(qtyBox, field("service").selectedOptions[0]);
-    if (!doctor || !service) { fee.textContent = ""; lastFee = null; return; }
+    if (!doctor || !service) { fee.textContent = ""; lastFee = null; money.reset(); return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(config().today)}`;
     if (patient) url += `&patient=${patient.id}`;
     if (patient && courseOf(dialog)) url += "&continues=1";
@@ -206,7 +208,9 @@ export function initWalkIn({ onBooked } = {}) {
     lastFee = result.data.fee == null ? null : result.data.fee * qty();
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = lastFee ? amountInput(lastFee) : "";
+    // The fee, plus what is owed from before, less the credit the patient holds (Saged, 2026-11-24).
+    const ask = money.set(result.data, lastFee);
+    if (field("amount") && !field("amount").dataset.touched) field("amount").value = ask == null ? "" : amountInput(ask);
   }
 
   let configCache = null;
@@ -226,8 +230,9 @@ export function initWalkIn({ onBooked } = {}) {
     if (field("doctor").value) out.doctor_id = Number(field("doctor").value);
     if (field("service").value) out.service_id = Number(field("service").value);
     if (qty() > 1) out.qty = qty();
-    if (field("collect") && field("collect").checked && lastFee !== 0) {  // a free follow-up has nothing to collect
-      out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
+    // A free follow-up has nothing to collect, unless the patient owes from before.
+    if (field("collect") && field("collect").checked && (lastFee !== 0 || money.owes())) {
+      out.payment = money.fill({ amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value });
     }
     return out;
   }
@@ -235,7 +240,8 @@ export function initWalkIn({ onBooked } = {}) {
   function check(b) {
     if (!b.patient_id && !b.new_patient) return t("need_patient");
     if (b.new_patient) { const missing = np.problem(b.new_patient); if (missing) return missing; }
-    if (b.payment && !b.payment.amount) return t("bad_amount");
+    if (b.payment && b.payment.amount == null) return t("bad_amount");
+    if (b.payment) return money.problem(b.payment);
     return "";
   }
 
@@ -249,13 +255,14 @@ export function initWalkIn({ onBooked } = {}) {
     const result = await submitter.run("POST", "/api/v1/appointments/walk-in", b, [t("walkin"), who].filter(Boolean).join(" · "));
     if (result && !isOk(result)) {
       if (np) np.refused(result);
+      money.refused(result);
       showConflict(dialog, result, { onConfirm: () => { confirmOther = true; form.requestSubmit(); } });
     }
     if (!result || !isOk(result)) return;
     const { appointment, turn, ahead } = result.data;
     dialog.close();
     toast(t("walkin_done", { name: appointment.patient.name, n: localDigits(turn), ahead: localDigits(ahead) }));
-    if (b.payment && !(appointment.invoice && appointment.invoice.paid >= b.payment.amount)) alertMessage(t("booked_not_paid"));
+    if (b.payment && !(appointment.invoice && appointment.invoice.paid > 0)) alertMessage(t("booked_not_paid"));
     if (onBooked) onBooked(result.data);
   });
 

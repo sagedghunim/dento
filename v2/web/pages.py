@@ -418,15 +418,17 @@ def _with_owed(ctx, results):
     """Each result's balance, for those who see money (desk review 3, 9): one grouped statement for the page."""
     _with_tags(ctx, results)
     if results and ctx.can("money.view"):
-        from billing.selectors import balances
+        from billing.selectors import balances, credits
 
         from billing.installments import late_by_patient
 
         owed = balances(ctx, [p["id"] for p in results])
         late = late_by_patient(ctx, [p["id"] for p in results])
+        held = credits(ctx, [p["id"] for p in results])  # money the clinic holds for them (Saged, 2026-11-24)
         for p in results:
             p["owed"] = owed.get(p["id"], 0)
             p["late"] = late.get(p["id"], 0)
+            p["credit"] = held.get(p["id"], 0)
     return results
 
 
@@ -734,7 +736,7 @@ def receipt_page(request, ctx, invoice_id):
         body = render_to_string("web/receipt.html", {
             "r": data, "lang": language, "paper": paper, "auto_print": request.GET.get("print") == "1",
             "printed_at": local_iso(ctx.clinic, timezone.now()), "invoice_id": data["id"],
-            "methods": dict(_labels()["methods"]),
+            "methods": {**dict(_labels()["methods"]), "credit": _("From the patient's credit")},
             "other_lang": "en" if language == "ar" else "ar",
             "other_paper": "a5" if paper == "80mm" else "80mm",
         }, request=request)

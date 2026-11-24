@@ -47,6 +47,7 @@
     {% if config.perms.collect %}
     <label class="check"><input type="checkbox" name="collect" checked> {% translate "Collect now" %}</label>
     <div class="grid-form" data-collect-fields>
+      {% include "web/_money_box.html" %}
       <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
       <fieldset class="group"><legend>{% translate "Payment method" %}</legend><div class="chips">{% for code, label in methods %}<label class="chip"><input type="radio" name="method" value="{{ code }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}</div></fieldset>
     </div>

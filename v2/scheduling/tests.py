@@ -583,7 +583,9 @@ class QueryCountTests(M1TestCase):
         # wait on another, so it must come before any summary row). Fixed: it never grows with the day.
         # Plus the lock on (patient, day) and the read of the patient's open visits that day (Saged, 2026-11-17).
         # Plus the register shifts read once for the business day (Saged, 2026-11-22: the day follows the drawer).
-        self.assertLessEqual(small[2], 18)
+        # Plus the lock on the patient's open bills that owe or hold credit (Saged, 2026-11-24: old debt and credit
+        # are settled with a booking's payment), one statement whatever their number.
+        self.assertLessEqual(small[2], 19)
 
 
 class FinishTests(M1TestCase):

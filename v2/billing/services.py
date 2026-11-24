@@ -205,6 +205,18 @@ def _insert_payment(ctx, invoice, patient_id, doctor_id, kind, method, amount, d
     new shift, so a closed shift never gains a payment after its count.
     """
     now = timezone.now()
+    if method == "credit":  # credit moved between bills: no money moves, so no shift (models.STORED_METHODS)
+        payment_id = sql.row(ctx, """
+            INSERT INTO "billing_payment" (clinic_id, invoice_id, patient_id, doctor_id, kind, method, amount,
+                                           refunded, refund_of_id, received_at, day, received_by_id, note, shift_id,
+                                           section_id, is_deposit)
+            VALUES (%s, %s, %s, %s, %s, 'credit', %s, 0, %s, %s, %s, %s, %s, NULL, %s, false) RETURNING id""", [
+            ctx.clinic_id, invoice["id"], patient_id, doctor_id, kind, amount, refund_of, now, day, ctx.membership_id,
+            note, section_id])[0]
+        return {"id": payment_id, "invoice_id": invoice["id"], "patient_id": patient_id, "doctor_id": doctor_id,
+                "kind": kind, "method": method, "amount": amount, "refunded": 0, "refund_of_id": refund_of,
+                "received_at": now, "day": day, "note": note, "shift_id": None, "section_id": section_id,
+                "is_deposit": False}
     if method == "cash":
         from finance.services import shift_for
 
@@ -533,6 +545,8 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False):
     patient_id, doctor_id, original_method, original_amount, refunded, section_id, was_deposit = updated
     today = business_day(ctx.clinic)
     method = method or original_method
+    if method == "credit":
+        method = "cash"  # a bill paid from credit gives the money back for real: that credit came in as money
     if method == "cash":  # cash never leaves the drawer beyond what is in it (Saged, 2026-11-23)
         from finance.services import require_cash, shift_for
 
@@ -690,6 +704,148 @@ def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today
             deltas.clinic_day(day)  # that visit's day shows what is owed
         left -= part
     return payments
+
+
+# --- Old debt and credit at booking (Saged, 2026-11-24) -------------------------------------------------------
+# A payment taken with a booking (or a walk-in) pays the new visit's fee first, then the patient's older unpaid bills,
+# oldest first. More than that is the patient's credit, only when the desk says so (`keep_credit`); it stays on the
+# new bill as money paid over its total. Credit the patient already holds is used first, before any cash: it moves
+# from the bill that holds it to the bill it pays (a "credit" refund row there, a "credit" payment row here), so it
+# never counts as money in the drawer twice. Lock order: the patient's open bills are locked (id order, as
+# lock_patient_invoices) before the invoice counter, the shift and the doctor-days, as for the finish dialog's
+# earlier balance; their visits are not locked, only read.
+
+
+def credit_of(invoice):
+    """What a bill holds for its patient: paid over its total, beyond a booking deposit still held."""
+    return max(0, invoice["paid"] - max(invoice["total"], invoice["deposit"]))
+
+
+def patient_money(ctx, patient_id):
+    """The patient's open bills that owe something or hold credit, locked in id order, oldest first, each with its
+    visit's doctor, day and section (None for a bill with no visit)."""
+    rows = sql.rows(ctx, f"""
+        SELECT {", ".join("i." + f for f in INVOICE_FIELDS)}, i.created_at, a.doctor_id, a.day, a.section_id
+          FROM "billing_invoice" i
+          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
+         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status = 'open' AND i.paid <> i.total
+         ORDER BY i.id FOR NO KEY UPDATE OF i""", [ctx.clinic_id, patient_id])
+    n = len(INVOICE_FIELDS)
+    found = [dict(_invoice(r[:n]), created_at=r[n], doctor_id=r[n + 1], day=r[n + 2], section_id=r[n + 3])
+             for r in rows]
+    return sorted(found, key=lambda i: (i["created_at"], i["id"]))
+
+
+def plan_booking_money(bills, fee, cash, keep_credit):
+    """Where a booking's payment goes. `bills` come from patient_money (none for a new patient); target 0 is the new
+    visit's bill (its fee), then the older bills that owe, oldest first.
+
+    Returns {"targets": [bill or None, ...], "moves": [(source bill, target index, amount)],
+    "cash": [(target index, amount)]}, the cash on target 0 including what is kept as credit. Refuses more than is
+    owed without `keep_credit` (`most`: the cash that pays everything), and a payment that pays nothing.
+    """
+    owing = [b for b in bills if b["paid"] < b["total"]]
+    targets, dues = [None, *owing], [fee, *(b["total"] - b["paid"] for b in owing)]
+    sources = [(b, credit_of(b)) for b in bills if credit_of(b) > 0]
+    need = sum(dues)
+    most = need - min(need, sum(c for _b, c in sources))
+    if cash > most and not keep_credit:
+        raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"},
+                       extra={"most": most})
+    left = list(dues)
+    moves, paid = [], []
+    for bill, credit in sources:
+        for index, due in enumerate(left):
+            part = min(credit, due)
+            if part > 0:
+                moves.append((bill, index, part))
+                left[index] -= part
+                credit -= part
+    rest = cash
+    for index, due in enumerate(left):
+        part = min(rest, due)
+        if part > 0:
+            paid.append([index, part])
+            rest -= part
+    if rest:  # kept as credit, on the new visit's bill
+        if paid and paid[0][0] == 0:
+            paid[0][1] += rest
+        else:
+            paid.insert(0, [0, rest])
+    if not moves and not paid:
+        raise ApiError("invalid", _("Enter an amount."), fields={"amount": "range"})
+    return {"targets": targets, "moves": moves, "cash": [tuple(p) for p in paid]}
+
+
+def booking_money_deltas(plan, deltas, today, method, doctor_id, section_id, day):
+    """The summary changes of a planned booking payment, before the doctor-days are written: the cash by the
+    doctor and section of the visit it pays, and each touched bill's visit day (it shows what is owed)."""
+    for index, amount in plan["cash"]:
+        bill = plan["targets"][index]
+        doctor, section = (doctor_id, section_id) if bill is None else (bill["doctor_id"], bill["section_id"])
+        if doctor is not None:
+            deltas.doctor_day(today, doctor, collected=amount)
+        deltas.money_day(today, section, method, collected=amount)
+        deltas.clinic_day(today, collected=amount)
+    for bill in [*plan["targets"][1:], *(source for source, _index, _amount in plan["moves"])]:
+        if bill["day"] is not None:
+            deltas.clinic_day(bill["day"])
+    deltas.clinic_day(day)
+
+
+def pay_booking(ctx, plan, appointment, number, patient_id, method, today, shift_id, doctor_id, section_id):
+    """Carry out plan_booking_money: the new visit's bill (`number` already taken) is created with all it is paid,
+    then the payment rows. The summaries were changed with booking_money_deltas. Returns the new bill."""
+    into_new = sum(a for _s, i, a in plan["moves"] if i == 0) + sum(a for i, a in plan["cash"] if i == 0)
+    invoice = create_invoice(ctx, appointment, number, paid=into_new)
+
+    def target(index):
+        bill = plan["targets"][index]
+        return (invoice, doctor_id, section_id) if bill is None else (bill, bill["doctor_id"], bill["section_id"])
+
+    for source, index, amount in plan["moves"]:
+        bill, doctor, section = target(index)
+        move_credit(ctx, source, bill, doctor, section, patient_id, amount, today, paid_in=index == 0)
+    for index, amount in plan["cash"]:
+        bill, doctor, section = target(index)
+        if index:
+            sql.run(ctx, 'UPDATE "billing_invoice" SET paid = paid + %s WHERE clinic_id = %s AND id = %s',
+                    [amount, ctx.clinic_id, bill["id"]])
+        _insert_payment(ctx, bill, patient_id, doctor, "payment", method, amount, today,
+                        _("Earlier balance") if index else "", section_id=section,
+                        shift_id=shift_id if method == "cash" else None)
+    return invoice
+
+
+def move_credit(ctx, source, target, doctor_id, section_id, patient_id, amount, today, paid_in=False):
+    """Under both bills' locks: `amount` of the credit `source` holds now pays `target`. The source's payments give
+    it up latest first (a "credit" refund row each, so none of it can be refunded again); the target gets one
+    "credit" payment row (`paid_in`: its `paid` already counts it). Audited. No drawer, no summary: no money moved."""
+    payments = sql.rows(ctx, 'SELECT id, amount - refunded, doctor_id, section_id FROM "billing_payment" '
+                             "WHERE clinic_id = %s AND invoice_id = %s AND kind = 'payment' AND NOT is_deposit "
+                             "AND refunded < amount ORDER BY id DESC", [ctx.clinic_id, source["id"]])
+    left = amount
+    note = _("Credit used on bill %(number)s") % {"number": target["number"]}
+    for payment_id, available, doctor, section in payments:
+        part = min(left, available)
+        sql.run(ctx, 'UPDATE "billing_payment" SET refunded = refunded + %s WHERE clinic_id = %s AND id = %s',
+                [part, ctx.clinic_id, payment_id])
+        _insert_payment(ctx, source, patient_id, doctor, "refund", "credit", part, today, note, refund_of=payment_id,
+                        section_id=section)
+        left -= part
+        if not left:
+            break
+    if left:
+        raise ApiError("credit_changed", _("The patient's credit changed. Reload and try again."), 409)
+    sql.run(ctx, 'UPDATE "billing_invoice" SET paid = paid - %s WHERE clinic_id = %s AND id = %s',
+            [amount, ctx.clinic_id, source["id"]])
+    if not paid_in:
+        sql.run(ctx, 'UPDATE "billing_invoice" SET paid = paid + %s WHERE clinic_id = %s AND id = %s',
+                [amount, ctx.clinic_id, target["id"]])
+    _insert_payment(ctx, target, patient_id, doctor_id, "payment", "credit", amount, today,
+                    _("From credit on bill %(number)s") % {"number": source["number"]}, section_id=section_id)
+    record_change(ctx, "invoice.credit_move", "invoice", target["id"], before={"from_invoice": source["id"]},
+                  after={"amount": amount}, patient_id=patient_id)
 
 
 # --- Session packages (F7) ------------------------------------------------------------------------------------

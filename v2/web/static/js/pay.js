@@ -163,6 +163,7 @@ export function initPay({ onChanged } = {}) {
   }
 
   function methodName(code) {
+    if (code === "credit") return t("from_credit");  // the patient's credit moved from another bill (Saged, 2026-11-24)
     const chip = form.querySelector(`[name="method"][value="${code}"]`);
     return chip ? chip.nextElementSibling.textContent : code;
   }

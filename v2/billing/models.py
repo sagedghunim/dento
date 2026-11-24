@@ -12,6 +12,10 @@ from django.utils import timezone
 from core.constraints import CompositeForeignKey
 
 METHODS = ["cash", "card", "transfer", "wallet", "instapay", "other"]  # transfer: design E3
+# What a payment row may hold: the methods money comes in by, and "credit" (Saged, 2026-11-24): the patient's credit
+# moved from one bill to another, a refund row on the bill it leaves and a payment row on the bill it pays. No money
+# moves, so these rows join no shift and no summary. Never accepted from a request.
+STORED_METHODS = [*METHODS, "credit"]
 LINE_KINDS = ["service", "procedure", "material", "package", "other"]  # package: F7
 DISCOUNT_KINDS = ["percent", "fixed"]
 
@@ -192,7 +196,7 @@ class Payment(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["clinic", "id"], name="payment_clinic_id_uniq"),
             models.CheckConstraint(condition=Q(kind__in=["payment", "refund"]), name="payment_kind_valid"),
-            models.CheckConstraint(condition=Q(method__in=METHODS), name="payment_method_valid"),
+            models.CheckConstraint(condition=Q(method__in=STORED_METHODS), name="payment_method_valid"),
             models.CheckConstraint(condition=Q(amount__gt=0), name="payment_amount_positive"),
             models.CheckConstraint(condition=Q(refunded__gte=0, refunded__lte=F("amount")), name="payment_refunded_valid"),
             models.CheckConstraint(condition=Q(kind="payment") | Q(refunded=0), name="payment_only_payments_refunded"),

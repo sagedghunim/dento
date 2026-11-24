@@ -11,6 +11,7 @@ import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneTe
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
+import { moneyBox } from "./credit.js";
 
 const config = JSON.parse(document.getElementById("clinic-config").textContent);
 
@@ -22,7 +23,7 @@ function clockText(iso) {
 // A result element's data (from _patient_results.html or the duplicate-phone list).
 export function patientFrom(node) {
   return { id: Number(node.dataset.id), name: node.dataset.name, file: node.dataset.file, phone: node.dataset.phone,
-           owed: Number(node.dataset.owed) || 0 };
+           owed: Number(node.dataset.owed) || 0, credit: Number(node.dataset.credit) || 0 };
 }
 
 // "File 12 · 010 1234 5678" as nodes, the phone isolated so its groups keep their order (design 7.2).
@@ -33,6 +34,7 @@ export function patientMeta(p) {
     nodes.push(" · ", phone);
   }
   if (p.owed > 0) nodes.push(" · ", el("strong", "owed", t("owed_before", { amount: moneyText(p.owed) })));
+  if (p.credit > 0) nodes.push(" · ", el("strong", "credit", t("money_credit", { amount: moneyText(p.credit) })));
   return nodes;
 }
 
@@ -90,6 +92,7 @@ export function initBook({ onBooked, defaults } = {}) {
   const collectFields = dialog.querySelector("[data-collect-fields]");
   const submitButton = dialog.querySelector("[data-submit]");
   const depositBox = dialog.querySelector("[data-deposit-box]");
+  const money = moneyBox(dialog, form);
   let patient = null;
   let quoteSeq = 0;
   let searchController = null;
@@ -290,7 +293,7 @@ export function initBook({ onBooked, defaults } = {}) {
     const service = serviceId();
     const day = when.day();
     const seq = ++quoteSeq;
-    if (!doctor || !service || !day) { fee.textContent = ""; return; }
+    if (!doctor || !service || !day) { fee.textContent = ""; money.reset(); return; }
     let url = `/api/v1/appointments/quote?doctor=${doctor}&service=${service}&day=${encodeURIComponent(day)}`;
     if (patient) url += `&patient=${patient.id}`;
     if (patient && courseOf(dialog)) url += "&continues=1";
@@ -301,7 +304,9 @@ export function initBook({ onBooked, defaults } = {}) {
     lastFee = result.data.fee == null ? null : result.data.fee * qty();
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = amountInput(lastFee);
+    // The fee, plus what is owed from before, less the credit the patient holds (Saged, 2026-11-24).
+    const ask = money.set(result.data, lastFee);
+    if (field("amount") && !field("amount").dataset.touched) field("amount").value = amountInput(ask);
     labels();
   }
 
@@ -310,7 +315,7 @@ export function initBook({ onBooked, defaults } = {}) {
   function labels() {
     const today = isToday();
     if (todayOnly) todayOnly.hidden = !today;
-    const collect = today && field("collect") && field("collect").checked && lastFee !== 0;
+    const collect = today && field("collect") && field("collect").checked && (lastFee !== 0 || money.owes());
     if (collectFields) collectFields.hidden = !collect;
     const arrive = today && field("arrive") && field("arrive").checked;
     const deposit = takesDeposit(today, collect, arrive);
@@ -348,9 +353,9 @@ export function initBook({ onBooked, defaults } = {}) {
     if (plan && patient) out.follow_up_id = session().id;
     const today = isToday();
     out.arrive = Boolean(today && field("arrive") && field("arrive").checked);
-    const collect = today && field("collect") && field("collect").checked && lastFee !== 0;
+    const collect = today && field("collect") && field("collect").checked && (lastFee !== 0 || money.owes());
     if (collect) {
-      out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
+      out.payment = money.fill({ amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value });
     } else if (takesDeposit(today, false, out.arrive)) {
       out.payment = { amount: depositAmount(), method: form.querySelector('[name="deposit_method"]:checked').value, deposit: true };
     }
@@ -364,7 +369,8 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!b.doctor_id) return t("need_doctor");
     if (!b.day) return t("need_day");
     if (when.needsTime() && !when.picked()) return t("need_time");
-    if (b.payment && !b.payment.amount) return t("bad_amount");
+    if (b.payment && b.payment.amount == null) return t("bad_amount");
+    if (b.payment && !b.payment.deposit) return money.problem(b.payment);
     return "";
   }
 
@@ -382,6 +388,7 @@ export function initBook({ onBooked, defaults } = {}) {
     const result = await submitter.run("POST", "/api/v1/appointments", b, label);
     if (result && !isOk(result)) {
       depositAnswer(result);
+      money.refused(result);
       if (np) np.refused(result);
       showConflict(dialog, result, { onConfirm: () => { confirmOther = true; form.requestSubmit(); } });
     }
@@ -390,7 +397,8 @@ export function initBook({ onBooked, defaults } = {}) {
     const bookedSession = b.follow_up_id ? session() : null;
     const more = Boolean(bookedSession && plan.index + 1 < plan.items.length);
     // "Collected" only when the answer's invoice shows the money (M1 decision R2), never from what was sent.
-    const paid = Boolean(b.payment && appointment.invoice && appointment.invoice.paid >= b.payment.amount);
+    // Part of it may have paid older bills: the visit's own bill shows at least its share (Saged, 2026-11-24).
+    const paid = Boolean(b.payment && appointment.invoice && appointment.invoice.paid > 0);
     if (tab && paid) tab.location.href = receiptUrl(appointment.invoice.id);
     else if (tab) tab.close();
     if (!more) dialog.close();

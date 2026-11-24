@@ -141,11 +141,13 @@ def invoice_row(ctx, invoice_id):
 
 
 def day_sums(ctx, day):
-    """For the recompute: per doctor (None for payments without one), money in and refunded that day (no locks)."""
+    """For the recompute: per doctor (None for payments without one), money in and refunded that day (no locks).
+    Credit moved between bills is no money in or out."""
     return {r[0]: {"collected": r[1], "refunded": r[2]} for r in sql.rows(ctx, """
         SELECT doctor_id, coalesce(sum(amount) FILTER (WHERE kind = 'payment'), 0),
                coalesce(sum(amount) FILTER (WHERE kind = 'refund'), 0)
-          FROM "billing_payment" WHERE clinic_id = %s AND day = %s GROUP BY doctor_id""", [ctx.clinic_id, day])}
+          FROM "billing_payment" WHERE clinic_id = %s AND day = %s AND method <> 'credit'
+         GROUP BY doctor_id""", [ctx.clinic_id, day])}
 
 
 def day_money(ctx, day):
@@ -153,10 +155,23 @@ def day_money(ctx, day):
     return {(r[0], r[1]): {"collected": r[2], "refunded": r[3]} for r in sql.rows(ctx, """
         SELECT coalesce(section_id, 0), method, coalesce(sum(amount) FILTER (WHERE kind = 'payment'), 0),
                coalesce(sum(amount) FILTER (WHERE kind = 'refund'), 0)
-          FROM "billing_payment" WHERE clinic_id = %s AND day = %s GROUP BY 1, 2""", [ctx.clinic_id, day])}
+          FROM "billing_payment" WHERE clinic_id = %s AND day = %s AND method <> 'credit'
+         GROUP BY 1, 2""", [ctx.clinic_id, day])}
 
 
 BALANCE_LIMIT = 50  # invoices listed; the total covers them all
+
+
+def credits(ctx, patient_ids):
+    """What the clinic holds for each of these patients (Saged, 2026-11-24): {patient_id: piastres}, holders only.
+    A bill's credit is what is paid over its total, beyond a booking deposit still held (billing.services.credit_of).
+    """
+    if not patient_ids:
+        return {}
+    return dict(sql.rows(ctx, """
+        SELECT patient_id, sum(paid - greatest(total, deposit))::bigint FROM "billing_invoice"
+         WHERE clinic_id = %s AND patient_id = ANY(%s::bigint[]) AND status = 'open' AND paid > greatest(total, deposit)
+         GROUP BY patient_id""", [ctx.clinic_id, sorted(set(patient_ids))]))
 
 
 def patient_credits(ctx, patient_id):

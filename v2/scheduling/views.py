@@ -20,8 +20,9 @@ def _any_queue_code(ctx):
         ctx.require(QUEUE_CODES[0])
 
 
-def _payment(data, name="payment", deposit=False):
-    """{amount, method}. With `deposit` (booking only) it may also say "deposit": true: the booking deposit."""
+def _payment(data, name="payment", deposit=False, booking=False):
+    """{amount, method}. With `deposit` (booking only) it may also say "deposit": true: the booking deposit. A
+    booking's or a walk-in's (`booking`) may say "keep_credit": true, and be 0 (credit pays it)."""
     value = data.get(name)
     if value is None:
         return None
@@ -29,8 +30,12 @@ def _payment(data, name="payment", deposit=False):
         raise ApiError("invalid", f"{name} must be an object", fields={name: "object"})
     from billing.models import METHODS
 
-    payment = {"amount": parse_money(value.get("amount"), "amount", low=1),
+    payment = {"amount": parse_money(value.get("amount"), "amount", low=0 if booking else 1),
                "method": validate.choice(value, "method", METHODS)}
+    if deposit and value.get("deposit") and not payment["amount"]:
+        raise ApiError("invalid", "amount: out of range", fields={"amount": "range"})  # a deposit is never 0
+    if booking and value.get("keep_credit") is not None:
+        payment["keep_credit"] = validate.boolean(value, "keep_credit")  # more than is owed stays as credit
     if value.get("deposit") is not None:
         if not deposit:
             raise ApiError("invalid", _("A deposit is taken only with a booking."), fields={f"{name}.deposit": "booking"})
@@ -110,7 +115,7 @@ def book_view(request, ctx, data):
         "source": validate.choice({"source": data.get("source") or "clinic"}, "source",
                                   ["clinic", "phone", "online", "whatsapp"]),
         "note": validate.text(data, "note", 500, required=False),
-        "payment": _payment(data, deposit=True),
+        "payment": _payment(data, deposit=True, booking=True),
         # The follow-up this booking is for (clinical.followups.claim), linked in the same transaction.
         "follow_up_id": (validate.ident(data.get("follow_up_id"), "follow_up_id")
                          if data.get("follow_up_id") is not None else None),
@@ -332,7 +337,7 @@ def walk_in_view(request, ctx, data):
         "patient_id": validate.ident(patient_id, "patient_id") if patient_id is not None else None,
         "new_patient": new_patient, "doctor_id": _optional_id(data, "doctor_id"),
         "service_id": _optional_id(data, "service_id"), "section_id": _optional_id(data, "section_id"),
-        "note": validate.text(data, "note", 500, required=False), "payment": _payment(data),
+        "note": validate.text(data, "note", 500, required=False), "payment": _payment(data, booking=True),
         "confirm_other_doctor": validate.boolean(data, "confirm_other_doctor"), "qty": _qty(data),
         "continues_id": _optional_id(data, "continues_id"),
     }

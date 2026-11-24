@@ -1,7 +1,7 @@
 {% load i18n hamada %}{% for p in items %}
 <tr>
   <td><span class="nowrap">{{ p.day|shortday }}</span> · {{ p.received_at|clock }}</td>
-  <td>{% if p.kind == "refund" %}<span class="pill grey"><svg class="icon"><use href="#i-undo"/></svg>{% translate "Given back to the patient" %}</span>{% else %}{% for code, label in methods %}{% if code == p.method %}{{ label }}{% endif %}{% endfor %}{% endif %}</td>
+  <td>{% if p.method == "credit" %}<span class="pill grey">{% if p.kind == "refund" %}{% translate "Moved as credit to another bill" %}{% else %}{% translate "From the patient's credit" %}{% endif %}</span>{% elif p.kind == "refund" %}<span class="pill grey"><svg class="icon"><use href="#i-undo"/></svg>{% translate "Given back to the patient" %}</span>{% else %}{% for code, label in methods %}{% if code == p.method %}{{ label }}{% endif %}{% endfor %}{% endif %}</td>
   <td class="num">{% if p.kind == "refund" %}−{% endif %}{{ p.amount|money }}{% if p.refunded %}<div class="muted">{% translate "refunded" %} {{ p.refunded|money }}</div>{% endif %}</td>
 </tr>
 {% endfor %}

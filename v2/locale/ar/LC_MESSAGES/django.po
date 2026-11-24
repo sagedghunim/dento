@@ -4738,3 +4738,50 @@ msgstr "اختار الإجراء لكل جلسة."
 
 msgid "This code was just used. Wait for the next code, then enter it."
 msgstr "الكود ده لسه مستخدم. استنى الكود اللي بعده واكتبه."
+
+msgid "Owes {amount} from before"
+msgstr "عليه {amount} من قبل"
+
+msgid "Has {amount} credit"
+msgstr "ليه {amount} رصيد"
+
+msgid "All of it {amount}"
+msgstr "المطلوب كله {amount}"
+
+msgid "Collect {amount}"
+msgstr "المقترح تحصّله {amount}"
+
+msgid "Only {most} is owed, you wrote {typed}"
+msgstr "المطلوب {most} بس، انت كاتب {typed}"
+
+msgid "Take {typed}, the {extra} stays as the patient's credit"
+msgstr "خد {typed}، والـ{extra} تبقى رصيد ليه"
+
+msgid "Keep it {most}"
+msgstr "خليها {most}"
+
+msgid "The {amount} stays as the patient's credit"
+msgstr "الـ{amount} هتبقى رصيد ليه"
+
+msgid "Choose: keep what is over as the patient's credit, or take only what is owed."
+msgstr "اختار: الزيادة تبقى رصيد ليه، ولا تاخد المطلوب بس."
+
+msgid "From the patient's credit"
+msgstr "من رصيد المريض"
+
+msgid "Moved as credit to another bill"
+msgstr "اتحوّل رصيد لفاتورة تانية"
+
+msgid "Credit:"
+msgstr "رصيد:"
+
+#, python-format
+msgid "Credit used on bill %(number)s"
+msgstr "اتخصم رصيد على فاتورة %(number)s"
+
+#, python-format
+msgid "From credit on bill %(number)s"
+msgstr "من رصيده على فاتورة %(number)s"
+
+msgid "The patient's credit changed. Reload and try again."
+msgstr "رصيد المريض اتغيّر. حدّث الصفحة وجرّب تاني."
