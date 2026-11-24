@@ -99,6 +99,9 @@
       </form>
     </div>
     {% endif %}
+    {% if perms.record %}{# Nothing done but the consultation (Saged, 2026-11-24): enough to finish, charges nothing more. #}
+    <label class="check consult-only"><input type="checkbox" data-consult-only{% if config.consult_only %} checked{% endif %}> {% translate "Consultation only (nothing else was done)" %}</label>
+    {% endif %}
     <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
       <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi>{% if visit.qty > 1 %} × {{ visit.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
     </ul>

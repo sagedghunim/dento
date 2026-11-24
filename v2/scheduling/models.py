@@ -71,6 +71,9 @@ class Appointment(models.Model):
     # One treatment's visits (Saged, 2026-11-22): each points at the treatment's first visit and is numbered 1, 2, 3…
     continues_id = models.BigIntegerField(null=True, blank=True)
     course_no = models.PositiveSmallIntegerField(default=1, db_default=1)
+    # "Consultation only" (Saged, 2026-11-24): the doctor saw the patient and nothing else was done (the patient
+    # stopped at the price, say). It counts as what was done today for the finish; it charges nothing more.
+    consult_only = models.BooleanField(default=False, db_default=False)
     called_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)

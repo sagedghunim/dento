@@ -57,6 +57,8 @@ def mutating(o):
         "vitals": ("PUT", f"/api/v1/appointments/{v}/vitals", {"pulse": 80}, {"pulse": 81}, ["visits.vitals"], 0),
         "record": ("POST", f"/api/v1/appointments/{v}/procedures", {"procedure_id": o.filling, "tooth": 36},
                    {"procedure_id": o.filling, "tooth": 37}, ["procedures.record"], None),
+        "consult only": ("POST", f"/api/v1/appointments/{v}/consult-only", {"on": True}, {"on": False},
+                         ["procedures.record"], None),
         "remove procedure": ("DELETE", f"/api/v1/appointments/{v}/procedures/{o.recorded}", {}, {"x": 1},
                              ["procedures.record"], None),
         "tooth": ("PUT", f"/api/v1/patients/{p}/teeth/16", {"condition": "caries", "surfaces": ["O"]},
@@ -136,6 +138,8 @@ def send(client, method, path, body, version=None, key=None):
 
 
 def snapshot(fixture):
+    from scheduling.models import Appointment
+
     with clinic_transaction(fixture.id, fixture.shard):
         return tuple(model.objects.filter(clinic_id=fixture.id).count() for model in (
             m.VisitNote, m.Vitals, m.VisitProcedure, m.Tooth, m.ToothHistory, m.Plan, m.PlanItem, m.Prescription,
@@ -148,6 +152,7 @@ def snapshot(fixture):
             list(m.Vitals.objects.filter(clinic_id=fixture.id).values_list("pulse", flat=True)),
             list(m.VisitNote.objects.filter(clinic_id=fixture.id).values_list("complaint", flat=True)),
             list(m.Tooth.objects.filter(clinic_id=fixture.id).values_list("surfaces", flat=True)),
+            list(Appointment.objects.filter(clinic_id=fixture.id, consult_only=True).values_list("id", flat=True)),
         )
 
 

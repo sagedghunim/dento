@@ -4810,3 +4810,12 @@ msgstr "فيه طلب مستني عند الدكتور لـ %(name)s. الغي �
 
 msgid "Ask about {name} instead"
 msgstr "الغي القديم وابعت {name}"
+
+msgid "Consultation only (nothing else was done)"
+msgstr "كشف بس (ماتعملش حاجة تانية)"
+
+msgid "Consultation only"
+msgstr "كشف بس"
+
+msgid "This can be changed only while the patient is in the room."
+msgstr "ده يتغيّر بس والعيان جوه الكشف."

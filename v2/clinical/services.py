@@ -1344,11 +1344,29 @@ def move_plan_item(ctx, item_id, status, expected):
                    fields={"status": "invalid"})
 
 
+def set_consult_only(ctx, appointment_id, on):
+    """POST appointments/{id}/consult-only {on}: the visit was a consultation and nothing more (Saged, 2026-11-24),
+    while the patient is in the room. Charges nothing. Audited."""
+    from scheduling import rules
+
+    rules.guard(ctx, appointment_id)
+    found = sql.row(ctx, 'UPDATE "scheduling_appointment" SET consult_only = %s, updated_at = %s, updated_by_id = %s '
+                         "WHERE clinic_id = %s AND id = %s AND status = 'in_room' RETURNING OLD.consult_only, patient_id",
+                    [on, timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id])
+    if found is None:
+        raise ApiError("status_changed", _("This can be changed only while the patient is in the room."), 409)
+    if found[0] != on:
+        record_change(ctx, "appointment.consult_only", "appointment", appointment_id, before={"consult_only": found[0]},
+                      after={"consult_only": on}, patient_id=found[1])
+    return {"consult_only": on}
+
+
 def require_record(ctx, appointment_id):
     """Before the visit screen finishes a visit (Saged, 2026-11-24): at least one thing done today, and the visit's
     notes written or the dental chart worked on in this visit (its findings also go into the notes by themselves)."""
     found = sql.row(ctx, """
-        SELECT EXISTS (SELECT 1 FROM "clinical_visit_procedure" WHERE clinic_id = a.clinic_id AND appointment_id = a.id),
+        SELECT a.consult_only OR EXISTS (SELECT 1 FROM "clinical_visit_procedure" WHERE clinic_id = a.clinic_id
+                                          AND appointment_id = a.id),
                EXISTS (SELECT 1 FROM "clinical_visit_note" WHERE clinic_id = a.clinic_id AND appointment_id = a.id
                           AND btrim(notes || complaint || diagnosis) <> ''),
                EXISTS (SELECT 1 FROM "clinical_tooth_history" WHERE clinic_id = a.clinic_id AND patient_id = a.patient_id

@@ -112,3 +112,19 @@ class OneAskTests(M2TestCase):
         self.assertEqual(self.appointment(second["id"]).status, "waiting")
         self.assertEqual(self.act(first["id"], "undo-ready", "ready").status_code, 200)
         self.assertEqual(self.act(second["id"], "ready", "waiting").status_code, 200)
+
+
+class ConsultOnlyTests(M2TestCase):
+    def test_consultation_only_is_enough_with_notes_and_charges_nothing(self):
+        visit = self.in_room()
+        url = f"/api/v1/appointments/{visit['id']}"
+        r = call(self.doc, "POST", f"{url}/consult-only", {"on": True})
+        self.assertEqual((r.status_code, r.json()), (200, {"consult_only": True}))
+        put(self.doc, f"{url}/note", {"notes": "Asked the price of a crown, will think"}, 0)
+        self.assertEqual(call(self.doc, "POST", f"{url}/finish", {"status": "in_room", "check_record": True}).status_code, 200)
+        from clinical.models import VisitProcedure
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertFalse(VisitProcedure.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"]).exists())
+        # Not after the visit is over.
+        self.assertEqual(call(self.doc, "POST", f"{url}/consult-only", {"on": False}).status_code, 409)

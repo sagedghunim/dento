@@ -937,6 +937,19 @@ if (rxDialog) {
   });
 }
 
+// --- "Consultation only" (Saged, 2026-11-24): the patient was seen and nothing else was done ---
+const consultBox = document.querySelector("[data-consult-only]");
+if (consultBox) {
+  consultBox.addEventListener("change", async () => {
+    const on = consultBox.checked;
+    consultBox.disabled = true;
+    const result = await save("POST", `/api/v1/appointments/${id}/consult-only`, { on }, { label: t("consult_only") });
+    consultBox.disabled = false;
+    if (result.settled && isOk(result)) return;
+    if (result.settled) { consultBox.checked = !on; alertMessage(errorMessage(result, t("failed"))); }
+  });
+}
+
 // --- "Finish the visit": the notes first, then the finish; Today shows the next patient ---
 
 const finishButton = document.querySelector("[data-finish]");
@@ -950,7 +963,11 @@ if (finishButton) {
       if (box.value !== saved && !(await flush())) { finishError.textContent = t("note_unsaved"); return; }
       if (!(await flushMedical())) { finishError.textContent = t("medical_unsaved"); return; }
       // The least a visit holds before it ends (Saged, 2026-11-24): what was done, and notes or the chart.
-      if (!procList || !procList.querySelector("[data-record]")) { finishError.textContent = t("finish_need_done"); return; }
+      const consultOnly = document.querySelector("[data-consult-only]");
+      if (!(consultOnly && consultOnly.checked) && !(procList && procList.querySelector("[data-record]"))) {
+        finishError.textContent = t("finish_need_done");
+        return;
+      }
       if (!box.value.trim() && !charted) { finishError.textContent = t("finish_need_notes"); box.focus(); return; }
       const result = await save("POST", `/api/v1/appointments/${id}/finish`, { status: "in_room", check_record: true },
         { label: t("finish"), auto: true });  // carries the status it expects: a resend is harmless

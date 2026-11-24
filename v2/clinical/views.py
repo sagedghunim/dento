@@ -133,6 +133,22 @@ def _record_answer(ctx, record_id):
             "version": current_version(ctx, appointment_id)}
 
 
+def _replay_consult_only(ctx, stored):
+    from core import sql
+
+    found = sql.row(ctx, 'SELECT consult_only FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                    [ctx.clinic_id, stored["target_id"]])
+    return {"consult_only": bool(found and found[0])}
+
+
+@api("POST", perm="procedures.record", replay=_replay_consult_only)
+def consult_only_view(request, ctx, data, appointment_id):
+    """{on}: the visit was a consultation and nothing more (Saged, 2026-11-24)."""
+    appointment_id = validate.path_id(appointment_id, ApiError("not_found", _("This appointment wasn't found."), 404))
+    return Result(services.set_consult_only(ctx, appointment_id, validate.boolean(data, "on")),
+                  target_type="appointment", target_id=appointment_id)
+
+
 def _replay_record(ctx, stored):
     return _record_answer(ctx, stored["target_id"])
 

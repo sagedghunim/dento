@@ -163,6 +163,8 @@ def visit_page(request, ctx, appointment_id):
         "medical": {k: patient[k] or "" for k in ("chronic_conditions", "allergies", "notes")},
         # For the finish's check and "Back to the visit" after it (Saged, 2026-11-24).
         "patient_name": visit["patient"]["name"],
+        "consult_only": sql.row(ctx, 'SELECT consult_only FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                                [ctx.clinic_id, visit["id"]])[0],
         "charted": sql.row(ctx, 'SELECT EXISTS (SELECT 1 FROM "clinical_tooth_history" WHERE clinic_id = %s '
                                 "AND patient_id = %s AND appointment_id = %s)",
                            [ctx.clinic_id, patient_id, visit["id"]])[0],
