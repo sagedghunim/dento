@@ -128,3 +128,19 @@ class ConsultOnlyTests(M2TestCase):
             self.assertFalse(VisitProcedure.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"]).exists())
         # Not after the visit is over.
         self.assertEqual(call(self.doc, "POST", f"{url}/consult-only", {"on": False}).status_code, 409)
+
+
+class DeskFinishTests(M2TestCase):
+    def test_the_desk_finishes_only_after_the_doctor_wrote_and_the_doctor_may_go_back(self):
+        visit = self.in_room()
+        url = f"/api/v1/appointments/{visit['id']}"
+        r = call(self.desk, "POST", f"{url}/finish", {"status": "in_room", "check_record": True})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "record_needed"))
+        self.assertIn("الدكتور", r.json()["error"]["message"])
+        call(self.doc, "POST", f"{url}/consult-only", {"on": True})
+        put(self.doc, f"{url}/note", {"notes": "Seen"}, 0)
+        self.assertEqual(call(self.desk, "POST", f"{url}/finish", {"status": "in_room", "check_record": True})
+                         .status_code, 200)
+        page = self.doc.get("/today").content.decode()
+        self.assertIn('id="just-finished"', page)
+        self.assertEqual(call(self.doc, "POST", f"{url}/reopen", {"status": "done"}).status_code, 200)

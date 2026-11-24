@@ -64,5 +64,6 @@
 {% include "web/_dialogs.html" %}
 {% if is_today and perms.book and perms.queue %}{% include "web/_dialog_walkin.html" %}{% endif %}
 {{ config|json_script:"clinic-config" }}
+{% if just_finished %}{{ just_finished|json_script:"just-finished" }}{% endif %}
 {% endblock %}
 {% block scripts %}<script type="module" src="{% static 'js/today.js' %}"></script>{% endblock %}

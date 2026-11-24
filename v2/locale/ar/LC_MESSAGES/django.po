@@ -4819,3 +4819,9 @@ msgstr "كشف بس"
 
 msgid "This can be changed only while the patient is in the room."
 msgstr "ده يتغيّر بس والعيان جوه الكشف."
+
+msgid "Finish {name}'s visit instead of the doctor? Make sure the doctor is done."
+msgstr "متأكدة إنك عايزة تنهي كشف {name} بدل الدكتور؟ اتأكدي إن الدكتور خلّص."
+
+msgid "The doctor hasn't written what was done and the notes yet. The visit can be finished once they have."
+msgstr "الدكتور لسه ما كتبش اللي اتعمل والملاحظات. الكشف يخلص بعد ما يكتبهم."

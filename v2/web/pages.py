@@ -329,6 +329,25 @@ def today_queue(request, ctx):
     return response
 
 
+def _just_finished(ctx, today):
+    """The doctor's own visit someone else finished in the last five minutes (Saged, 2026-11-24): Today offers
+    "Back to the visit" for it, as after the doctor's own finish."""
+    from core import sql
+    from scheduling.services import REOPEN_SECONDS
+
+    found = sql.row(ctx, """
+        SELECT a.id, p.full_name, a.called_at, a.finished_at FROM "scheduling_appointment" a
+          JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
+         WHERE a.clinic_id = %s AND a.day = %s AND a.doctor_id = %s AND a.status = 'done'
+           AND a.finished_at > %s AND a.updated_by_id <> %s
+         ORDER BY a.finished_at DESC LIMIT 1""", [ctx.clinic_id, today, ctx.membership_id,
+                                                timezone.now() - dt.timedelta(seconds=REOPEN_SECONDS), ctx.membership_id])
+    if found is None or found[2] is None:
+        return None
+    return {"id": found[0], "name": found[1], "called_at": found[2].isoformat(),
+            "finished_at": int(found[3].timestamp() * 1000), "server_now": int(timezone.now().timestamp() * 1000)}
+
+
 @require_GET
 @ensure_csrf_cookie
 @page()
@@ -364,6 +383,8 @@ def today_page(request, ctx):
         "prev_day": day - dt.timedelta(days=1), "next_day": day + dt.timedelta(days=1),
         "poll_after": settings.POLL_AFTER_SECONDS, **_dialog_context(ctx, today),
     }
+    if day == today and _treats(ctx):
+        context["just_finished"] = _just_finished(ctx, today)
     if day == today and ctx.can("billing.collect") and ctx.can("money.view"):
         from billing import installments
 

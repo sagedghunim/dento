@@ -33,6 +33,18 @@ function tick() {
 tick();
 setInterval(tick, 1000);
 
+// The desk may finish this visit for the doctor (Saged, 2026-11-24): every 20 s the visit screen looks, and a visit
+// no longer in the room goes to Today, where "Back to the visit" waits for five minutes.
+setInterval(async () => {
+  if (document.hidden || leaving) return;
+  const result = await get(`/api/v1/appointments/${id}`);
+  const status = isOk(result) && result.data.appointment ? result.data.appointment.status : null;
+  if (!status || status === "in_room") return;
+  if (box.value !== saved) await flush();
+  leaving = true;
+  window.location.assign("/");
+}, 20000);
+
 // --- the notes ---
 
 const box = document.querySelector("[data-notes]");

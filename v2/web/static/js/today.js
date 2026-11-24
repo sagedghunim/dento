@@ -546,7 +546,7 @@ const UNDO = { arrive: ["undo-arrive", "waiting"], call: ["undo-call", "in_room"
                "no-show": ["undo-no-show", "no_show"] };
 const UNDO_FLAG = { "undo-arrive": "undoArrive", "undo-call": "undoCall" };  // the others always exist
 
-async function quick(id, action, status, name, doctorId) {
+async function quick(id, action, status, name, doctorId, extra = null) {
   const key = `${id}:${action}`;
   if (acting.has(key)) return;
   acting.set(key, true);
@@ -554,7 +554,7 @@ async function quick(id, action, status, name, doctorId) {
   const row = list.querySelector(`.appt[data-id="${id}"]`);
   if (row) markActing(row);
   // auto: the body carries the expected status, so a resend at the next page load is harmless (R7).
-  const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status }, { label: t(MESSAGES[action], { name }), auto: true });
+  const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status, ...extra }, { label: t(MESSAGES[action], { name }), auto: true });
   acting.delete(key);
   acting.delete(`${id}:busy`);
   const now = list.querySelector(`.appt[data-id="${id}"]`);
@@ -599,10 +599,16 @@ card.addEventListener("click", (event) => {
     case "next":  // the next visit of a plan: the same patient and doctor, no search (desk review 4)
       if (book) book.open({ patient: v.patient, doctorId: v.doctorId, opener: button, continues: v.id });
       break;
-    case "finish":
+    case "finish": {
+      // Someone other than the visit's doctor finishing it (Saged, 2026-11-24): asked first, and the server checks
+      // that the doctor wrote what was done and the notes or the chart, as for the doctor's own finish.
+      const forDoctor = v.status === "in_room" && v.doctorId !== config.me.membership_id;
+      if (forDoctor && !window.confirm(t("desk_finish_confirm", { name: v.name }))) break;
+      v.checkRecord = forDoctor;
       if (config.perms.collect && (v.due > 0 || v.earlier > 0)) visitDialogs.finish(v, button);
-      else quick(v.id, "finish", v.status, v.name);
+      else quick(v.id, "finish", v.status, v.name, v.doctorId, forDoctor ? { check_record: true } : null);
       break;
+    }
     case "pay": case "invoice":
       if (pay) pay.open(v);
       break;

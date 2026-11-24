@@ -64,6 +64,7 @@ export function initVisitDialogs({ onChanged } = {}) {
   async function finish(withPayment) {
     if (finishDialog.dataset.busy) return;
     let body = { status: visit.status };
+    if (visit.checkRecord) body.check_record = true;  // the desk finishing for the doctor (Saged, 2026-11-24)
     if (withPayment) {
       const money = payments();
       if (!money) { finishing.say(t("bad_amount")); return; }

@@ -1375,9 +1375,15 @@ def require_record(ctx, appointment_id):
     if found is None:
         return  # the finish answers 404
     done, noted, charted = found
+    if done and (noted or charted):
+        return
+    doctor = sql.row(ctx, 'SELECT doctor_id FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                     [ctx.clinic_id, appointment_id])[0]
+    if doctor != ctx.membership_id:  # the desk finishing for the doctor (Saged, 2026-11-24): the doctor writes first
+        message = _("The doctor hasn't written what was done and the notes yet. The visit can be finished once they have.")  # noqa: E501
+        raise ApiError("record_needed", message, 409, fields={"status": "record_needed"})
     if not done:
         raise ApiError("record_needed", _("Add what was done today before finishing the visit."), 409,
                        fields={"procedures": "required"})
-    if not (noted or charted):
-        raise ApiError("record_needed", _("Write the visit notes or mark the dental chart before finishing."), 409,
-                       fields={"notes": "required"})
+    raise ApiError("record_needed", _("Write the visit notes or mark the dental chart before finishing."), 409,
+                   fields={"notes": "required"})

@@ -22,6 +22,12 @@ function clock(ms) {
 export function showReopen() {
   let visit = null;
   try { visit = JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch (e) { visit = null; }
+  const server = document.getElementById("just-finished");
+  if ((!visit || !visit.id) && server) {
+    // The desk finished the doctor's visit (Saged, 2026-11-24): the same offer, from the server's answer.
+    const found = JSON.parse(server.textContent);
+    visit = { ...found, skew: found.server_now - Date.now() };
+  }
   if (!visit || !visit.id) return;
   const skew = visit.skew || 0;
   const calledAt = Date.parse(visit.called_at);
