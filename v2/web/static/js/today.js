@@ -564,6 +564,16 @@ async function quick(id, action, status, name, doctorId) {
     window.location.assign(`/visits/${id}`);  // the doctor's own call-in opens the visit screen; the desk stays
     return;
   }
+  const error = result.data && result.data.error;
+  if (action === "ready" && error && error.code === "doctor_asked") {
+    // One request to a doctor at a time (Saged, 2026-11-24): take the other one back, and ask about this one.
+    toast(error.message, { label: t("ask_instead", { name }), onClick: async () => {
+      await quick(error.appointment_id, "undo-ready", "ready", error.name);
+      quick(id, "ready", status, name, doctorId);
+    } });
+    changed();
+    return;
+  }
   if (isOk(result)) {
     const undo = UNDO[action];
     const canUndo = undo && (!UNDO_FLAG[undo[0]] || card.dataset[UNDO_FLAG[undo[0]]] === "1");

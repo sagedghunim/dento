@@ -32,6 +32,8 @@ def objects(test, fixture):
         return r.json()["appointment"]
 
     free_rooms(fixture)  # a doctor has one patient in the room at a time (Saged, 2026-11-13)
+    with clinic_transaction(fixture.id, fixture.shard):  # and is asked about one at a time (Saged, 2026-11-24)
+        Appointment.objects.filter(clinic_id=fixture.id, status="ready").update(status="waiting", ready_at=None)
     booked, waiting, in_room = book(), book(arrive=True), book(arrive=True)
     call(client, "POST", f"/api/v1/appointments/{in_room['id']}/call", {"status": "waiting"})
     # A waiting visit on another day: the owner's room is taken today, so "call" is tried on this one.
@@ -108,7 +110,8 @@ def mutating(test, o):
                    {"status": "done", "note": 1}, ["appointments.queue"]),
         "assist": ("POST", f"/api/v1/appointments/{o.waiting}/assist", {"status": "waiting"},
                    {"status": "waiting", "note": 1}, ["appointments.queue"]),
-        "ready": ("POST", f"/api/v1/appointments/{o.waiting}/ready", {"status": "waiting"},
+        # o.callable: today the owner is already asked about o.readied, one request at a time (Saged, 2026-11-24).
+        "ready": ("POST", f"/api/v1/appointments/{o.callable}/ready", {"status": "waiting"},
                   {"status": "waiting", "note": 1}, ["appointments.queue"]),
         "undo assist": ("POST", f"/api/v1/appointments/{o.assisted}/undo-assist", {"status": "with_assistant"},
                         {"status": "with_assistant", "note": 1}, ["appointments.queue"]),

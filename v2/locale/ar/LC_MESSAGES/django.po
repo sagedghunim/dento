@@ -4803,3 +4803,10 @@ msgstr "عدّى أكتر من ٥ دقايق من ساعة ما الكشف خل�
 
 msgid "This visit changed meanwhile."
 msgstr "الكشف ده اتغيّر في الوقت ده."
+
+#, python-format
+msgid "The doctor is already asked about %(name)s. Take that request back first."
+msgstr "فيه طلب مستني عند الدكتور لـ %(name)s. الغي الطلب ده الأول عشان تبعت لحد تاني."
+
+msgid "Ask about {name} instead"
+msgstr "الغي القديم وابعت {name}"

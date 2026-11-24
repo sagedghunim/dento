@@ -398,6 +398,8 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
         extra_where = " AND day = %s"  # arrive is allowed only on the visit's business day
     if action == "call":
         _one_in_room(ctx, appointment_id)
+    if action == "ready":
+        _one_asked(ctx, appointment_id)
     params =[target, now, now, ctx.membership_id, *extra_params, ctx.clinic_id, appointment_id, source]
     if action == "arrive":
         params.append(today)
@@ -486,6 +488,26 @@ def _one_in_room(ctx, appointment_id):
     if busy is not None:
         raise ApiError("doctor_busy", _("The doctor already has a patient in the room. Finish that visit first."), 409,
                        fields={"status": "doctor_busy"}, extra={"appointment_id": busy[0]})
+
+
+def _one_asked(ctx, appointment_id):
+    """The desk asks a doctor about one patient at a time (Saged, 2026-11-24): a second "ask the doctor" while
+    another is waiting for the doctor's answer is 409 doctor_asked, naming that patient, so the desk takes that
+    request back first. Serialised per doctor with an advisory lock, as _one_in_room."""
+    found = sql.row(ctx, "SELECT a.doctor_id, a.day, a.status, CASE WHEN a.status IN ('waiting', 'with_assistant') THEN "
+                         "pg_advisory_xact_lock(hashtextextended('asked:' || a.clinic_id || ':' || a.doctor_id, 0)) END "
+                         'FROM "scheduling_appointment" a WHERE a.clinic_id = %s AND a.id = %s', [ctx.clinic_id, appointment_id])
+    if found is None or found[2] not in TRANSITIONS["ready"][0]:
+        return  # the conditional UPDATE answers
+    doctor_id, day = found[0], found[1]
+    other = sql.row(ctx, 'SELECT a.id, p.full_name FROM "scheduling_appointment" a '
+                         'JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id '
+                         "WHERE a.clinic_id = %s AND a.day = %s AND a.doctor_id = %s AND a.status = 'ready' AND a.id <> %s "
+                         "LIMIT 1", [ctx.clinic_id, day, doctor_id, appointment_id])
+    if other is not None:
+        raise ApiError("doctor_asked", _("The doctor is already asked about %(name)s. Take that request back first.")
+                       % {"name": other[1]}, 409, fields={"status": "doctor_asked"},
+                       extra={"appointment_id": other[0], "name": other[1]})
 
 
 def undo(ctx, appointment_id, action, seen):

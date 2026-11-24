@@ -100,3 +100,15 @@ class ReopenTests(M2TestCase):
         self.in_room()
         r = self.reopen()
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "doctor_busy"))
+
+
+class OneAskTests(M2TestCase):
+    def test_the_desk_asks_the_doctor_about_one_patient_at_a_time(self):
+        first, second = self.book(arrive=True).json()["appointment"], self.book(arrive=True).json()["appointment"]
+        self.assertEqual(self.act(first["id"], "ready", "waiting").status_code, 200)
+        r = self.act(second["id"], "ready", "waiting")
+        error = r.json()["error"]
+        self.assertEqual((r.status_code, error["code"], error["appointment_id"]), (409, "doctor_asked", first["id"]))
+        self.assertEqual(self.appointment(second["id"]).status, "waiting")
+        self.assertEqual(self.act(first["id"], "undo-ready", "ready").status_code, 200)
+        self.assertEqual(self.act(second["id"], "ready", "waiting").status_code, 200)
