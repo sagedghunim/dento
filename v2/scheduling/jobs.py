@@ -19,12 +19,11 @@ from procrastinate.contrib.django import app
 from billing import selectors as billing_read
 from billing import services as billing
 from clinics.models import Clinic
-from clinics.services import take_numbers
 from core import sql
 from core.context import Ctx
 from core.days import business_day
 from core.routing import clinic_transaction
-from summaries.services import Deltas, record_visits
+from summaries.services import Deltas
 
 from . import selectors
 
@@ -55,17 +54,18 @@ def last_closed_day(clinic, now):
 
 
 def sweep_clinic(clinic_id, alias, now=None):
-    """Close the open visits of the business days that have ended (design 5.10). Returns counts.
+    """Close the business days that have ended (design 5.10). Returns counts.
 
-    booked → no_show; waiting → no_show with arrived_at kept and auto_closed ("left without
-    being seen", pending Saged); in_room → done with auto_closed, its invoice ensured. The
-    auto_closed flag is what the owner sees as "flagged".
+    Whoever is still waiting or in the room moves to the new day (Saged, 2026-11-24: scheduling.services.carry_over);
+    a booking nobody came to becomes no_show and charges no visit fee.
     """
     return _sweep(clinic_id, alias, now or timezone.now())[0]
 
 
 def _sweep(clinic_id, alias, now):
     """sweep_clinic's work. Returns (counts, the last business day closed, the shard's clinic row or None)."""
+    from .services import carry_over
+
     with clinic_transaction(clinic_id, alias):
         clinic = _clinic(clinic_id)
         if clinic is None:
@@ -73,54 +73,34 @@ def _sweep(clinic_id, alias, now):
         ctx = system_ctx(clinic, alias)
         last = last_closed_day(clinic, now)
         first = last - dt.timedelta(days=SWEEP_CATCH_UP_DAYS - 1)
+        carried = carry_over(ctx, business_day(clinic, now))
         rows = sql.dicts(ctx, """
-            SELECT a.id, a.status, a.day, a.doctor_id, a.patient_id, a.service_id, a.fee, s.name AS service_name
+            SELECT a.id, a.day, a.doctor_id, a.service_id
               FROM "scheduling_appointment" a
-              JOIN "clinics_service" s ON s.clinic_id = a.clinic_id AND s.id = a.service_id
-             WHERE a.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')
+             WHERE a.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status = 'booked'
              ORDER BY a.id FOR NO KEY UPDATE OF a""", [ctx.clinic_id, first, last])
+        counts = {"carried": carried} if carried else {}
         if not rows:
-            return {}, last, clinic
+            return counts, last, clinic
         sql.run(ctx, """
-            UPDATE "scheduling_appointment"
-               SET status = CASE status WHEN 'in_room' THEN 'done' ELSE 'no_show' END,
-                   auto_closed = (status <> 'booked'),
-                   finished_at = CASE status WHEN 'in_room' THEN %s ELSE finished_at END,
-                   updated_at = %s, updated_by_id = NULL
-             WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND status IN ('booked', 'waiting', 'with_assistant', 'ready', 'in_room')""",
-                [now, now, ctx.clinic_id, [r["id"] for r in rows]])
+            UPDATE "scheduling_appointment" SET status = 'no_show', updated_at = %s, updated_by_id = NULL
+             WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND status = 'booked'""",
+                [now, ctx.clinic_id, [r["id"] for r in rows]])
         # A visit that didn't happen charges no visit fee (as the desk's own "didn't come"): a booking deposit stays
         # on its bill and nothing is owed. Only the few that have a bill, in id order (appointment, then invoice).
-        missed = [r for r in rows if r["status"] != "in_room"]
-        if missed:
-            billed = {r[0] for r in sql.rows(ctx, 'SELECT appointment_id FROM "billing_invoice" WHERE clinic_id = %s '
-                                                  "AND appointment_id = ANY(%s::bigint[]) AND status = 'open'",
-                                             [ctx.clinic_id, [r["id"] for r in missed]])}
-            for r in missed:
-                if r["id"] in billed:
-                    billing.set_visit_line(ctx, r["id"], r["service_id"], 0, "no_show")
-        in_room = [r for r in rows if r["status"] == "in_room"]
-        if in_room:
-            invoiced = {r[0] for r in sql.rows(ctx, 'SELECT appointment_id FROM "billing_invoice" WHERE clinic_id = %s '
-                                                    "AND appointment_id = ANY(%s::bigint[]) AND status = 'open'",
-                                               [ctx.clinic_id, [r["id"] for r in in_room]])}
-            missing = [r for r in in_room if r["id"] not in invoiced]
-            if missing:
-                for appointment, number in zip(missing, take_numbers(ctx, "invoice", len(missing))):
-                    billing.create_invoice(ctx, appointment, number)
+        billed = {r[0] for r in sql.rows(ctx, 'SELECT appointment_id FROM "billing_invoice" WHERE clinic_id = %s '
+                                              "AND appointment_id = ANY(%s::bigint[]) AND status = 'open'",
+                                         [ctx.clinic_id, [r["id"] for r in rows]])}
+        for r in rows:
+            if r["id"] in billed:
+                billing.set_visit_line(ctx, r["id"], r["service_id"], 0, "no_show")
         deltas = Deltas()
         for r in rows:
             deltas.clinic_day(r["day"])
-            if r["status"] != "in_room":
-                deltas.doctor_day(r["day"], r["doctor_id"], no_shows=1)  # F8; an auto-closed visit isn't timed
-        for r in in_room:
-            deltas.doctor_day(r["day"], r["doctor_id"], done=1)
-            deltas.clinic_day(r["day"], done=1)
-        record_visits(ctx, [(r["patient_id"], r["day"]) for r in in_room])
+            deltas.doctor_day(r["day"], r["doctor_id"], no_shows=1)  # F8
         deltas.write_doctors(ctx)
         deltas.write_clinics(ctx)
-        counts = {"no_show": sum(r["status"] == "booked" for r in rows),
-                  "left": sum(r["status"] in ("waiting", "with_assistant", "ready") for r in rows), "auto_done": len(in_room)}
+        counts["no_show"] = len(rows)
         log.info("sweep clinic=%s days=%s..%s %s", clinic_id, first, last, counts)
         return counts, last, clinic
 

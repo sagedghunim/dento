@@ -41,6 +41,9 @@ def open_visit(ctx):
     """The id of this member's own visit in the room today, or None. One read on (clinic, day, doctor)."""
     if not ctx.can(NOTE_CODE) or not treats(ctx):
         return None
+    from scheduling.services import carry_over_today
+
+    carry_over_today(ctx, business_day(ctx.clinic))  # last night's visit still in the room is on today (Saged, 2026-11-24)
     found = sql.row(ctx, 'SELECT id FROM "scheduling_appointment" WHERE clinic_id = %s AND day = %s AND doctor_id = %s '
                          "AND status = 'in_room' ORDER BY called_at DESC LIMIT 1",
                     [ctx.clinic_id, business_day(ctx.clinic), ctx.membership_id])

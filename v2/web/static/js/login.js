@@ -28,9 +28,15 @@ async function submit(form, url, body) {
   delete form.dataset.busy;
   button.disabled = false;
   if (result.status === 200) return go(result.data.next, form);
-  if (result.status === 401 && url.endsWith("/code")) {
+  if (result.status === 401 && url.endsWith("/code")) {  // the half sign-in ended: the name stays, only the password again
+    codeForm.reset();
     codeForm.hidden = true;
     passwordForm.hidden = false;
+    const password = passwordForm.querySelector('[name="password"]');
+    password.value = "";
+    password.focus();
+    passwordForm.querySelector("[data-error]").textContent = errorMessage(result, "");
+    return;
   }
   error.textContent = errorMessage(result, document.documentElement.lang === "ar" ? "تعذر تسجيل الدخول." : "Couldn't sign in.");
 }

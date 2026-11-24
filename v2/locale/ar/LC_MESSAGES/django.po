@@ -4735,3 +4735,6 @@ msgstr "اختار من القايمة أو اكتب"
 
 msgid "Pick what each session is."
 msgstr "اختار الإجراء لكل جلسة."
+
+msgid "This code was just used. Wait for the next code, then enter it."
+msgstr "الكود ده لسه مستخدم. استنى الكود اللي بعده واكتبه."

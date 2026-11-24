@@ -21,7 +21,7 @@ from .models import AccountEvent, RecoveryCode, User
 PENDING_USER = "hamada_pending_user"
 PENDING_UNTIL = "hamada_pending_until"
 PENDING_FAILURES = "hamada_pending_failures"
-PENDING_SECONDS = 300
+PENDING_SECONDS = 600  # ten minutes to fetch the code from the phone (Saged, 2026-11-24)
 _DUMMY_HASH = make_password("not-a-real-password-for-timing")
 
 
@@ -104,6 +104,8 @@ def verify_code(request, code):
     if _accept_code(user, code):
         _complete(request, user, mfa=True)
         return {"next": next_step(request, user)}
+    if _code_just_used(user, code):  # right, but already used: no strike, and a message that says so
+        raise ApiError("code_used", _("This code was just used. Wait for the next code, then enter it."), 400)
     failures = request.session.get(PENDING_FAILURES, 0) + 1
     request.session[PENDING_FAILURES] = failures
     event(user.id, "totp_failed", request)
@@ -125,6 +127,13 @@ def _accept_code(user, code):
     if step is None:
         return False
     return User.objects.filter(pk=user.pk, totp_last_step__lt=step).update(totp_last_step=step) == 1
+
+
+def _code_just_used(user, code):
+    if len(totp.clean(code)) != totp.DIGITS:
+        return False
+    user.refresh_from_db(fields=["totp_last_step"])
+    return totp.used_recently(crypto.decrypt(user.totp_secret), code, last_step=user.totp_last_step)
 
 
 def sign_out(request):

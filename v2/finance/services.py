@@ -16,7 +16,7 @@ from django.utils.translation import gettext as _
 
 from audit.services import record_change
 from core import sql
-from core.days import business_day, forget_shift
+from core.days import business_day
 from core.errors import ApiError
 from summaries.services import Deltas
 
@@ -93,7 +93,6 @@ def shift_for(ctx, method):
             ON CONFLICT (clinic_id) WHERE status = 'open' DO NOTHING RETURNING id""",
                          [ctx.clinic_id, timezone.now(), ctx.membership_id])
         if opened:
-            forget_shift(ctx.clinic)
             record_change(ctx, "shift.auto_open", "shift", opened[0])
             return opened[0]
         # Another request opened one and committed (or a close ended it) meanwhile: look again.
@@ -111,7 +110,6 @@ def open_shift(ctx, opening_float, note=""):
         VALUES (%s, 'open', %s, %s, %s, %s) RETURNING {SHIFT_COLUMNS}""",
                        [ctx.clinic_id, opening_float, timezone.now(), ctx.membership_id, note],
                        {"shift_one_open": lambda: shift_open_error(ctx)})
-    forget_shift(ctx.clinic)
     return _shift(found)
 
 
@@ -181,7 +179,6 @@ def close_shift(ctx, shift_id, counted, note=""):
                difference = %s, note = CASE WHEN %s = '' THEN note ELSE %s END
          WHERE clinic_id = %s AND id = %s AND status = 'open' RETURNING {SHIFT_COLUMNS}""", [
         timezone.now(), ctx.membership_id, expected, counted, counted - expected, note, note, ctx.clinic_id, shift_id]))
-    forget_shift(ctx.clinic)  # the drawer closed: the next day starts now (Saged, 2026-11-22)
     record_change(ctx, "shift.close", "shift", shift_id, after={"expected": expected, "counted": counted,
                                                                "difference": counted - expected})
     return closed, totals

@@ -444,21 +444,22 @@ class TimeTests(M1TestCase):
             self.act(done["id"], "finish", "in_room", client=desk)
             in_room = self.book(client=desk, arrive=True).json()["appointment"]
             self.act(in_room["id"], "call", "waiting", client=desk)  # one patient in the room at a time
-        self.assertEqual(sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T04:29")), {})
+        # 04:00 ends the day at once for whoever is still waiting or in the room: they move to the new day with a new
+        # turn and their status (Saged, 2026-11-24). A booking nobody came to waits the 30 minutes, then is no_show.
+        self.assertEqual(sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T04:29")), {"carried": 2})
         self.assertEqual(self.appointment(booked["id"]).status, "booked")
         counts = sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T04:30"))
-        self.assertEqual(counts, {"no_show": 1, "left": 1, "auto_done": 1})
+        self.assertEqual(counts, {"no_show": 1})
         rows = {i: self.appointment(i) for i in (booked["id"], waiting["id"], in_room["id"], done["id"])}
-        self.assertEqual([(rows[i].status, rows[i].auto_closed) for i in rows],
-                         [("no_show", False), ("no_show", True), ("done", True), ("done", False)])
-        self.assertIsNotNone(rows[waiting["id"]].arrived_at)
-        clinic, doctors = summaries(self.a, dt.date(2026, 11, 10))
+        self.assertEqual([(rows[i].status, str(rows[i].day), rows[i].auto_closed) for i in rows],
+                         [("no_show", "2026-11-10", False), ("waiting", "2026-11-11", False),
+                          ("in_room", "2026-11-11", False), ("done", "2026-11-10", False)])
+        self.assertEqual(sorted([rows[waiting["id"]].queue_no, rows[in_room["id"]].queue_no]), [1, 2])
         owner = self.a.membership("owner").id
-        self.assertEqual((clinic["done"], doctors[owner]["done"], doctors[owner]["booked"]), (2, 2, 4))
-        from billing.models import Invoice
-
-        with clinic_transaction(self.a.id, self.a.shard):
-            self.assertTrue(Invoice.objects.filter(clinic_id=self.a.id, appointment_id=in_room["id"], status="open").exists())
+        clinic, doctors = summaries(self.a, dt.date(2026, 11, 10))
+        self.assertEqual((clinic["done"], doctors[owner]["done"], doctors[owner]["booked"]), (1, 1, 2))
+        clinic, doctors = summaries(self.a, dt.date(2026, 11, 11))
+        self.assertEqual((doctors[owner]["booked"], doctors[owner]["last_queue_no"]), (2, 2))
         # A second run finds nothing to close.
         self.assertEqual(sweep_clinic(self.a.id, self.a.shard, cairo("2026-11-11T05:00")), {})
 
@@ -573,10 +574,9 @@ class QueryCountTests(M1TestCase):
         self._bulk_appointments(300)
         large = measure()
         self.assertEqual(small, large)
-        # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version, and the
-        # open register shift, since the day follows the drawer (Saged, 2026-11-22).
-        self.assertEqual(small[1], 4)
-        self.assertLessEqual(small[0], 7)  # plus the register shifts: the day follows the drawer
+        # Shard statements, request plumbing included (design 10): 304 = set_config, membership, version.
+        self.assertEqual(small[1], 3)
+        self.assertLessEqual(small[0], 7)  # plus the carry-over look at last night's unfinished visits
         # 12 plus the FOR SHARE on the doctor's row, which must be its own statement (chief judge M1, R4), plus the
         # money-day upsert of a paid booking (F5: one statement per summary table, design 5.0), plus the open
         # cash shift taken before the doctor-day (F1, 8a: cash opens a shift when none is, and that INSERT can

@@ -510,6 +510,42 @@ def _only_today():
     return ApiError("not_today", _("This can be done only on the visit's own day."), 409, fields={"day": "not_today"})
 
 
+UNFINISHED = ("waiting", "with_assistant", "ready", "in_room")
+CARRY_DAYS = 7  # as the sweep's catch-up: older days were closed long ago
+
+
+def carry_over(ctx, today=None):
+    """Whoever is still waiting or in the room when the day ends moves to the new day (Saged, 2026-11-24).
+
+    The day ends at a fixed time (core.days). A visit that isn't over keeps its status, its bill and its times and
+    takes a new turn on the new day; the old day gives back its booking. Called by the sweep and, so nobody waits
+    for it, by Today and the doctor's room on their first look at a new day. Returns how many moved.
+    """
+    today = today or business_day(ctx.clinic)
+    rows = sql.dicts(ctx, 'SELECT id, day, doctor_id FROM "scheduling_appointment" '
+                          "WHERE clinic_id = %s AND day >= %s AND day < %s AND status = ANY(%s) "
+                          "ORDER BY id FOR NO KEY UPDATE",
+                     [ctx.clinic_id, today - dt.timedelta(days=CARRY_DAYS), today, list(UNFINISHED)])
+    now = timezone.now()
+    for r in rows:
+        deltas = Deltas()
+        deltas.take_turn(today, r["doctor_id"])
+        deltas.doctor_day(r["day"], r["doctor_id"], booked=-1)
+        number = deltas.write_doctors(ctx)
+        sql.run(ctx, 'UPDATE "scheduling_appointment" SET day = %s, queue_no = %s, updated_at = %s, updated_by_id = NULL '
+                     "WHERE clinic_id = %s AND id = %s", [today, number, now, ctx.clinic_id, r["id"]])
+        deltas.clinic_day(r["day"])
+        deltas.clinic_day(today)
+        deltas.write_clinics(ctx)
+    return len(rows)
+
+
+def carry_over_today(ctx, day):
+    """carry_over when `day` is today, so Today never shows a new day without last night's unfinished visits."""
+    today = business_day(ctx.clinic)
+    return carry_over(ctx, today) if day == today else 0
+
+
 def mark_no_show(ctx, appointment_id, seen):
     """The desk marks a booked visit "didn't come" (desk review 7): today only, once its time has passed.
 

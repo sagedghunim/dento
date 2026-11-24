@@ -43,7 +43,7 @@ def verify(secret, code, *, last_step=0, now=None, window=1):
 
     Steps at or before `last_step` are refused, so a code can't be used twice.
     """
-    code = ascii_digits(code or "").strip()
+    code = clean(code)
     if len(code) != DIGITS or not code.isascii() or not code.isdigit():
         return None
     step = current_step(now)
@@ -51,6 +51,21 @@ def verify(secret, code, *, last_step=0, now=None, window=1):
         if candidate > last_step and hmac.compare_digest(code_at(secret, candidate), code):
             return candidate
     return None
+
+
+def clean(code):
+    """The digits of a code as people type or paste it: "123 456", "123-456", Arabic digits (Saged, 2026-11-24)."""
+    return "".join(ascii_digits(code or "").split()).replace("-", "")
+
+
+def used_recently(secret, code, *, last_step, now=None, window=1):
+    """True when the code is right but its step was already used: on another phone, or a second tap."""
+    code = clean(code)
+    if len(code) != DIGITS or not code.isdigit():
+        return False
+    step = current_step(now)
+    return any(candidate <= last_step and hmac.compare_digest(code_at(secret, candidate), code)
+               for candidate in range(step - window, step + window + 1))
 
 
 def provisioning_uri(secret, account, issuer="Dento"):

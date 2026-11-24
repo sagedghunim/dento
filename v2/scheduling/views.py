@@ -76,6 +76,9 @@ def today_view(request, ctx, data):
     headers = {"ETag": etag, **poll_headers()}
     if selectors.etag_matches(request.headers.get("If-None-Match"), etag):
         return Result({}, status=304, headers=headers)
+    if services.carry_over_today(ctx, day):  # the first look at a new day (Saged, 2026-11-24)
+        state = selectors.today_state(ctx, day)
+        headers["ETag"] = selectors.today_etag(ctx, day, state["version"], getattr(request, "LANGUAGE_CODE", ""), section_id)
     return Result(selectors.today_data(ctx, day, state, section_id), headers=headers)
 
 

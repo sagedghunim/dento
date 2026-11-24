@@ -315,6 +315,11 @@ def today_queue(request, ctx):
     if selectors.etag_matches(request.headers.get("If-None-Match"), etag):
         response = HttpResponseNotModified()
     else:
+        from scheduling.services import carry_over_today
+
+        if carry_over_today(ctx, day):  # a page left open across the night (Saged, 2026-11-24)
+            state = selectors.today_state(ctx, day)
+            etag = _queue_etag(ctx, day, state["version"], getattr(request, "LANGUAGE_CODE", ""))
         data = selectors.today_data(ctx, day, state)
         context = {"ctx": ctx, **queue_context(ctx, day, today, data)}
         response = HttpResponse(render_to_string("web/_queue.html", context, request=request))
@@ -345,7 +350,10 @@ def today_page(request, ctx):
         return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
     from scheduling import selectors
 
+    from scheduling.services import carry_over_today
+
     day, today = _day_param(ctx, request.GET.get("day"))
+    carry_over_today(ctx, day)  # last night's unfinished visits come to the new day first (Saged, 2026-11-24)
     state = selectors.today_state(ctx, day)
     data = selectors.today_data(ctx, day, state)
     sections = places.sections(ctx)

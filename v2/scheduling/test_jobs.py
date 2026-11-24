@@ -50,7 +50,7 @@ class DuePlaceTests(M1TestCase):
             booked = self.book(client=desk).json()["appointment"]
         jobs.run_sweep(now=cairo("2026-11-11T04:29"))
         self.assertEqual(self.appointment(booked["id"]).status, "booked")
-        self.assertEqual(jobs.run_sweep(now=cairo("2026-11-11T04:30")), {"no_show": 1, "left": 0, "auto_done": 0})
+        self.assertEqual(jobs.run_sweep(now=cairo("2026-11-11T04:30")), {"no_show": 1})
         self.assertEqual(self.appointment(booked["id"]).status, "no_show")
         self.assertEqual(jobs.run_sweep(now=cairo("2026-11-11T04:40")), {})
 
@@ -85,7 +85,8 @@ class DuePlaceTests(M1TestCase):
             self.assertEqual(jobs.run_recompute(now=now), [])
         self.assertEqual(self.due("recompute", now), {})
         self.assertFalse(summaries(self.a, dt.date(2026, 11, 10))[0]["changed_since_recompute"])
-        self.assertEqual(self.appointment(appt["id"]).status, "no_show")
+        row = self.appointment(appt["id"])  # arrived and never seen: on the new day (Saged, 2026-11-24)
+        self.assertEqual((row.status, row.day), ("waiting", dt.date(2026, 11, 11)))
         self.assertEqual(DirectoryClinic.objects.get(id=self.a.id).recomputed_through, dt.date(2026, 11, 10))
 
     def test_a_catch_up_run_for_named_places_ignores_the_marks(self):
@@ -95,7 +96,7 @@ class DuePlaceTests(M1TestCase):
             booked = self.book(client=desk).json()["appointment"]
         self.assertEqual(jobs.run_sweep(now=cairo("2026-11-11T05:00")), {})
         self.assertEqual(jobs.run_sweep(now=cairo("2026-11-11T05:00"), clinic_ids={self.a.id}),
-                         {"no_show": 1, "left": 0, "auto_done": 0})
+                         {"no_show": 1})
         with clinic_transaction(self.a.id, self.a.shard):
             self.assertEqual(Appointment.objects.get(clinic_id=self.a.id, id=booked["id"]).status, "no_show")
 
@@ -122,49 +123,24 @@ class ProcrastinateTests(M1TestCase):
             self.assertEqual(self.appointment(booked["id"]).status, "booked")
             self.assertEqual(DirectoryClinic.objects.get(id=self.b.id).swept_through, dt.date(2026, 11, 10))
             self.assertIsNone(DirectoryClinic.objects.get(id=self.a.id).swept_through)
-            self.assertEqual(jobs.sweep_shard(timestamp=0, alias="shard_1"), {"no_show": 1, "left": 0, "auto_done": 0})
+            self.assertEqual(jobs.sweep_shard(timestamp=0, alias="shard_1"), {"no_show": 1})
             self.assertEqual(jobs.recompute_shard(timestamp=0, alias="shard_1"), {"differences": 0})
         self.assertEqual(DirectoryClinic.objects.get(id=self.a.id).recomputed_through, dt.date(2026, 11, 10))
         self.assertIsNone(DirectoryClinic.objects.get(id=self.b.id).recomputed_through)
 
 
 class DrawerDayTests(M1TestCase):
-    """The day ends when the drawer is closed (Saged, 2026-11-22), not at a clock time: an open register keeps its
-    day past midnight and past 04:00; closing it starts the next day. A register forgotten open for days doesn't
-    hold the day back more than one day."""
+    """The day ends at a fixed time, whatever the drawer (Saged, 2026-11-24; replaces "the drawer decides" of
+    2026-11-22): a register left open held one place on yesterday while another showed today."""
 
-    def open_register(self, at):
+    def test_an_open_drawer_doesnt_hold_the_day_back(self):
         from core.testing import call
-        from finance.models import Shift
+        from scheduling.testing import today
 
-        with clinic_transaction(self.a.id, self.a.shard):  # the fixture's cash may have opened one: it opened at `at`
-            found = Shift.objects.filter(clinic_id=self.a.id, status="open").first()
-            if found:
-                Shift.objects.filter(clinic_id=self.a.id, id=found.id).update(opened_at=at)
-                return found.id
-        with frozen(at):
+        with frozen(cairo("2026-11-19T10:00")):
             r = call(self.desk, "POST", "/api/v1/register/open", {"opening_float": 0})
-        self.assertEqual(r.status_code, 201, r.content)
-        return r.json()["shift"]["id"]
-
-    def test_an_open_drawer_keeps_its_day_until_it_is_closed(self):
-        from core.testing import call
-        from scheduling.testing import today
-
-        shift = self.open_register(cairo("2026-11-19T10:00"))
+        self.assertIn(r.status_code, (201, 409), r.content)  # the fixture's cash may have opened one
+        self.assertEqual(today(self.a, cairo("2026-11-20T03:59")), dt.date(2026, 11, 19))
+        self.assertEqual(today(self.a, cairo("2026-11-20T04:00")), dt.date(2026, 11, 20))
         with frozen(cairo("2026-11-20T05:30")):
-            self.assertEqual(today(self.a), dt.date(2026, 11, 19))  # Thursday's register is still open
-            page = self.desk.get("/").content.decode()
-            r = call(self.desk, "POST", f"/api/v1/register/shifts/{shift}/close", {"counted": 0})
-            self.assertEqual(r.status_code, 200, r.content)
-            self.assertEqual(today(self.a), dt.date(2026, 11, 20))  # closed: Friday starts
-        self.assertIn("19", page.split('class="today-date"')[1].split("</p>")[0])
-        # The past keeps the day of the drawer it happened in.
-        self.assertEqual(today(self.a, cairo("2026-11-20T03:00")), dt.date(2026, 11, 19))
-
-    def test_a_drawer_forgotten_open_holds_the_day_back_one_day_at_most(self):
-        from scheduling.testing import today
-
-        self.open_register(cairo("2026-11-16T10:00"))
-        with frozen(cairo("2026-11-20T12:00")):
             self.assertEqual(today(self.a), dt.date(2026, 11, 20))
