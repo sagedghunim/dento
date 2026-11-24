@@ -1089,6 +1089,7 @@ progress.fin-bar::-moz-progress-bar { background: var(--teal); border-radius: 99
 .fu-name { font-weight: 800; color: var(--ink); overflow-wrap: anywhere; }
 .fu-items li { display: flex; gap: 10px; justify-content: space-between; overflow-wrap: anywhere; }
 .fu-day { white-space: nowrap; font-weight: 700; }
+.fu-late, .plan-late { color: var(--red, #b3261e); font-weight: 700; }
 .just-out { margin-block-end: 16px; border-inline-start: 4px solid var(--amber); }
 .next-send { margin: 10px 0 0; }
 .recipe-list li > span { min-width: 0; }

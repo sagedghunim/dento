@@ -390,6 +390,42 @@ class PhaseBTests(M2TestCase):
         self.assertEqual(self.act(first.json()["appointment"]["id"], "cancel", "booked").status_code, 200)
         self.assertEqual(self.slot("11:00", follow_up_id=self.ids[0], expect=None).status_code, 201)
 
+    def test_a_session_booked_late_moves_the_later_ones_by_as_many_days(self):
+        """Saged, 2026-11-24: the gaps the doctor set stay when a session is booked after its suggested day."""
+        self.finish()
+
+        def dues():
+            with clinic_transaction(self.a.id, self.a.shard):
+                return [PlanItem.objects.get(clinic_id=self.a.id, id=i).due_on for i in self.ids]
+
+        first, second = dues()
+        self.assertEqual(second - first, dt.timedelta(days=7))
+        # Booked early (before its day): nothing moves.
+        early = self.day + dt.timedelta(days=2)
+        r = self.book(patient_id=self.patient, doctor_id=self.doctor_id, day=early.isoformat(),
+                      starts_at=self.slot_iso(self.a, early, "10:00"), follow_up_id=self.ids[0], expect=None)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(dues(), [first, second])
+        self.assertEqual(self.act(r.json()["appointment"]["id"], "cancel", "booked").status_code, 200)
+        # Booked three days late: the next session moves three days on, the gap stays a week.
+        late = first + dt.timedelta(days=3)
+        r = self.book(patient_id=self.patient, doctor_id=self.doctor_id, day=late.isoformat(),
+                      starts_at=self.slot_iso(self.a, late, "10:00"), follow_up_id=self.ids[0], expect=None)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(dues(), [first, second + dt.timedelta(days=3)])
+        # The list says how late an overdue one is.
+        self.assertEqual(self.act(r.json()["appointment"]["id"], "cancel", "booked").status_code, 200)
+        groups = FollowUpTests._to_book(self, first + dt.timedelta(days=5))
+        overdue = [g for g in groups if g["key"] == "overdue"][0]["rows"][0]["items"]
+        self.assertEqual([i["late"] for i in overdue], [5])
+        from django.utils import translation
+
+        from web.templatetags.hamada import late_days
+
+        with translation.override("ar"):
+            self.assertEqual([late_days(n) for n in (0, 1, 2, 5, 11)],
+                             ["", "متأخرة يوم", "متأخرة يومين", "متأخرة 5 أيام", "متأخرة 11 يوم"])
+
     def test_a_follow_up_is_booked_only_for_its_patient_by_someone_who_sees_it(self):
         self.finish()
         tomorrow = (self.day + dt.timedelta(days=1)).isoformat()  # today stays free for this patient's booking below

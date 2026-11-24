@@ -228,7 +228,7 @@ def _item(ctx, item_id):
 
     where, params = _visible(ctx)
     found = sql.dicts(ctx, f"""
-        SELECT i.id, i.status, i.due_on, i.appointment_id, p.patient_id, a.day AS visit_day, a.doctor_id
+        SELECT i.id, i.status, i.due_on, i.appointment_id, i.plan_id, p.patient_id, a.day AS visit_day, a.doctor_id
           FROM "clinical_plan_item" i
           JOIN "clinical_plan" p ON p.clinic_id = i.clinic_id AND p.id = i.plan_id
           JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.visit_id
@@ -326,7 +326,31 @@ def claim(ctx, item_id, appointment_id, patient_id):
     sql.run(ctx, 'UPDATE "clinical_plan_item" SET appointment_id = %s, snoozed_until = NULL, updated_at = %s '
                  "WHERE clinic_id = %s AND id = %s", [appointment_id, timezone.now(), ctx.clinic_id, item_id])
     record_change(ctx, "follow_up.booked", "plan_item", item_id, after={"appointment_id": appointment_id})
+    _shift_later(ctx, item, appointment_id)
     return item["visit_day"]
+
+
+def _shift_later(ctx, item, appointment_id):
+    """A session booked later than its suggested day (Saged, 2026-11-24): the plan's later sessions not booked yet
+    move by as many days, so the gaps the doctor set between them stay. An earlier booking moves nothing. A later
+    session another booking holds right now is left to that booking (SKIP LOCKED: never a wait on a sibling)."""
+    found = sql.row(ctx, 'SELECT day FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                    [ctx.clinic_id, appointment_id])
+    if found is None or item["due_on"] is None or found[0] <= item["due_on"]:
+        return
+    late = (found[0] - item["due_on"]).days
+    ids = [r[0] for r in sql.rows(ctx, """
+        SELECT i.id FROM "clinical_plan_item" i
+         WHERE i.clinic_id = %s AND i.plan_id = %s AND i.status = 'planned' AND i.due_on > %s AND i.id <> %s
+           AND NOT EXISTS (SELECT 1 FROM "scheduling_appointment" b WHERE b.clinic_id = i.clinic_id
+                            AND b.id = i.appointment_id AND b.status NOT IN ('cancelled', 'no_show'))
+         ORDER BY i.id FOR NO KEY UPDATE OF i SKIP LOCKED""",
+                                   [ctx.clinic_id, item["plan_id"], item["due_on"], item["id"]])]
+    if not ids:
+        return
+    sql.run(ctx, 'UPDATE "clinical_plan_item" SET due_on = due_on + %s, updated_at = %s '
+                 "WHERE clinic_id = %s AND id = ANY(%s::bigint[])", [late, timezone.now(), ctx.clinic_id, ids])
+    record_change(ctx, "follow_up.shift", "plan_item", item["id"], after={"days": late, "moved": ids})
 
 
 def link_booked(ctx, item_ids, appointment_id):
@@ -348,6 +372,7 @@ def link_booked(ctx, item_ids, appointment_id):
         sql.run(ctx, 'UPDATE "clinical_plan_item" SET appointment_id = %s, snoozed_until = NULL, updated_at = %s '
                      "WHERE clinic_id = %s AND id = %s", [appointment_id, timezone.now(), ctx.clinic_id, item_id])
         record_change(ctx, "follow_up.booked", "plan_item", item_id, after={"appointment_id": appointment_id})
+        _shift_later(ctx, item, appointment_id)
         linked.append(item_id)
         seen.add(item["visit_day"])
     _tell_today(ctx, seen)
@@ -388,7 +413,7 @@ def to_book(ctx, today=None, after=None, size=LIST_SIZE):
             "doctor_id": r["doctor_id"], "doctor": pick(r["display_name"], r["display_name_en"]),
             "section_id": r["section_id"], "day": r["due_on"], "items": []})
         row["items"].append({"id": r["id"], "name": pick(r["name_ar"], r["name_en"]) or r["label"], "tooth": r["tooth"],
-                             "due_on": r["due_on"]})
+                             "due_on": r["due_on"], "late": max((today - r["due_on"]).days, 0)})
     cursor = (page[-1]["due_on"].isoformat(), page[-1]["id"]) if len(rows) > size else None
     return [{"key": key, "rows": list(found.values())} for key, found in groups.items() if found], cursor
 

@@ -21,6 +21,14 @@ function booked(answer, session) {
   const item = session && root.querySelector(`[data-item="${session.id}"]`);
   if (!item) return;
   const row = item.closest("[data-fu]");
+  // Booked after its day: the row's later sessions moved on the server too (Saged, 2026-11-24).
+  const day = answer.appointment && answer.appointment.day;
+  if (day && day > session.due) {
+    const late = (Date.parse(`${day}T00:00:00Z`) - Date.parse(`${session.due}T00:00:00Z`)) / 86400000;
+    row.querySelectorAll("[data-item]").forEach((li) => {
+      if (li.dataset.due > session.due) li.dataset.due = new Date(Date.parse(`${li.dataset.due}T00:00:00Z`) + late * 86400000).toISOString().slice(0, 10);
+    });
+  }
   item.remove();
   if (!row.querySelector("[data-item]")) leave(row);
 }

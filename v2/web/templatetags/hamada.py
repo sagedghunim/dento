@@ -2,6 +2,7 @@
 
 from django import template
 from django.utils.html import format_html
+from django.utils.translation import gettext as _
 
 from web import format as fmt
 from web import nav
@@ -53,6 +54,20 @@ def num(value):
     if value in (None, ""):
         return ""
     return format_html('<bdi class="ltr num">{}</bdi>', fmt.digits(value))
+
+
+@register.filter
+def late_days(n):
+    """How late a follow-up is (Saged, 2026-11-24), counted as Arabic counts days; book.js lateText says the same."""
+    if not n:
+        return ""
+    if n == 1:
+        return _("A day late")
+    if n == 2:
+        return _("Two days late")
+    if 3 <= n % 100 <= 10:
+        return _("{n} days late").format(n=fmt.digits(n))
+    return _("Late by {n} days").format(n=fmt.digits(n))
 
 
 @register.filter

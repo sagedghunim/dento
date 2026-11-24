@@ -4,7 +4,7 @@
     <span class="what">{% translate "File" %} {{ r.patient.file_no|num }} · <bdi dir="auto">{{ r.doctor }}</bdi>{% if r.patient.phone %} · <a class="tel" href="tel:{{ r.patient.phone }}" aria-label="{% translate "Call" %} {{ r.patient.phone }}">{{ r.patient.phone|phone }}</a>{% with wa=r.patient.phone|whatsapp %}{% if wa %} · <a class="tel wa" href="https://wa.me/{{ wa }}" target="_blank" rel="noopener noreferrer">{% translate "WhatsApp" %}</a>{% endif %}{% endwith %}{% endif %}</span>
   </div>
   <ul class="fu-items">
-    {% for i in r.items %}<li data-item="{{ i.id }}" data-due="{{ i.due_on.isoformat }}" data-what="{{ i.name }}"><span><bdi dir="auto">{{ i.name }}</bdi>{% if i.tooth %} · {% translate "Tooth" %} {{ i.tooth|digits }}{% endif %}</span> <span class="num fu-day">{{ i.due_on|shortday }}</span></li>{% endfor %}
+    {% for i in r.items %}<li data-item="{{ i.id }}" data-due="{{ i.due_on.isoformat }}" data-what="{{ i.name }}"><span><bdi dir="auto">{{ i.name }}</bdi>{% if i.tooth %} · {% translate "Tooth" %} {{ i.tooth|digits }}{% endif %}</span> <span class="num fu-day">{{ i.due_on|shortday }}{% if i.late %} <span class="fu-late">{{ i.late|late_days }}</span>{% endif %}</span></li>{% endfor %}
   </ul>
   <div class="appt-actions">
     {% if perms.book %}<button type="button" class="btn" data-fu-book>{% translate "Book" %}</button>{% endif %}

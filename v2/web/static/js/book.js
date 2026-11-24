@@ -102,13 +102,38 @@ export function initBook({ onBooked, defaults } = {}) {
   let stepAt = 0;      // when the dialog moved to the next session: a double tap never books that one too
   const planBar = dialog.querySelector("[data-plan-bar]");
 
-  const when = new When(dialog, { onChange: () => { quote(); labels(); } });
+  const when = new When(dialog, { onChange: (name) => { quote(); labels(); if (name === "doctor" && plan) suggestDay(); } });
   wireClose(dialog);
 
   // --- a plan's sessions ---
 
   const session = () => (plan ? plan.items[plan.index] : null);
   const bookable = (iso) => (iso < when.today ? when.today : iso > when.last ? when.last : iso);
+  const dayNumber = (iso) => Date.parse(`${iso}T00:00:00Z`) / 86400000;
+  const addDays = (iso, n) => new Date((dayNumber(iso) + n) * 86400000).toISOString().slice(0, 10);
+
+  // How late a session is (Saged, 2026-11-24), as Arabic counts days; the template filter late_days says the same.
+  function lateText(n) {
+    if (n === 1) return t("late_1");
+    if (n === 2) return t("late_2");
+    return t(n % 100 >= 3 && n % 100 <= 10 ? "late_few" : "late_many", { n: localDigits(n) });
+  }
+
+  // The session opens on the doctor's first day with room from its suggested day (today for an overdue one), and
+  // the bar names that day. Only a day nobody changed moves.
+  let suggestSeq = 0;
+  async function suggestDay() {
+    const current = session();
+    if (!current) return;
+    const from = bookable(current.due);
+    const seq = ++suggestSeq;
+    const day = await when.firstOpen(from);
+    if (seq !== suggestSeq || session() !== current) return;
+    current.nearest = day;
+    if (day && day !== from && when.day() === from) when.pick(day);
+    showPlan();
+    when.render();
+  }
 
   function showPlan() {
     const current = session();
@@ -120,7 +145,16 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!current) return;
     planBar.querySelector("[data-plan-step]").textContent = plan.items.length > 1
       ? t("plan_step", { i: localDigits(plan.index + 1), n: localDigits(plan.items.length), name: current.name }) : current.name;
-    planBar.querySelector("[data-plan-hint]").textContent = t("plan_suggested", { day: when.dayLabel(current.due) });
+    // An overdue session says when it was due and how late it is (Saged, 2026-11-24), then the nearest free day.
+    const hint = planBar.querySelector("[data-plan-hint]");
+    const nearest = current.nearest ? t("plan_nearest", { day: when.dayLabel(current.nearest) }) : "";
+    if (current.due < when.today) {
+      hint.replaceChildren(`${t("plan_was_due", { day: when.dayLabel(current.due) })} · `,
+        el("strong", "plan-late", lateText(dayNumber(when.today) - dayNumber(current.due))), nearest ? ` · ${nearest}` : "");
+    } else {
+      hint.replaceChildren([t("plan_suggested", { day: when.dayLabel(current.due) }),
+        current.nearest && current.nearest !== current.due ? nearest : ""].filter(Boolean).join(" · "));
+    }
   }
 
   function nextSession() {
@@ -396,6 +430,11 @@ export function initBook({ onBooked, defaults } = {}) {
     const appointment = result.data.appointment;
     const bookedSession = b.follow_up_id ? session() : null;
     const more = Boolean(bookedSession && plan.index + 1 < plan.items.length);
+    // Booked after its day: the later sessions move by as many days, as the server moved them (Saged, 2026-11-24).
+    if (bookedSession && appointment.day > bookedSession.due) {
+      const late = dayNumber(appointment.day) - dayNumber(bookedSession.due);
+      for (const item of plan.items.slice(plan.index + 1)) if (item.due > bookedSession.due) item.due = addDays(item.due, late);
+    }
     // "Collected" only when the answer's invoice shows the money (M1 decision R2), never from what was sent.
     // Part of it may have paid older bills: the visit's own bill shows at least its share (Saged, 2026-11-24).
     const paid = Boolean(b.payment && appointment.invoice && appointment.invoice.paid > 0);
@@ -462,6 +501,7 @@ export function initBook({ onBooked, defaults } = {}) {
     } catch (e) { /* none */ }
     when.reset();
     if (plan) when.setDay(bookable(session().due));  // the session's suggested day; an overdue one from today on
+    if (plan) session().nearest = null;
     showPlan();
     lastFee = null;
     const d = defaults ? defaults() : {};
@@ -474,6 +514,7 @@ export function initBook({ onBooked, defaults } = {}) {
     if (!when.doctor()) pickOnlyDoctor();
     fixed = fixedDoctor && when.doctor() === Number(fixedDoctor) ? Number(fixedDoctor) : null;
     doctorBox.hidden = Boolean(fixed);
+    if (plan) suggestDay();
     if (given) showPicked(given);
     else { patient = null; picked.hidden = true; finder.hidden = false; if (newBox) newBox.hidden = true; field("q").value = query; }
     openDialog(dialog, opener || dialog._opener);

@@ -276,6 +276,39 @@ export class When {
     if (doctorChanged) this.keepWorkingDay();
   }
 
+  // One month's days for the picked doctor ({iso: {day, works, free, full}}), from the cache or the server; null
+  // without a doctor or on a failed answer.
+  async monthDays(month) {
+    const doctor = this.doctor();
+    if (!doctor) return null;
+    const key = this.cacheKey(month);
+    if (this.monthInfo.has(key)) return this.monthInfo.get(key);
+    const section = this.sectionOf ? this.sectionOf() : "";
+    const result = await get(`/api/v1/doctors/${doctor}/month?month=${month}${section ? `&section=${section}` : ""}`);
+    if (!isOk(result) || doctor !== this.doctor()) return null;
+    const days = {};
+    for (const d of result.data.days) days[d.day] = d;
+    this.monthInfo.set(key, days);
+    return days;
+  }
+
+  // The first day from `from` on that the picked doctor works and still has room (Saged, 2026-11-24): a plan's
+  // session opens there, not on a full day or a day off. Three months ahead at most; null when none is found.
+  async firstOpen(from) {
+    let [y, m] = from.split("-").map(Number);
+    for (let i = 0; i < 3; i++) {
+      const month = isoOf(y, m, 1).slice(0, 7);
+      if (month > this.last.slice(0, 7)) break;
+      const days = await this.monthDays(month);
+      if (!days) return null;
+      const found = Object.values(days).find((d) => d.day >= from && d.works && !d.full);
+      if (found) return found.day;
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+    }
+    return null;
+  }
+
   // After a doctor change, a picked day they don't work moves to their next working day in the month shown.
   keepWorkingDay() {
     const days = this.monthInfo.get(this.cacheKey(this.monthKey()));

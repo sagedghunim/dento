@@ -4825,3 +4825,21 @@ msgstr "متأكدة إنك عايزة تنهي كشف {name} بدل الدكت�
 
 msgid "The doctor hasn't written what was done and the notes yet. The visit can be finished once they have."
 msgstr "الدكتور لسه ما كتبش اللي اتعمل والملاحظات. الكشف يخلص بعد ما يكتبهم."
+
+msgid "A day late"
+msgstr "متأخرة يوم"
+
+msgid "Two days late"
+msgstr "متأخرة يومين"
+
+msgid "{n} days late"
+msgstr "متأخرة {n} أيام"
+
+msgid "Late by {n} days"
+msgstr "متأخرة {n} يوم"
+
+msgid "Was due {day}"
+msgstr "كان معادها {day}"
+
+msgid "Nearest free day: {day}"
+msgstr "أقرب يوم فاضي: {day}"
