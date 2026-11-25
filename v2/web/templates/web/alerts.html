@@ -3,17 +3,25 @@
 {% block content %}
 <div class="page-head">
   <h1>{% translate "Alerts" %}</h1>
-  <p>{% translate "What the team did with money and records in the last two months: removed procedures and bill lines, discounts, refunds, voided bills, the register short or over, price changes, stock counts, and a patient's file changed after the visit ended." %}</p>
+  <p>{% translate "What the team did with money and records in the last two months, in four groups: the drawer, bills and prices, patients and files, and the stock." %}</p>
 </div>
 {# The owner picks which kinds reach them (Saged, 2026-11-24); each switch saves at once. #}
 <details class="card alert-settings" data-alert-settings>
   <summary>{% translate "Which alerts reach you" %}{% if some_off %} <span class="pill grey">{% translate "Some are off" %}</span>{% endif %}</summary>
   <p class="muted">{% translate "Turn off what you don't want to hear about. It is still kept in the patient's file and the records." %}</p>
+  {% for g in groups %}
+  <h3 class="sub-title" data-group-head="{{ g.key }}">{{ g.label }}</h3>
   <div class="switch-list">
-    {% for k in kinds %}<label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% endfor %}
+    {% for k in g.kinds %}<label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% endfor %}
   </div>
+  {% endfor %}
   <p class="muted" role="status" data-settings-status></p>
 </details>
+{# One group at a time, or all, newest first either way (Saged, 2026-11-25). #}
+<nav class="chips alert-groups" aria-label="{% translate "Alert groups" %}">
+  <a class="chip-btn" href="/alerts"{% if not group %} aria-pressed="true" aria-current="page"{% endif %}>{% translate "All" %}</a>
+  {% for g in groups %}<a class="chip-btn" href="?group={{ g.key }}" data-group="{{ g.key }}"{% if group == g.key %} aria-pressed="true" aria-current="page"{% endif %}>{{ g.label }}</a>{% endfor %}
+</nav>
 <section class="card">
   {% if items %}
   <ul class="alert-list">

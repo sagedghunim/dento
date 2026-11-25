@@ -1,6 +1,6 @@
 """The owner's alerts (Saged, 2026-11-19): the sensitive things the team did, read from the change log.
 
-Removing a recorded procedure or a bill line, a discount, a refund, a voided bill, a register closed short or over,
+A procedure taken off after its visit was finished, a removed bill line, a discount, a refund, a voided bill, a register closed short or over,
 a price change, a voided expense and a stock count that changed. The change log (audit_change) already holds each
 one with who and when, so nothing new is written when they happen: this reads it on its index (clinic, at DESC).
 
@@ -26,37 +26,41 @@ from core.errors import ApiError
 
 from .http import clinic_page
 
-# The kinds the owner can turn off, in the settings' order: (key, the change-log actions, the label's msgid).
-# "late" is any change to a file after its visit had finished (Saged, 2026-11-22: web.file_history).
+# The kinds the owner can turn off, by group, in the settings' order (Saged, 2026-11-25: grouped, so it reads
+# simply): (key, the change-log actions, the label's msgid, the group). "late" is any change to a file after its
+# visit had finished (web.file_history).
 KINDS = (
-    ("procedure", ("visit_procedure.remove",), "Removed a recorded procedure"),
-    ("line", ("invoice.line_remove",), "Removed a line from a bill"),
-    ("discount", ("invoice.discount",), "Gave a discount"),
-    ("refund", ("payment.refund",), "Refunded money to a patient"),
-    ("void", ("invoice.void",), "Voided a bill"),
-    ("register", ("shift.close",), "The register was short or over"),
-    ("cash", ("cash.in", "cash.out"), "Money added to or taken from the drawer"),
-    ("auto_close", ("shift.auto_close",), "The register closed by itself without a count"),
-    ("price", ("procedure.price",), "Changed a price"),
-    ("expense", ("expense.void",), "Voided an expense"),
-    ("stock", ("item.count",), "A stock count changed the quantity"),
-    ("patient", ("patient.hide", "patient.delete"), "Deleted a patient"),
-    ("late", (), "A file changed after its visit ended"),
+    ("register", ("shift.close",), "The register was short or over", "drawer"),
+    ("auto_close", ("shift.auto_close",), "The register closed by itself without a count", "drawer"),
+    ("cash", ("cash.in", "cash.out"), "Money added to or taken from the drawer", "drawer"),
+    ("refund", ("payment.refund",), "Refunded money to a patient", "drawer"),
+    ("expense", ("expense.void",), "Voided an expense", "drawer"),
+    ("line", ("invoice.line_remove",), "Removed a line from a bill", "bills"),
+    ("procedure", ("visit_procedure.remove",), "Removed a procedure after the visit ended", "bills"),
+    ("discount", ("invoice.discount",), "Gave a discount", "bills"),
+    ("void", ("invoice.void",), "Voided a bill", "bills"),
+    ("price", ("procedure.price",), "Changed a price", "bills"),
+    ("patient", ("patient.hide", "patient.delete"), "Deleted a patient", "files"),
+    ("late", (), "A file changed after its visit ended", "files"),
+    ("stock", ("item.count",), "A stock count changed the quantity", "stock"),
 )
-KEYS = tuple(k for k, _a, _l in KINDS)
-ACTIONS = tuple(a for _k, actions, _l in KINDS for a in actions)
+GROUPS = ("drawer", "bills", "files", "stock")
+KEYS = tuple(k[0] for k in KINDS)
+ACTIONS = tuple(a for k in KINDS for a in k[1])
 DAYS = 60
 LIMIT = 150
-# A register closed with the count matching is not news, nor a bill line the doctor's removed procedure took with it
-# (that procedure's own alert says it).
+# A register closed with the count matching is not news, nor a bill line the doctor's removed procedure took with it,
+# nor a procedure taken off while its visit was still on: that is a fix (Saged, 2026-11-25). Only one taken off
+# after the visit was finished with it (the doctor went back in) is an alert.
 _WHERE = ("clinic_id = %s AND (action = ANY(%s){late}) AND at >= %s "
           "AND NOT (action = 'shift.close' AND coalesce((details->'after'->>'difference')::bigint, 0) = 0) "
-          "AND NOT (action = 'invoice.line_remove' AND details->>'from_procedure' = 'true')")
+          "AND NOT (action = 'invoice.line_remove' AND details->>'from_procedure' = 'true') "
+          "AND NOT (action = 'visit_procedure.remove' AND coalesce(details->>'after_finish', '') <> 'true')")
 
 
 def _labels():
     # Written out so the string catalogue finds them (core.i18n reads the gettext calls).
-    return {"procedure": _("Removed a recorded procedure"), "line": _("Removed a line from a bill"),
+    return {"procedure": _("Removed a procedure after the visit ended"), "line": _("Removed a line from a bill"),
             "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"), "void": _("Voided a bill"),
             "register": _("The register was short or over"), "cash": _("Money added to or taken from the drawer"),
             "auto_close": _("The register closed by itself without a count"),
@@ -65,14 +69,21 @@ def _labels():
             "late": _("A file changed after its visit ended")}
 
 
+def _group_labels():
+    return {"drawer": _("The drawer"), "bills": _("Bills and prices"), "files": _("Patients and files"),
+            "stock": _("The stock")}
+
+
 def off_kinds(ctx):
     return set(ctx.membership.alerts_off or ()) & set(KEYS)
 
 
-def _where(ctx):
-    """(sql, actions) for the kinds still on."""
+def _where(ctx, group=None):
+    """(sql, actions) for the kinds still on, of one group when given."""
     off = off_kinds(ctx)
-    actions = [a for key, kind_actions, _l in KINDS if key not in off for a in kind_actions]
+    if group:
+        off = off | {k[0] for k in KINDS if k[3] != group}
+    actions = [a for key, kind_actions, _l, _g in KINDS if key not in off for a in kind_actions]
     late = "" if "late" in off else " OR details->>'late' = 'true'"
     return _WHERE.format(late=late), actions
 
@@ -97,9 +108,9 @@ def unseen(ctx):
     return found[0]
 
 
-def items(ctx):
+def items(ctx, group=None):
     """The latest alerts, newest first, each with who, when, what and the patient when there is one."""
-    where, actions = _where(ctx)
+    where, actions = _where(ctx, group)
     rows = sql.dicts(ctx, f'SELECT id, action, membership_id, target_id, patient_id, details, at FROM "audit_change" '
                           f"WHERE {where} ORDER BY at DESC, id DESC LIMIT %s",
                      [ctx.clinic_id, actions, _since(), LIMIT])
@@ -152,7 +163,7 @@ def items(ctx):
             item["patient_id"] = r["patient_id"]
             item["patient"] = late_names.get(r["patient_id"])
         elif action == "visit_procedure.remove":
-            item["what"] = _("Removed a recorded procedure")
+            item["what"] = _("Removed a procedure after the visit ended")
             item["detail"] = procedures.get(before.get("procedure_id"), "") + (f" · {before['tooth']}" if before.get("tooth") else "")
             item["amount"] = before.get("amount")
             item["patient_id"] = before.get("patient_id")
@@ -237,7 +248,9 @@ def _shifts(ctx, oldest, names):
 def alerts_page(request, ctx):
     if not sees(ctx):
         return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
-    found = items(ctx)
+    group = request.GET.get("group")
+    group = group if group in GROUPS else None
+    found = items(ctx, group)
     from clinics.models import Membership
 
     now = timezone.now()
@@ -248,10 +261,12 @@ def alerts_page(request, ctx):
     except OperationalError:
         pass
     off = off_kinds(ctx)
-    labels = _labels()
-    kinds = [{"key": key, "label": labels[key], "on": key not in off} for key in KEYS]
+    labels, names = _labels(), _group_labels()
+    groups = [{"key": g, "label": names[g],
+               "kinds": [{"key": k[0], "label": labels[k[0]], "on": k[0] not in off} for k in KINDS if k[3] == g]}
+              for g in GROUPS]
     return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS,
-                                               "kinds": kinds, "some_off": bool(off)})
+                                               "groups": groups, "group": group, "some_off": bool(off)})
 
 
 @api("PUT", key=False)

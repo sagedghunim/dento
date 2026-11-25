@@ -1217,9 +1217,15 @@ def remove_procedure(ctx, appointment_id, record_id):
     sql.run(ctx, 'DELETE FROM "clinical_visit_procedure" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, record["id"]])
     before = {name: record[name] for name in RECORD_FIELDS if name not in ("id", "created_at")}
     before["created_at"] = record["created_at"].isoformat()
+    # Taken off after the visit had been finished with it on (the doctor went back in): the owner hears of it
+    # (Saged, 2026-11-25); one taken off while the visit was still on is just a fix and says nothing.
+    after_finish = sql.row(ctx, 'SELECT 1 FROM "audit_change" WHERE clinic_id = %s AND target_type = %s AND target_id = %s '
+                                "AND action = 'appointment.reopen' AND at > %s LIMIT 1",
+                           [ctx.clinic_id, "appointment", appointment_id, record["created_at"]]) is not None
     # The answer's replay reads `appointment` and `restored` back from this row (clinical.views._replay_removed).
+    extra = {"after_finish": True} if after_finish else {}
     log_file(ctx, "visit_procedure.remove", record["patient_id"], appointment, "visit_procedure", record["id"],
-             before=before, restored=list(restored) if restored else None)
+             before=before, restored=list(restored) if restored else None, **extra)
     deltas.doctor_day(appointment["day"], appointment["doctor_id"], procedures=-1).clinic_day(appointment["day"])
     deltas.write_doctors(ctx)
     version = deltas.write_clinics(ctx)[appointment["day"]]

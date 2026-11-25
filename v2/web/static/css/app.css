@@ -1254,3 +1254,6 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .ov-team tfoot th, .ov-team tfoot td { border-block-start: 2px solid var(--line); font-weight: 800; }
 /* "Consultation only" is locked while a procedure is recorded (Saged, 2026-11-25). */
 .check.consult-only.off { opacity: .5; cursor: not-allowed; }
+
+/* The alert groups above the list (Saged, 2026-11-25). */
+.alert-groups { margin-block: 4px 12px; }

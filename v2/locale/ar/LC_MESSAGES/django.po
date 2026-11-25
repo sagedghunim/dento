@@ -4458,16 +4458,6 @@ msgstr "كتب روشتة"
 msgid "Wrote the visit's notes"
 msgstr "كتب ملاحظات الكشف"
 
-msgid ""
-"What the team did with money and records in the last two months: removed "
-"procedures and bill lines, discounts, refunds, voided bills, the register "
-"short or over, price changes, stock counts, and a patient's file changed "
-"after the visit ended."
-msgstr ""
-"اللي الفريق عمله في الفلوس والسجلات آخر شهرين: إجراءات أو بنود فواتير "
-"اتشالت، وخصومات، وفلوس اترجّعت، وفواتير اتلغت، والخزنة لو ناقصة أو زيادة، "
-"وتغيير أسعار، وجرد المخزن، وتعديل في ملف مريض بعد ما الزيارة خلصت."
-
 msgid "Add a procedure"
 msgstr "زوّد خدمة"
 
@@ -4909,3 +4899,24 @@ msgstr "متوسط العيادة"
 
 msgid "A procedure was recorded, so this isn't a consultation only."
 msgstr "اتسجّل إجراء، فدي مش كشف بس."
+
+msgid "Removed a procedure after the visit ended"
+msgstr "شال إجراء بعد ما الكشف خلص"
+
+msgid "The drawer"
+msgstr "الخزنة"
+
+msgid "Bills and prices"
+msgstr "الفواتير والأسعار"
+
+msgid "Patients and files"
+msgstr "المرضى والملفات"
+
+msgid "The stock"
+msgstr "المخزن"
+
+msgid "Alert groups"
+msgstr "مجموعات التنبيهات"
+
+msgid "What the team did with money and records in the last two months, in four groups: the drawer, bills and prices, patients and files, and the stock."
+msgstr "اللي الفريق عمله في الفلوس والسجلات آخر شهرين، في أربع مجموعات: الخزنة، والفواتير والأسعار، والمرضى والملفات، والمخزن."
