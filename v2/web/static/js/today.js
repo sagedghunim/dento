@@ -44,6 +44,9 @@ let reloadWanted = false;
 const rowHtml = new Map();       // id -> the server's HTML of the row now shown
 const heldRows = new Map();      // id -> newer server HTML waiting until the row is let go
 const acting = new Map();        // "id:action" -> true while a row action is in flight
+// Rows the user just changed themself (Instinct 3, Saged 2026-11-25): the server's answer shows at once even with the
+// mouse or focus still on the row; holding is only for changes made by someone else.
+const mine = new Set();
 
 // --- the channel between tabs: one tab polls, the others listen (design 7.4) ---
 
@@ -272,6 +275,7 @@ function hot() {
 
 function held(row) {
   if (acting.has(`${row.dataset.id}:busy`)) return true;
+  if (mine.has(row.dataset.id)) return false;
   if (row.querySelector("details[open]")) return true;
   if (row.querySelector(":focus-visible")) return true;
   return lastPointer === "mouse" && row.matches(":hover");
@@ -310,7 +314,7 @@ function replaceRow(row, html) {
 }
 
 function apply(html) {
-  if (hot() && !(deferredSince && Date.now() - deferredSince > 10000)) {
+  if (!mine.size && hot() && !(deferredSince && Date.now() - deferredSince > 10000)) {  // own change: at once
     if (!deferred) deferredSince = Date.now();
     deferred = html;
     return;
@@ -557,6 +561,10 @@ async function quick(id, action, status, name, doctorId, extra = null) {
   const result = await save("POST", `/api/v1/appointments/${id}/${action}`, { status, ...extra }, { label: t(MESSAGES[action], { name }), auto: true });
   acting.delete(key);
   acting.delete(`${id}:busy`);
+  if (result.settled && isOk(result)) {
+    mine.add(String(id));
+    setTimeout(() => mine.delete(String(id)), 10000);  // long enough for the next poll's answer
+  }
   const now = list.querySelector(`.appt[data-id="${id}"]`);
   if (now) { now.classList.remove("saving"); now.querySelectorAll("[data-act]").forEach((b) => { b.disabled = false; }); }
   if (!result.settled) { renderPending(); return; }

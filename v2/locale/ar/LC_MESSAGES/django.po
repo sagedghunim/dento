@@ -4959,3 +4959,6 @@ msgstr "اتوافق عليه وطلع من الدرج."
 
 msgid "Refused. Nothing left the drawer."
 msgstr "اترفض، ومفيش حاجة طلعت من الدرج."
+
+msgid "Will pay"
+msgstr "هيدفع"

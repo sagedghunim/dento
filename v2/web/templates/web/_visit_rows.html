@@ -8,7 +8,7 @@
     </div>
     <div class="visit-side">
       {% include "web/_status_pill.html" with status=v.status %}
-      {% if perms.money %}<span class="num">{% if v.invoice and v.invoice.total is not None %}{{ v.invoice.total|money }}{% else %}{{ v.fee|money }}{% endif %}</span>{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}<span class="pill amber">{% translate "Owes" %} {{ v.due|money }}</span>{% endif %}{% endif %}
+      {% if perms.money %}<span class="num">{% if v.invoice and v.invoice.total is not None %}{{ v.invoice.total|money }}{% else %}{{ v.fee|money }}{% endif %}</span>{% if v.due > 0 and v.status != "cancelled" and v.status != "no_show" %}{% if v.invoice %}<span class="pill amber">{% translate "Owes" %} {{ v.due|money }}</span>{% else %}{# No bill yet: the visit hasn't been finished, so nothing is owed yet (Saged, 2026-11-25). #}<span class="pill grey" data-will-pay>{% translate "Will pay" %} {{ v.due|money }}</span>{% endif %}{% endif %}{% endif %}
       {% if perms.collect and v.status != "cancelled" and v.status != "no_show" %}<button type="button" class="btn{% if not v.due %} ghost{% endif %}" data-act="pay">{% if v.due > 0 %}{% translate "Collect" %}{% else %}{% translate "Bill" %}{% endif %}</button>{% endif %}
       {% if perms.money and v.invoice and v.invoice.paid > 0 %}<button type="button" class="icon-btn" data-act="receipt" aria-label="{% translate "Print receipt" %}" title="{% translate "Print receipt" %}"><svg class="icon"><use href="#i-print"/></svg></button>{% endif %}
     </div>
