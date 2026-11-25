@@ -5,12 +5,42 @@
   <h1>{% translate "Alerts" %}</h1>
   <p>{% translate "What the team did with money and records in the last two months, in four groups: the drawer, bills and prices, patients and files, and the stock." %}</p>
 </div>
+{# Money the desk asked to take out of the drawer, waiting for the owner's OK (Saged, 2026-11-25). #}
+{% if waiting %}
+<section class="card waiting-card" data-cash-requests aria-labelledby="waiting-title">
+  <h2 id="waiting-title">{% translate "Waiting for your OK" %} <span class="pill amber">{{ waiting|length|digits }}</span></h2>
+  <ul class="alert-list">
+    {% for w in waiting %}
+    <li class="alert-row level-warn" data-request="{{ w.id }}">
+      <div class="alert-main">
+        <p class="alert-what"><strong>{{ w.what }}</strong></p>
+        <p class="muted"><bdi dir="auto">{{ w.who }}</bdi> · {{ w.at|shortday }} · {{ w.at|clock }}{% if w.note %} · <bdi dir="auto">{{ w.note }}</bdi>{% endif %}</p>
+        <div class="request-actions">
+          <button type="button" class="btn" data-decide="approve">{% translate "Approve" %}</button>
+          <button type="button" class="btn ghost" data-decide="reject">{% translate "Refuse" %}</button>
+        </div>
+        <p class="form-error" data-request-error role="alert"></p>
+      </div>
+      <p class="alert-amount num">{{ w.amount|money }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {# The owner picks which kinds reach them (Saged, 2026-11-24); each switch saves at once. #}
 <details class="card alert-settings" data-alert-settings>
   <summary>{% translate "Which alerts reach you" %}{% if some_off %} <span class="pill grey">{% translate "Some are off" %}</span>{% endif %}</summary>
   <p class="muted">{% translate "Turn off what you don't want to hear about. It is still kept in the patient's file and the records." %}</p>
   {% for g in groups %}
   <h3 class="sub-title" data-group-head="{{ g.key }}">{{ g.label }}</h3>
+  {% if g.key == "drawer" %}
+  {# The desk's money out of the drawer: at once with an alert, or waiting for the owner's OK (Saged, 2026-11-25). #}
+  <fieldset class="chips drawer-approval" data-drawer-approval data-on="{{ drawer_approval|yesno:'1,0' }}">
+    <legend>{% translate "When the desk takes money out of the drawer" %}</legend>
+    <label class="chip"><input type="radio" name="drawer_approval" value="0"{% if not drawer_approval %} checked{% endif %}><span>{% translate "It goes out, and I get an alert" %}</span></label>
+    <label class="chip"><input type="radio" name="drawer_approval" value="1"{% if drawer_approval %} checked{% endif %}><span>{% translate "It waits for my OK" %}</span></label>
+  </fieldset>
+  {% endif %}
   <div class="switch-list">
     {% for k in g.kinds %}<label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% endfor %}
   </div>

@@ -21,6 +21,9 @@ EXPECTED = {
     ("POST", "api/v1/expenses"): ("expenses.manage",),
     ("POST", "api/v1/expenses/<int:expense_id>/void"): ("expenses.manage",),
     ("POST", "api/v1/drawer-expenses"): ("cash.shift",),  # the desk pays from the drawer (Saged, 2026-11-22)
+    # Money out of the drawer waiting for the owner's OK (Saged, 2026-11-25)
+    ("GET", "api/v1/cash-requests"): ("cash.collect",),
+    ("POST", "api/v1/cash-requests/<int:request_id>/decide"): ("finances.view",),
     # F4 staff pay, F5 reports
     ("GET", "api/v1/finances/pay"): ("finances.view",),
     ("PUT", "api/v1/finances/pay/<int:membership_id>"): ("finances.pay",),
@@ -90,7 +93,7 @@ class M3RouteTests(M2TestCase):
                 continue
             path = "/" + pattern.replace("<slug:name>", "never_came_back")
             for part in ("shift_id", "category_id", "expense_id", "membership_id", "item_id", "procedure_id",
-                         "package_id", "appointment_id", "patient_id", "tag_id"):
+                         "package_id", "appointment_id", "patient_id", "tag_id", "request_id"):
                 path = path.replace(f"<int:{part}>", "1")
             r = call(self.desk, method, path, {})
             self.assertEqual(r.status_code, 403, (method, path, r.content))

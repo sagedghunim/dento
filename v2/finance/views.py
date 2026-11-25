@@ -1,5 +1,7 @@
 """Back-office money endpoints (design F1, F3, F4, F5). Views validate, check codes and call one service."""
 
+from django.utils.translation import gettext as _
+
 from core import paging, validate
 from core.api import Result, api
 from core.days import business_day, local_iso
@@ -36,7 +38,27 @@ def _report(ctx, shift):
 
 
 def _replay_shift(ctx, stored):
+    if stored["target_type"] == "cash_request":
+        return _replay_request(ctx, stored)
     return _report(ctx, services.get_shift(ctx, stored["target_id"]))
+
+
+def request_payload(ctx, request):
+    body = dict(request)
+    for name in ("requested_at", "decided_at"):
+        body[name] = local_iso(ctx.clinic, body[name]) if body[name] else None
+    return body
+
+
+def _replay_request(ctx, stored):
+    found = [r for r in services.cash_requests(ctx, limit=200) if r["id"] == stored["target_id"]]
+    return {"request": request_payload(ctx, found[0]) if found else None}
+
+
+def _asked(ctx, request):
+    """Waiting for the owner's OK (Saged, 2026-11-25): 202, and nothing has left the drawer yet."""
+    return Result({"request": request_payload(ctx, request)}, status=202, target_type="cash_request",
+                  target_id=request["id"])
 
 
 # --- The register (F1) -----------------------------------------------------------------------------------------
@@ -69,10 +91,14 @@ def close_shift_view(request, ctx, data, shift_id):
 
 @api("POST", perm="cash.shift", replay=_replay_shift)
 def cash_movement_view(request, ctx, data):
-    """POST {kind: in|out, amount, reason}: cash into or out of the open shift's drawer."""
-    shift_id, _movement = services.cash_movement(ctx, validate.choice(data, "kind", ["in", "out"]),
-                                                 parse_money(data.get("amount"), "amount", low=1),
-                                                 validate.text(data, "reason", 200))
+    """POST {kind: in|out, amount, reason}: cash into or out of the open shift's drawer. Cash out by someone other
+    than the owner is a request (202) when the owner wants to approve it (drawer_approval)."""
+    kind = validate.choice(data, "kind", ["in", "out"])
+    amount = parse_money(data.get("amount"), "amount", low=1)
+    reason = validate.text(data, "reason", 200)
+    if kind == "out" and services.needs_approval(ctx):
+        return _asked(ctx, services.ask_cash(ctx, "out", amount, note=reason))
+    shift_id, _movement = services.cash_movement(ctx, kind, amount, reason)
     return Result(_report(ctx, services.get_shift(ctx, shift_id)), status=201, target_type="shift", target_id=shift_id)
 
 
@@ -176,10 +202,14 @@ def add_expense_view(request, ctx, data):
 @api("POST", perm="cash.shift", replay=_replay_expense)
 def drawer_expense_view(request, ctx, data):
     """POST {category_id, amount, note?}: the desk pays rent, a salary… out of today's drawer (Saged, 2026-11-22).
-    Other days, expenses not from the drawer and voiding stay with expenses.manage."""
-    expense = services.add_expense(ctx, validate.ident(data.get("category_id"), "category_id"),
-                                   parse_money(data.get("amount"), "amount", low=1), business_day(ctx.clinic),
-                                   validate.text(data, "note", 200, required=False), True)
+    Other days, expenses not from the drawer and voiding stay with expenses.manage. A request (202) when the owner
+    wants to approve the desk's spending (drawer_approval, Saged 2026-11-25)."""
+    category_id = validate.ident(data.get("category_id"), "category_id")
+    amount = parse_money(data.get("amount"), "amount", low=1)
+    note = validate.text(data, "note", 200, required=False)
+    if services.needs_approval(ctx):
+        return _asked(ctx, services.ask_cash(ctx, "expense", amount, category_id, note))
+    expense = services.add_expense(ctx, category_id, amount, business_day(ctx.clinic), note, True)
     return Result({"expense": _expense_payload(ctx, expense)}, status=201, target_type="expense",
                   target_id=expense["id"])
 
@@ -288,3 +318,28 @@ def revenue_view(request, ctx, data):
 def profit_view(request, ctx, data):
     """?month=YYYY-MM (default this month)."""
     return selectors.profit(ctx, _month(request, business_day(ctx.clinic)))
+
+
+# --- Requests waiting for the owner (Saged, 2026-11-25) -----------------------------------------------------------
+
+
+def _owner(ctx):
+    if not ctx.membership.is_owner:
+        raise ApiError("forbidden", _("Only the account's owner can change this."), 403)
+
+
+@api("GET", perm="cash.collect")
+def cash_requests_view(request, ctx, data):
+    """The owner: every pending request. Anyone else: their own, pending or decided in the last day."""
+    owner = ctx.membership.is_owner
+    items = services.cash_requests(ctx, pending_only=owner, mine=not owner)
+    return {"items": [request_payload(ctx, r) for r in items]}
+
+
+@api("POST", perm="finances.view", replay=_replay_request)
+def decide_cash_request_view(request, ctx, data, request_id):
+    """POST {approve: true|false}: the owner only."""
+    _owner(ctx)
+    request_id = validate.path_id(request_id, services.not_found("request"))
+    decided = services.decide_cash(ctx, request_id, validate.boolean(data, "approve"))
+    return Result({"request": request_payload(ctx, decided)}, target_type="cash_request", target_id=request_id)

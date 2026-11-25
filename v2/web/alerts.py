@@ -105,7 +105,29 @@ def unseen(ctx):
     where, actions = _where(ctx)
     found = sql.row(ctx, f'SELECT count(*) FROM (SELECT 1 FROM "audit_change" WHERE {where} LIMIT 100) a',
                     [ctx.clinic_id, actions, since])
-    return found[0]
+    # Money waiting for the owner's OK counts until it is decided (Saged, 2026-11-25).
+    waiting = sql.row(ctx, 'SELECT count(*) FROM (SELECT 1 FROM "finance_cash_request" WHERE clinic_id = %s '
+                           "AND status = 'pending' LIMIT 100) r", [ctx.clinic_id])
+    return found[0] + waiting[0]
+
+
+def waiting_requests(ctx):
+    """Money the desk asked to take out of the drawer, waiting for the owner, with who asked and what for."""
+    from finance.services import cash_requests
+
+    rows = cash_requests(ctx, pending_only=True)
+    if not rows:
+        return []
+    names = dict(sql.rows(ctx, 'SELECT id, display_name FROM "clinics_membership" WHERE clinic_id = %s', [ctx.clinic_id]))
+    from core.i18n import pick
+
+    categories = {i: pick(n, e) for i, n, e in sql.rows(
+        ctx, 'SELECT id, name, name_en FROM "finance_category" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
+        [ctx.clinic_id, [r["category_id"] for r in rows if r["category_id"]]])}
+    return [{"id": r["id"], "amount": r["amount"], "who": names.get(r["requested_by_id"], ""),
+             "at": local_iso(ctx.clinic, r["requested_at"]), "note": r["note"],
+             "what": (_("Pay an expense from the drawer") + " · " + categories.get(r["category_id"], ""))
+             if r["kind"] == "expense" else _("Take money out of the drawer")} for r in rows]
 
 
 def items(ctx, group=None):
@@ -265,8 +287,12 @@ def alerts_page(request, ctx):
     groups = [{"key": g, "label": names[g],
                "kinds": [{"key": k[0], "label": labels[k[0]], "on": k[0] not in off} for k in KINDS if k[3] == g]}
               for g in GROUPS]
+    from clinics import settings as clinic_settings
+
     return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS,
-                                               "groups": groups, "group": group, "some_off": bool(off)})
+                                               "groups": groups, "group": group, "some_off": bool(off),
+                                               "waiting": waiting_requests(ctx),
+                                               "drawer_approval": clinic_settings.effective(ctx.clinic.settings)["drawer_approval"]})
 
 
 @api("PUT", key=False)

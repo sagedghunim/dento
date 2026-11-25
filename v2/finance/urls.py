@@ -20,6 +20,9 @@ urlpatterns = [
     path("api/v1/expenses", by_method(GET=views.expenses_view, POST=views.add_expense_view)),
     path("api/v1/expenses/<int:expense_id>/void", views.void_expense_view),
     path("api/v1/drawer-expenses", views.drawer_expense_view),
+    # Money out of the drawer waiting for the owner's OK (Saged, 2026-11-25)
+    path("api/v1/cash-requests", views.cash_requests_view),
+    path("api/v1/cash-requests/<int:request_id>/decide", views.decide_cash_request_view),
     # Staff pay (F4)
     path("api/v1/finances/pay", views.pay_rules_view),
     path("api/v1/finances/pay/<int:membership_id>", views.set_pay_rule_view),

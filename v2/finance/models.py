@@ -106,6 +106,41 @@ class Category(models.Model):
         ]
 
 
+REQUEST_KINDS = ["expense", "out"]
+REQUEST_STATUSES = ["pending", "approved", "rejected"]
+
+
+class CashRequest(models.Model):
+    """Money the desk asks to take out of the drawer, waiting for the owner's OK (Saged, 2026-11-25), when the owner
+    turned on drawer_approval. Approved: the expense or the cash-out is made then (result_id); rejected: nothing."""
+
+    clinic = _clinic()
+    kind = models.CharField(max_length=8)  # expense: from the drawer, by category; out: cash out with a reason
+    amount = models.BigIntegerField()
+    category = _ref(Category, null=True)
+    note = models.CharField(max_length=200, blank=True, default="")  # the expense's note, or the cash-out's reason
+    status = models.CharField(max_length=8, default="pending")
+    requested_by_id = models.BigIntegerField()
+    requested_at = models.DateTimeField(default=timezone.now)
+    decided_by_id = models.BigIntegerField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    result_id = models.BigIntegerField(null=True, blank=True)  # the expense or the cash movement made on approval
+
+    class Meta:
+        db_table = "finance_cash_request"
+        constraints = [
+            models.CheckConstraint(condition=Q(kind__in=REQUEST_KINDS), name="cash_request_kind_valid"),
+            models.CheckConstraint(condition=Q(status__in=REQUEST_STATUSES), name="cash_request_status_valid"),
+            models.CheckConstraint(condition=Q(amount__gt=0), name="cash_request_amount_positive"),
+            models.CheckConstraint(condition=Q(kind="out") | Q(category__isnull=False), name="cash_request_expense_category"),
+            models.CheckConstraint(condition=Q(status="pending", decided_at__isnull=True)
+                                   | (~Q(status="pending") & Q(decided_at__isnull=False)), name="cash_request_decided"),
+            _fk("category", "finance.Category", "cash_request_category_fk"),
+        ]
+        indexes = [models.Index("clinic", F("requested_at").desc(), F("id").desc(), name="cash_request_list"),
+                   models.Index(fields=["clinic", "id"], condition=Q(status="pending"), name="cash_request_pending")]
+
+
 class Expense(models.Model):
     clinic = _clinic()
     category = _ref(Category)

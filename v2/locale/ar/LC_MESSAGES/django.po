@@ -4920,3 +4920,42 @@ msgstr "مجموعات التنبيهات"
 
 msgid "What the team did with money and records in the last two months, in four groups: the drawer, bills and prices, patients and files, and the stock."
 msgstr "اللي الفريق عمله في الفلوس والسجلات آخر شهرين، في أربع مجموعات: الخزنة، والفواتير والأسعار، والمرضى والملفات، والمخزن."
+
+msgid "Waiting for your OK"
+msgstr "مستني موافقتك"
+
+msgid "Approve"
+msgstr "وافق"
+
+msgid "Refuse"
+msgstr "ارفض"
+
+msgid "When the desk takes money out of the drawer"
+msgstr "لما الاستقبال يطلّع فلوس من الدرج"
+
+msgid "It goes out, and I get an alert"
+msgstr "تطلع على طول، ويجيلي تنبيه"
+
+msgid "It waits for my OK"
+msgstr "تستنى موافقتي"
+
+msgid "Pay an expense from the drawer"
+msgstr "دفع مصروف من الدرج"
+
+msgid "Take money out of the drawer"
+msgstr "طلّع فلوس من الدرج"
+
+msgid "This request was already decided."
+msgstr "الطلب ده اتقرر فيه خلاص."
+
+msgid "This request wasn't found."
+msgstr "الطلب ده مش موجود."
+
+msgid "Sent to the owner. It leaves the drawer once they approve it."
+msgstr "اتبعت لصاحب الحساب. الفلوس هتطلع من الدرج لما يوافق."
+
+msgid "Approved. It left the drawer."
+msgstr "اتوافق عليه وطلع من الدرج."
+
+msgid "Refused. Nothing left the drawer."
+msgstr "اترفض، ومفيش حاجة طلعت من الدرج."

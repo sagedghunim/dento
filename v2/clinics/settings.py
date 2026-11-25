@@ -26,10 +26,13 @@ DEFAULTS = {
     "installment_down_percent": 30,
     "installment_every": "month",
     "installment_count": 3,
+    # Money the desk takes out of the drawer (an expense or cash out) waits for the owner's OK (Saged, 2026-11-25);
+    # off: it goes out at once and the owner gets an alert.
+    "drawer_approval": False,
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
 OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure",
-              "installment_down_percent", "installment_every", "installment_count"}
+              "installment_down_percent", "installment_every", "installment_count", "drawer_approval"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
 
 _RULES = {
@@ -49,6 +52,7 @@ _RULES = {
     "installment_down_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
     "installment_every": lambda v: v in ("week", "2weeks", "month"),
     "installment_count": lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 24,
+    "drawer_approval": lambda v: isinstance(v, bool),
 }
 
 

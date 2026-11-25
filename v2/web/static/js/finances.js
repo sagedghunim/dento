@@ -102,6 +102,8 @@ const cashDialog = setup("cash-dialog", ({ dialog, field, submitter }) => {
                label: t(kind === "in" ? "fin_cash_in" : "fin_cash_out", { amount: moneyText(amount) }) };
     },
     done(data) {
+      // Waiting for the owner's OK (Saged, 2026-11-25): nothing left the drawer yet.
+      if (data.request) { toast(t("fin_request_sent")); reloadTab(); return; }
       toast(t("fin_cash_saved", { expected: moneyText(data.totals.expected_cash) }));
       reloadTab();
     },
@@ -205,6 +207,7 @@ const expenseDialog = setup("expense-dialog", ({ dialog, field, submitter }) => 
                label: t("fin_expense_added", { name, amount: moneyText(amount) }) };
     },
     done(data) {
+      if (data.request) { toast(t("fin_request_sent")); reloadTab(); return; }  // waiting for the owner's OK
       const e = data.expense;
       toast(tab !== "expenses" || e.day.slice(0, 7) === month ? t("fin_expense_saved") : t("fin_expense_other_month"));
       reloadTab();

@@ -1257,3 +1257,9 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 
 /* The alert groups above the list (Saged, 2026-11-25). */
 .alert-groups { margin-block: 4px 12px; }
+
+/* Money waiting for the owner (Saged, 2026-11-25). */
+.waiting-card { border-color: var(--amber, #b7791f); }
+.request-actions { display: flex; gap: 8px; margin-block-start: 8px; }
+.drawer-approval { border: 0; padding: 0; margin: 0 0 10px; }
+.drawer-approval legend { font-weight: 700; margin-block-end: 6px; }

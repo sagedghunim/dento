@@ -47,6 +47,7 @@ def not_found(what):
         "category": _("This category wasn't found."),
         "expense": _("This expense wasn't found."),
         "member": _("This member wasn't found."),
+        "request": _("This request wasn't found."),
     }
     return ApiError("not_found", messages[what], 404)
 
@@ -215,15 +216,16 @@ def close_shift(ctx, shift_id, counted, note=""):
     return closed, totals
 
 
-def cash_movement(ctx, kind, amount, reason):
-    """Cash in or out of the open shift's drawer, with a reason (F1). Audited."""
+def cash_movement(ctx, kind, amount, reason, by_id=None):
+    """Cash in or out of the open shift's drawer, with a reason (F1). Audited. `by_id`: who asked, when the owner
+    approved someone's request (Saged, 2026-11-25)."""
     shift_id = shift_for(ctx, "cash")
     if kind == "out":
         require_cash(ctx, shift_id, amount)
     movement_id = sql.row(ctx, """
         INSERT INTO "finance_cash_movement" (clinic_id, shift_id, kind, amount, reason, at, by_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
-        ctx.clinic_id, shift_id, kind, amount, reason, timezone.now(), ctx.membership_id])[0]
+        ctx.clinic_id, shift_id, kind, amount, reason, timezone.now(), by_id or ctx.membership_id])[0]
     record_change(ctx, "cash." + kind, "shift", shift_id, amount=amount, reason=reason, movement_id=movement_id)
     return shift_id, movement_id
 
@@ -341,7 +343,7 @@ def category_by_code(ctx, code):
                    [ctx.clinic_id, name, code])[0]
 
 
-def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False, deltas=None):
+def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False, deltas=None, by_id=None):
     """An expense on a day (not after today), optionally paid from the open shift's drawer (lock order 8a, 10).
     The "other" category is money that fits no category, so it needs a note saying what it was; the rest don't.
 
@@ -361,7 +363,7 @@ def add_expense(ctx, category_id, amount, day, note, from_shift, purchase=False,
         INSERT INTO "finance_expense" (clinic_id, category_id, amount, day, note, shift_id, purchase, created_at,
                                        created_by_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING {EXPENSE_COLUMNS}""", [
-        ctx.clinic_id, category_id, amount, day, note, shift_id, purchase, timezone.now(), ctx.membership_id])
+        ctx.clinic_id, category_id, amount, day, note, shift_id, purchase, timezone.now(), by_id or ctx.membership_id])
     own = deltas is None
     deltas = deltas or Deltas()
     deltas.clinic_day(day, expenses=amount)
@@ -543,3 +545,73 @@ def payout(ctx, membership_id, month, amount, method, note):
     record_change(ctx, "payout.add", "membership", membership_id, amount=amount, method=method,
                   month=month.isoformat(), payout_id=payout_id)
     return payout_id
+
+
+# --- Money out of the drawer that waits for the owner's OK (Saged, 2026-11-25) ----------------------------------
+
+REQUEST_COLUMNS = ("id, kind, amount, category_id, note, status, requested_by_id, requested_at, decided_by_id, "
+                   "decided_at, result_id")
+
+
+def needs_approval(ctx):
+    """The owner turned on drawer_approval and this isn't the owner: money out of the drawer is a request."""
+    from clinics import settings as clinic_settings
+
+    return bool(clinic_settings.effective(ctx.clinic.settings)["drawer_approval"]) and not ctx.membership.is_owner
+
+
+def ask_cash(ctx, kind, amount, category_id=None, note=""):
+    """A request to take money out of the drawer: checked as the real thing would be (the category, its note),
+    then kept until the owner decides. Audited as cash.request, which the owner's alerts read."""
+    if kind == "expense" and _active_category(ctx, category_id) == "other" and not note.strip():
+        raise ApiError("invalid", _("Write what this money was for."), fields={"note": "required"})
+    found = sql.row(ctx, f"""
+        INSERT INTO "finance_cash_request" (clinic_id, kind, amount, category_id, note, status, requested_by_id,
+                                            requested_at)
+        VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s) RETURNING {REQUEST_COLUMNS}""", [
+        ctx.clinic_id, kind, amount, category_id if kind == "expense" else None, note, ctx.membership_id,
+        timezone.now()])
+    request = dict(zip(_cols(REQUEST_COLUMNS), found))
+    record_change(ctx, "cash.request", "cash_request", request["id"], kind=kind, amount=amount, note=note,
+                  category_id=request["category_id"])
+    return request
+
+
+def decide_cash(ctx, request_id, approve):
+    """The owner approves (the expense or cash-out is made now, in the open shift, as the one who asked) or rejects.
+    The row is locked first, so two taps decide once; a decided request is 409 decided. Audited."""
+    found = sql.row(ctx, f'SELECT {REQUEST_COLUMNS} FROM "finance_cash_request" WHERE clinic_id = %s AND id = %s '
+                         "FOR NO KEY UPDATE", [ctx.clinic_id, request_id])
+    if found is None:
+        raise not_found("request")
+    request = dict(zip(_cols(REQUEST_COLUMNS), found))
+    if request["status"] != "pending":
+        raise ApiError("decided", _("This request was already decided."), 409, extra={"status": request["status"]})
+    result_id = None
+    if approve:
+        if request["kind"] == "expense":
+            result_id = add_expense(ctx, request["category_id"], request["amount"], business_day(ctx.clinic),
+                                    request["note"], True, by_id=request["requested_by_id"])["id"]
+        else:
+            result_id = cash_movement(ctx, "out", request["amount"], request["note"],
+                                      by_id=request["requested_by_id"])[1]
+    status = "approved" if approve else "rejected"
+    sql.run(ctx, 'UPDATE "finance_cash_request" SET status = %s, decided_by_id = %s, decided_at = %s, result_id = %s '
+                 "WHERE clinic_id = %s AND id = %s", [status, ctx.membership_id, timezone.now(), result_id,
+                                                      ctx.clinic_id, request_id])
+    record_change(ctx, "cash.request_" + status, "cash_request", request_id, amount=request["amount"],
+                  requested_by_id=request["requested_by_id"])
+    return {**request, "status": status, "result_id": result_id}
+
+
+def cash_requests(ctx, pending_only=False, mine=False, limit=30):
+    """Requests, newest first: the owner's pending ones, or one member's own (pending and decided today)."""
+    where, params = "clinic_id = %s", [ctx.clinic_id]
+    if pending_only:
+        where += " AND status = 'pending'"
+    if mine:
+        where += " AND requested_by_id = %s AND (status = 'pending' OR decided_at >= %s)"
+        params += [ctx.membership_id, timezone.now() - dt.timedelta(hours=24)]
+    rows = sql.rows(ctx, f'SELECT {REQUEST_COLUMNS} FROM "finance_cash_request" WHERE {where} '
+                         "ORDER BY requested_at DESC, id DESC LIMIT %s", [*params, limit])
+    return [dict(zip(_cols(REQUEST_COLUMNS), r)) for r in rows]
