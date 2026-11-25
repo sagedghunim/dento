@@ -36,6 +36,7 @@ SECTIONS = (
     Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True, (
         Part("items", _("Stock items"), "/inventory?part=items", ("inventory.use", "inventory.manage")),
         Part("materials", _("Materials of each procedure"), "/inventory?part=materials", ("inventory.manage",)),
+        Part("kits", _("Packages"), "/inventory?part=kits", ("inventory.manage",)),
     )),
     Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True, (
         Part("month", _("This month"), "/finances?tab=month", ("finances.view",)),

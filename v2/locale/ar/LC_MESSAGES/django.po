@@ -2586,8 +2586,8 @@ msgid ""
 "Collected is after refunds in the splits. Profit is what was collected, "
 "minus refunds, expenses and the staff pay earned this month."
 msgstr ""
-"المحصَّل في التقسيمات بعد خصم اللي رجع للمرضى. الربح هو المحصَّل ناقص اللي رجع للمرضى "
-"والمصروفات وأجور الفريق المستحقة عن الشهر."
+"المحصَّل في التقسيمات بعد خصم اللي رجع للمرضى. الربح هو المحصَّل ناقص اللي "
+"رجع للمرضى والمصروفات وأجور الفريق المستحقة عن الشهر."
 
 msgid "Counted"
 msgstr "المعدود"
@@ -3306,7 +3306,6 @@ msgstr "اليوم: {day}"
 msgid "Done today"
 msgstr "اللي اتعمل النهارده"
 
-
 msgid "Type part of its name"
 msgstr "اكتب جزء من اسمه"
 
@@ -3325,15 +3324,11 @@ msgstr "الجاي"
 msgid "The desk books these when the visit is finished."
 msgstr "الاستقبال بيحجزها أول ما الكشف يخلص."
 
-
-
 msgid "Follow-up visit"
 msgstr "متابعة"
 
 msgid "Continue the treatment"
 msgstr "استكمال العلاج"
-
-
 
 msgid "In 2 days"
 msgstr "بعد يومين"
@@ -3714,8 +3709,6 @@ msgstr "الخصومات والمرتجع والمصاريف والباقات و
 
 msgid "Give discounts"
 msgstr "عمل خصومات"
-
-
 
 msgid "How many"
 msgstr "العدد"
@@ -4537,8 +4530,12 @@ msgstr "يغيّر أسعار خدماته هو في قايمة الأسعار،
 msgid "Add the code to another phone"
 msgstr "ضيف الكود على موبايل تاني"
 
-msgid "Anyone who scans it gets the same changing code as you. Show it only to people you trust with this account."
-msgstr "أي حد يمسح الكود ده هيطلع عنده نفس الأرقام اللي بتتغير. اعرضه بس للناس اللي بتأمنهم على الحساب ده."
+msgid ""
+"Anyone who scans it gets the same changing code as you. Show it only to "
+"people you trust with this account."
+msgstr ""
+"أي حد يمسح الكود ده هيطلع عنده نفس الأرقام اللي بتتغير. اعرضه بس للناس اللي "
+"بتأمنهم على الحساب ده."
 
 msgid "Your password"
 msgstr "كلمة السر بتاعتك"
@@ -4576,8 +4573,13 @@ msgstr "اكتب اسم الخدمة الرئيسية الجديدة."
 msgid "Pay an installment"
 msgstr "ادفع قسط"
 
-msgid "Payments count toward the installments by themselves, the earliest first. If the patient pays more than is due, the rest is split again evenly over the coming installments."
-msgstr "أي فلوس المريض يدفعها بتتحسب من الأقساط لوحدها، الأقدم الأول. ولو دفع أكتر من المطلوب، الباقي بيتقسم من جديد بالتساوي على الأقساط الجاية."
+msgid ""
+"Payments count toward the installments by themselves, the earliest first. If"
+" the patient pays more than is due, the rest is split again evenly over the "
+"coming installments."
+msgstr ""
+"أي فلوس المريض يدفعها بتتحسب من الأقساط لوحدها، الأقدم الأول. ولو دفع أكتر "
+"من المطلوب، الباقي بيتقسم من جديد بالتساوي على الأقساط الجاية."
 
 msgid "Left of the installments:"
 msgstr "الباقي من التقسيط:"
@@ -4585,7 +4587,8 @@ msgstr "الباقي من التقسيط:"
 msgid "Take the payment"
 msgstr "استلم الفلوس"
 
-msgid "The {rest} left will be split again over the coming installments: {parts}."
+msgid ""
+"The {rest} left will be split again over the coming installments: {parts}."
 msgstr "الباقي {rest} هيتقسم من جديد على الأقساط الجاية: {parts}."
 
 msgid "The amount is more than what is left of the installments."
@@ -4615,8 +4618,12 @@ msgstr "ده أكتر من الباقي له عن الشهر ده: %(amount)s."
 msgid "The bill goes down by the same amount, so the patient doesn't owe it"
 msgstr "الفاتورة تقل بنفس المبلغ، فالمريض ميبقاش عليه حاجة"
 
-msgid "This patient has a visit not finished, money owed or given, or installments running. Finish those first."
-msgstr "المريض ده عنده زيارة لسه مخلصتش، أو فلوس عليه أو ليه، أو تقسيط شغال. خلّصهم الأول."
+msgid ""
+"This patient has a visit not finished, money owed or given, or installments "
+"running. Finish those first."
+msgstr ""
+"المريض ده عنده زيارة لسه مخلصتش، أو فلوس عليه أو ليه، أو تقسيط شغال. خلّصهم "
+"الأول."
 
 msgid "This procedure is for a molar. Tooth %(tooth)s isn't one."
 msgstr "الإجراء ده للضروس بس، والسنة %(tooth)s مش ضرس."
@@ -4660,7 +4667,9 @@ msgstr "اتحفظ في ملف المريض"
 msgid "Not saved in the file yet: no connection. Retrying…"
 msgstr "لسه ما اتحفظش في الملف: مفيش نت. بنحاول تاني…"
 
-msgid "The patient's medical file isn't saved yet. Check the connection and try again."
+msgid ""
+"The patient's medical file isn't saved yet. Check the connection and try "
+"again."
 msgstr "ملف المريض الطبي لسه ما اتحفظش. اتأكد من النت وجرّب تاني."
 
 msgid "Tap to see all, or type a letter"
@@ -4747,7 +4756,9 @@ msgstr "خليها {most}"
 msgid "The {amount} stays as the patient's credit"
 msgstr "الـ{amount} هتبقى رصيد ليه"
 
-msgid "Choose: keep what is over as the patient's credit, or take only what is owed."
+msgid ""
+"Choose: keep what is over as the patient's credit, or take only what is "
+"owed."
 msgstr "اختار: الزيادة تبقى رصيد ليه، ولا تاخد المطلوب بس."
 
 msgid "From the patient's credit"
@@ -4789,8 +4800,11 @@ msgid "This visit changed meanwhile."
 msgstr "الكشف ده اتغيّر في الوقت ده."
 
 #, python-format
-msgid "The doctor is already asked about %(name)s. Take that request back first."
-msgstr "فيه طلب مستني عند الدكتور لـ %(name)s. الغي الطلب ده الأول عشان تبعت لحد تاني."
+msgid ""
+"The doctor is already asked about %(name)s. Take that request back first."
+msgstr ""
+"فيه طلب مستني عند الدكتور لـ %(name)s. الغي الطلب ده الأول عشان تبعت لحد "
+"تاني."
 
 msgid "Ask about {name} instead"
 msgstr "الغي القديم وابعت {name}"
@@ -4804,10 +4818,13 @@ msgstr "كشف بس"
 msgid "This can be changed only while the patient is in the room."
 msgstr "ده يتغيّر بس والعيان جوه الكشف."
 
-msgid "Finish {name}'s visit instead of the doctor? Make sure the doctor is done."
+msgid ""
+"Finish {name}'s visit instead of the doctor? Make sure the doctor is done."
 msgstr "متأكدة إنك عايزة تنهي كشف {name} بدل الدكتور؟ اتأكدي إن الدكتور خلّص."
 
-msgid "The doctor hasn't written what was done and the notes yet. The visit can be finished once they have."
+msgid ""
+"The doctor hasn't written what was done and the notes yet. The visit can be "
+"finished once they have."
 msgstr "الدكتور لسه ما كتبش اللي اتعمل والملاحظات. الكشف يخلص بعد ما يكتبهم."
 
 msgid "A day late"
@@ -4846,8 +4863,11 @@ msgstr "التنبيهات اللي توصلك"
 msgid "Some are off"
 msgstr "فيه حاجات مقفولة"
 
-msgid "Turn off what you don't want to hear about. It is still kept in the patient's file and the records."
-msgstr "اقفل اللي مش عايز يوصلك عنه تنبيه. هيفضل متسجل في ملف المريض والسجلات عادي."
+msgid ""
+"Turn off what you don't want to hear about. It is still kept in the "
+"patient's file and the records."
+msgstr ""
+"اقفل اللي مش عايز يوصلك عنه تنبيه. هيفضل متسجل في ملف المريض والسجلات عادي."
 
 msgid "Add money to the drawer"
 msgstr "زوّد فلوس في الخزنة"
@@ -4879,7 +4899,8 @@ msgstr "دوس واختار روشتة جاهزة"
 msgid "Type or tap to pick a medicine"
 msgstr "اكتب اسم الدوا أو دوس واختار"
 
-msgid "Only cash is in the drawer; the other methods go to the bank or the wallet."
+msgid ""
+"Only cash is in the drawer; the other methods go to the bank or the wallet."
 msgstr "الكاش بس اللي في الدرج؛ باقي الطرق بتروح البنك أو المحفظة."
 
 msgid "Higher than before"
@@ -4915,8 +4936,12 @@ msgstr "المخزن"
 msgid "Alert groups"
 msgstr "مجموعات التنبيهات"
 
-msgid "What the team did with money and records in the last two months, in four groups: the drawer, bills and prices, patients and files, and the stock."
-msgstr "اللي الفريق عمله في الفلوس والسجلات آخر شهرين، في أربع مجموعات: الخزنة، والفواتير والأسعار، والمرضى والملفات، والمخزن."
+msgid ""
+"What the team did with money and records in the last two months, in four "
+"groups: the drawer, bills and prices, patients and files, and the stock."
+msgstr ""
+"اللي الفريق عمله في الفلوس والسجلات آخر شهرين، في أربع مجموعات: الخزنة، "
+"والفواتير والأسعار، والمرضى والملفات، والمخزن."
 
 msgid "Waiting for your OK"
 msgstr "مستني موافقتك"
@@ -4960,7 +4985,8 @@ msgstr "شيل بند من فاتورة"
 msgid "Change a price"
 msgstr "تغيير سعر"
 
-msgid "Green: it waits for your permission. Red: it happens, and you get an alert."
+msgid ""
+"Green: it waits for your permission. Red: it happens, and you get an alert."
 msgstr "أخضر: بإذنك، يستنى موافقتك. أحمر: يتنفذ على طول ويجيلك تنبيه."
 
 msgid "Taken from pay"
@@ -5077,3 +5103,100 @@ msgstr "أحمر: يتنفذ ويجيلك تنبيه"
 
 msgid "Type to pick from the ready list"
 msgstr "اكتب واختار من القايمة الجاهزة"
+
+msgid "Not in the ready list. Your name is kept as typed."
+msgstr "مش في القايمة الجاهزة. الاسم هيتسجل زي ما كتبته."
+
+msgid "Packages"
+msgstr "الباكجات"
+
+msgid "New package"
+msgstr "باكج جديد"
+
+msgid "Edit the package"
+msgstr "تعديل الباكج"
+
+msgid "Package name"
+msgstr "اسم الباكج"
+
+msgid "e.g. Braces"
+msgstr "مثلاً: تقويم"
+
+msgid "Delete the package"
+msgstr "امسح الباكج"
+
+msgid ""
+"A set of items the doctor takes in one pick during a visit, such as braces. "
+"Only stock changes, never the bill."
+msgstr ""
+"مجموعة حاجات الدكتور بياخدها بدوسة واحدة في الكشف، زي التقويم. بتتخصم من "
+"المخزون بس، ومش بتدخل في الفاتورة."
+
+msgid "No packages yet. Make one for what you use together often."
+msgstr "مفيش باكجات لسه. اعمل باكج للحاجات اللي بتستخدمها مع بعض كتير."
+
+msgid "A package with this name is already in the list."
+msgstr "فيه باكج بالاسم ده بالفعل."
+
+msgid "Used from stock"
+msgstr "الاستهلاك"
+
+msgid ""
+"What you used with this patient beyond the procedures' own materials. It "
+"comes off the stock, not the bill."
+msgstr ""
+"اللي استخدمته مع المريض ده غير المكوّنات اللي بتتخصم مع الإجراءات لوحدها. "
+"بيتخصم من المخزون، مش من الفاتورة."
+
+msgid "Pick a package or an item"
+msgstr "اختار باكج أو صنف"
+
+msgid "Tap, or type the first letters"
+msgstr "دوس، أو اكتب أول حروف"
+
+msgid "Take from stock"
+msgstr "اخصم من المخزون"
+
+msgid "Taken in this visit"
+msgstr "اللي اتخصم في الكشف ده"
+
+msgid "{n} {unit} left"
+msgstr "فاضل {n} {unit}"
+
+msgid "{n} left"
+msgstr "فاضل {n}"
+
+msgid "Package · {n} items"
+msgstr "باكج · {n} أصناف"
+
+msgid "Nothing with this name in stock."
+msgstr "مفيش حاجة بالاسم ده في المخزون."
+
+msgid "Added the package: {name}"
+msgstr "اتضاف الباكج: {name}"
+
+msgid "Not enough in stock: {list}"
+msgstr "مش كفاية في المخزون: {list}"
+
+msgid "Taken from stock."
+msgstr "اتخصم من المخزون."
+
+msgid "Enter the package name."
+msgstr "اكتب اسم الباكج."
+
+msgid "Package saved: {name}"
+msgstr "اتحفظ الباكج: {name}"
+
+msgid "Package deleted: {name}"
+msgstr "اتمسح الباكج: {name}"
+
+msgid ""
+"Added {n} of the package's {all} items: {name} (the rest aren't in this "
+"section)"
+msgstr "اتضاف {n} من {all} أصناف الباكج: {name} (الباقي مش في القسم ده)"
+
+msgid "The list of packages is full. Delete one you no longer use."
+msgstr "قايمة الباكجات اتملت. امسح باكج مش بتستخدمه."
+
+msgid "At most 30 items at a time. Take these, then add the rest."
+msgstr "أقصى حاجة 30 صنف في المرة. اخصم دول، وبعدين ضيف الباقي."

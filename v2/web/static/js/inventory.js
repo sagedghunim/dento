@@ -256,15 +256,92 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
 // A ready item picked from the list (Saged, 2026-11-25), for a new item only, fills its English name, category and
 // unit. A field the user typed in is kept; what the list filled follows the name (and empties when it no longer
 // matches). The price is only a hint in the cost field: store prices change, so nothing is saved that was not typed.
+// The list drops under the name on a tap and every letter filters it (Saged, 2026-11-25); arrows and Enter pick.
 const readyItems = document.getElementById("ready-items");
+const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+  .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
 if (itemDialog && readyItems) {
   const dialog = document.getElementById("item-dialog");
   const form = dialog.querySelector("form");
   const input = (name) => form.querySelector(`[name="${name}"]`);
-  input("name").addEventListener("input", () => {
-    if (!dialog.querySelector("[data-title-edit]").hidden) return;  // editing: the item's own values stay
-    const value = input("name").value.trim();
-    const picked = [...readyItems.options].find((o) => o.value === value);
+  const nameInput = input("name");
+  const options = [...readyItems.querySelectorAll("li[data-ready]")];
+  const none = readyItems.querySelector("[data-ready-none]");
+  const hay = new Map(options.map((li) => [li, plain(`${li.dataset.ready} ${li.dataset.en}`)]));
+  const editing = () => !dialog.querySelector("[data-title-edit]").hidden;  // editing: the item's own values stay
+  let shown = [];
+  let active = -1;
+  const mark = () => {
+    options.forEach((li) => { li.classList.remove("active"); li.setAttribute("aria-selected", "false"); });
+    const li = shown[active];
+    if (li) {
+      li.classList.add("active");
+      li.setAttribute("aria-selected", "true");
+      nameInput.setAttribute("aria-activedescendant", li.id);
+      li.scrollIntoView({ block: "nearest" });
+    } else nameInput.removeAttribute("aria-activedescendant");
+  };
+  const close = () => {
+    readyItems.hidden = true;
+    nameInput.setAttribute("aria-expanded", "false");
+    active = -1;
+    mark();
+  };
+  const open = () => {
+    if (editing()) { close(); return; }
+    const q = plain(nameInput.value.trim());
+    const ranked = options.map((li) => {
+      const text = hay.get(li);
+      const rank = !q ? 0 : !text.includes(q) ? -1 : text.startsWith(q) ? 0 : text.split(/[\s(),/%-]+/).some((w) => w.startsWith(q)) ? 1 : 2;
+      return [q.length === 1 && rank === 2 ? -1 : rank, li];  // one letter: names or words that start with it
+    });
+    shown = ranked.filter(([r]) => r >= 0).sort((a, b) => a[0] - b[0]).map(([, li]) => li);
+    options.forEach((li) => { li.hidden = true; });
+    shown.forEach((li) => { li.hidden = false; readyItems.insertBefore(li, none); });  // the best matches first
+    none.hidden = shown.length > 0 || !q;
+    readyItems.hidden = !shown.length && !q;
+    nameInput.setAttribute("aria-expanded", String(!readyItems.hidden));
+    active = -1;
+    mark();
+    readyItems.scrollTop = 0;
+  };
+  const choose = (li) => {
+    nameInput.value = li.dataset.ready;
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    close();
+    const next = input("quantity");  // then the quantity in stock
+    if (next) next.focus({ preventScroll: false });
+  };
+  options.forEach((li) => {
+    li.addEventListener("mousedown", (event) => event.preventDefault());  // the field keeps the focus
+    li.addEventListener("click", () => choose(li));
+  });
+  readyItems.addEventListener("mousedown", (event) => event.preventDefault());  // its scrollbar keeps the list open
+  nameInput.addEventListener("focus", open);
+  nameInput.addEventListener("click", () => { if (readyItems.hidden) open(); });
+  nameInput.addEventListener("input", (event) => { if (event.isTrusted) open(); });
+  nameInput.addEventListener("blur", close);
+  dialog.addEventListener("close", close);
+  nameInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (readyItems.hidden) { open(); return; }
+      if (!shown.length) return;
+      active = (active + (event.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length;
+      mark();
+    } else if (event.key === "Enter" && !readyItems.hidden && active >= 0) {
+      event.preventDefault();
+      choose(shown[active]);
+    } else if (event.key === "Escape" && !readyItems.hidden) {
+      event.preventDefault();   // closes the list, not the dialog
+      event.stopPropagation();
+      close();
+    }
+  });
+  nameInput.addEventListener("input", () => {
+    if (editing()) return;
+    const value = nameInput.value.trim();
+    const picked = options.find((li) => li.dataset.ready === value);
     const cost = input("unit_cost");
     if (cost) cost.placeholder = picked && picked.dataset.price ? `≈ ${picked.dataset.price}` : "";
     const filled = form.readyFilled || (form.readyFilled = {});
@@ -382,10 +459,40 @@ if (materialsDialog) {
     if (remove && !materialsDialog.dataset.busy && !submitter.unknown) remove.closest("li").remove();
   });
 
+  // The same dialog edits a package (Saged, 2026-11-25): a name above the lines, and a delete button.
+  const kitList = document.querySelector("[data-kits]");
+  const kitName = form.elements.namedItem("kit_name");
+  const deleteKit = materialsDialog.querySelector("[data-delete-kit]");
+  let kitRow = null;     // the package's row, or null for a new one
+  let kitMode = false;
+
+  function linesText(items) {
+    return items.length ? items.map((i) => `${i.name} × ${localDigits(i.qty)}`).join(" · ") : t("nothing_taken");
+  }
+
+  function showKit(kit) {
+    const li = kitRow || document.createElement("li");
+    if (!kitRow) {
+      li.innerHTML = '<div class="mat-main"><strong><bdi dir="auto"></bdi></strong><p class="muted" data-mat-text></p></div>';
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "btn ghost";
+      edit.dataset.editKit = "";
+      edit.textContent = t("edit");
+      li.append(edit);
+      kitList.append(li);
+    }
+    li.dataset.kit = JSON.stringify({ id: kit.id, name: kit.name, lines: kit.lines.map((l) => ({ item_id: l.item_id, qty: l.qty })) });
+    li.querySelector("bdi").textContent = kit.name;
+    li.querySelector("[data-mat-text]").textContent = linesText(kit.lines);
+    document.querySelector("[data-kits-empty]").hidden = true;
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (materialsDialog.dataset.busy) return;
-    const procedure = JSON.parse(materialsRow.dataset.procedure);
+    const procedure = kitMode ? null : JSON.parse(materialsRow.dataset.procedure);
+    const kit = kitMode && kitRow ? JSON.parse(kitRow.dataset.kit) : null;
     let body = null;
     if (!submitter.unknown) {
       const picked = [];
@@ -398,29 +505,77 @@ if (materialsDialog) {
         picked.push({ item_id: itemId, qty });
       }
       body = { lines: picked };
+      if (kitMode) {
+        const name = kitName.value.trim();
+        if (!name) { submitter.say(t("need_kit_name")); kitName.focus(); return; }
+        if (!picked.length) { submitter.say(t("need_line_item")); return; }
+        body.name = name;
+      }
+    }
+    if (kitMode) {
+      const label = t("kit_saved", { name: body ? body.name : kitName.value.trim() });
+      const result = await submitter.run(kit ? "PUT" : "POST", kit ? `/api/v1/inventory/kits/${kit.id}` : "/api/v1/inventory/kits", body, label);
+      if (!result || !isOk(result)) return;
+      materialsDialog.close();
+      showKit(result.data.kit);
+      toast(t("kit_saved", { name: result.data.kit.name }));
+      return;
     }
     const result = await submitter.run("PUT", `/api/v1/inventory/materials/${procedure.id}`, body, t("materials_saved", { name: procedure.name }));
     if (!result || !isOk(result)) return;
     materialsDialog.close();
     const items = result.data.items;
     materialsRow.dataset.procedure = JSON.stringify({ ...procedure, lines: items.map((i) => ({ item_id: i.item_id, qty: i.qty })) });
-    const text = materialsRow.querySelector("[data-mat-text]");
-    text.textContent = items.length ? items.map((i) => `${i.name} × ${localDigits(i.qty)}`).join(" · ") : t("nothing_taken");
+    materialsRow.querySelector("[data-mat-text]").textContent = linesText(items);
     toast(t("materials_saved", { name: procedure.name }));
   });
 
+  deleteKit.addEventListener("click", async () => {
+    if (!kitRow || materialsDialog.dataset.busy || deleteKit.disabled) return;
+    const kit = JSON.parse(kitRow.dataset.kit);
+    deleteKit.disabled = true;
+    const result = await save("DELETE", `/api/v1/inventory/kits/${kit.id}`, null, { key: newKey(), label: kit.name });
+    deleteKit.disabled = false;
+    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
+    if (!result.settled) { alertMessage(t("unknown")); return; }
+    if (!isOk(result) && result.status !== 404) { alertMessage(errorMessage(result, t("failed"))); return; }
+    materialsDialog.close();
+    kitRow.remove();
+    kitRow = null;
+    document.querySelector("[data-kits-empty]").hidden = Boolean(kitList.children.length);
+    toast(t("kit_deleted", { name: kit.name }));
+  });
+
+  function openLines(opener, title, currentLines, asKit) {
+    kitMode = asKit;
+    submitter.reset();
+    materialsDialog.querySelectorAll("[data-kit-hide]").forEach((n) => { n.hidden = asKit; });
+    materialsDialog.querySelectorAll("[data-kit-show]").forEach((n) => { n.hidden = !asKit; });
+    materialsDialog.querySelector("[data-kit-new]").hidden = !asKit || Boolean(kitRow);
+    materialsDialog.querySelector("[data-kit-edit]").hidden = !asKit || !kitRow;
+    deleteKit.hidden = !asKit || !kitRow;
+    if (asKit) kitName.value = title;
+    else materialsDialog.querySelector("[data-name]").textContent = title;
+    lines.replaceChildren();
+    for (const line of currentLines) addLine(line.item_id, line.qty);
+    if (!currentLines.length) addLine(null, 1);
+    openDialog(materialsDialog, opener);
+    if (asKit && !kitRow) kitName.focus();
+  }
+
   document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-materials]");
+    const button = event.target.closest("[data-materials], [data-edit-kit], [data-new-kit]");
     if (!button) return;
     if (submitter.holdsUnknown()) { openDialog(materialsDialog, button); return; }
-    materialsRow = button.closest("[data-procedure]");
-    const procedure = JSON.parse(materialsRow.dataset.procedure);
-    submitter.reset();
-    materialsDialog.querySelector("[data-name]").textContent = procedure.name;
-    lines.replaceChildren();
-    for (const line of procedure.lines) addLine(line.item_id, line.qty);
-    if (!procedure.lines.length) addLine(null, 1);
-    openDialog(materialsDialog, button);
+    if (button.matches("[data-materials]")) {
+      materialsRow = button.closest("[data-procedure]");
+      const procedure = JSON.parse(materialsRow.dataset.procedure);
+      openLines(button, procedure.name, procedure.lines, false);
+      return;
+    }
+    kitRow = button.matches("[data-edit-kit]") ? button.closest("[data-kit]") : null;
+    const kit = kitRow ? JSON.parse(kitRow.dataset.kit) : { name: "", lines: [] };
+    openLines(button, kit.name, kit.lines, true);
   });
 }
 

@@ -81,6 +81,17 @@ def _materials(ctx):
     return procedures
 
 
+def _kits(ctx):
+    """The packages a doctor picks in a visit (Saged, 2026-11-25), each with its values for the dialog."""
+    from inventory import services
+
+    kits = services.kits(ctx)
+    for kit in kits:
+        kit["json"] = json.dumps({"id": kit["id"], "name": kit["name"], "lines": [
+            {"item_id": line["item_id"], "qty": line["qty"]} for line in kit["lines"]]}, ensure_ascii=False)
+    return kits
+
+
 @require_GET
 @ensure_csrf_cookie
 @page()
@@ -99,6 +110,7 @@ def inventory_page(request, ctx):
                         for r in catalog.ready_items(have)] if perms["manage"] else [],
         "sections": sections if len(sections) > 1 else [],
         "procedures": _materials(ctx) if perms["manage"] else [],
+        "kits": _kits(ctx) if perms["manage"] else [],
     })
 
 

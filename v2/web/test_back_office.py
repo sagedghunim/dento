@@ -46,13 +46,18 @@ class InventoryPageTests(BackOfficeCase):
         self.assertIn('href="/inventory" aria-current="page"', self.doctor.get("/inventory").content.decode())
 
     def test_a_manager_picks_a_new_item_from_the_ready_list(self):
-        # Typing the name shows the ready items (Saged, 2026-11-25); the ones the clinic has are left out.
+        # A tap drops the ready items under the name, each with its unit (Saged, 2026-11-25); the ones the clinic
+        # has are left out. Our own list, not the browser's datalist.
         self.item(name="جوانتي لاتكس")
         html = self.owner.get("/inventory").content.decode()
-        self.assertIn('list="ready-items"', html)
-        self.assertIn('<option value="جوانتي نيتريل" label="تعقيم ومستهلكات · ≈170 ج.م"', html)
-        self.assertIn('data-unit="علبة"', html)
-        self.assertNotIn('<option value="جوانتي لاتكس"', html)
+        self.assertIn('aria-controls="ready-items"', html)
+        self.assertNotIn("<datalist", html)
+        row = html.split('data-ready="جوانتي نيتريل"')[1].split("</li>")[0]
+        self.assertIn("تعقيم ومستهلكات", row)
+        self.assertIn('<bdi dir="auto">علبة</bdi>', row)
+        self.assertIn("≈ 170 ج.م", row)
+        self.assertNotIn('data-ready="جوانتي لاتكس"', html)
+        self.assertNotIn("{#", html)  # a comment never shows as text
         self.assertNotIn("ready-items", self.desk.get("/inventory").content.decode())  # adding items is the manager's
 
     def test_someone_with_use_only_sees_the_list_and_records_use(self):

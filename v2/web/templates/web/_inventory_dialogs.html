@@ -52,9 +52,15 @@
   </header>
   <div class="dialog-body tight">
     <div class="grid-form">
-      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus{% if ready_items %} list="ready-items" placeholder="{% translate "Type to pick from the ready list" %}"{% endif %}></label>
-      {% if ready_items %}{# Ready items from the stores' research (Saged, 2026-11-25): typing shows the matching ones. #}
-      <datalist id="ready-items">{% for r in ready_items %}<option value="{{ r.name }}" label="{{ r.category }}{% if r.price_text and perms.money %} · ≈{{ r.price_text }}{% endif %}" data-en="{{ r.name_en }}" data-category="{{ r.category }}" data-unit="{{ r.unit }}"{% if perms.money %} data-price="{{ r.price|default:'' }}"{% endif %}></option>{% endfor %}</datalist>
+      {% if ready_items %}{# Ready items (Saged, 2026-11-25): a tap drops the list with each unit; each letter filters it. #}
+      {# Our own list, not the browser's datalist, which froze on Windows. #}
+      <div class="combo" data-ready-combo>
+        <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus
+          role="combobox" aria-expanded="false" aria-controls="ready-items" aria-autocomplete="list" placeholder="{% translate "Type to pick from the ready list" %}"></label>
+        <ul class="combo-list ready-list" id="ready-items" role="listbox" hidden>{% for r in ready_items %}<li role="option" id="ready-{{ forloop.counter }}" aria-selected="false" data-ready="{{ r.name }}" data-en="{{ r.name_en }}" data-category="{{ r.category }}" data-unit="{{ r.unit }}"{% if perms.money %} data-price="{{ r.price|default:'' }}"{% endif %}><span class="ready-main"><bdi dir="auto">{{ r.name }}</bdi><small class="muted">{{ r.category }}</small></span><span class="ready-side"><bdi dir="auto">{{ r.unit }}</bdi>{% if r.price_text and perms.money %}<small class="muted">≈ {{ r.price_text }}</small>{% endif %}</span></li>{% endfor %}<li class="ready-none muted" data-ready-none hidden role="option" aria-disabled="true">{% translate "Not in the ready list. Your name is kept as typed." %}</li></ul>
+      </div>
+      {% else %}
+      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
       {% endif %}
       <label class="field">{% translate "Unit" %}<input name="unit" maxlength="20" dir="auto" autocomplete="off" placeholder="{% translate "box, piece, syringe…" %}"></label>
       <label class="field" data-new-only>{% translate "Quantity in stock now" %}<input name="quantity" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
@@ -175,11 +181,12 @@
 <dialog class="sheet" id="materials-dialog" aria-labelledby="materials-dialog-title">
 <form novalidate>
   <header class="dialog-head">
-    <h2 id="materials-dialog-title">{% translate "What this procedure uses" %}</h2>
+    <h2 id="materials-dialog-title"><span data-kit-hide>{% translate "What this procedure uses" %}</span><span data-kit-show hidden><span data-kit-new>{% translate "New package" %}</span><span data-kit-edit>{% translate "Edit the package" %}</span></span></h2>
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
-    <p><strong class="who" data-name></strong></p>
+    <p data-kit-hide><strong class="who" data-name></strong></p>
+    <label class="field" data-kit-show hidden>{% translate "Package name" %}<input name="kit_name" maxlength="80" dir="auto" autocomplete="off" placeholder="{% translate "e.g. Braces" %}"></label>
     <ul class="edit-lines" data-lines></ul>
     <p><button type="button" class="btn ghost" data-add-line><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add an item" %}</button></p>
     <template data-line-template>
@@ -195,6 +202,7 @@
   </div>
   <footer class="dialog-foot">
     <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost danger" data-delete-kit hidden>{% translate "Delete the package" %}</button>
     <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
     <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
     <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>

@@ -169,3 +169,90 @@ class StockConcurrencyTests(TransactionTestCase):
         with clinic_transaction(self.a.id, self.a.shard):
             self.assertEqual(Item.objects.get(clinic_id=self.a.id, id=item["id"]).quantity, 0)
             self.assertEqual(Movement.objects.filter(clinic_id=self.a.id, item_id=item["id"], kind="use").count(), 1)
+
+
+class KitTests(M2TestCase):
+    """Packages (Saged, 2026-11-25): a stock manager sets them once; the doctor picks one in the visit and its items
+    come into the visit's use together. Stock only, never the bill."""
+
+    item = StockTests.item
+
+    def kit(self, name, lines, client=None, method="POST", kit_id=None, expect=201):
+        url = "/api/v1/inventory/kits" + (f"/{kit_id}" if kit_id else "")
+        r = call(client or self.owner, method, url, {"name": name, "lines": lines})
+        self.assertEqual(r.status_code, expect, r.content)
+        return r.json()
+
+    def test_a_manager_makes_edits_and_deletes_a_package(self):
+        wire, bands = self.item("Wire", quantity=20), self.item("Bands", quantity=40)
+        kit = self.kit("Braces", [{"item_id": wire["id"], "qty": 2}, {"item_id": bands["id"], "qty": 4}])["kit"]
+        self.assertEqual([(l["name"], l["qty"]) for l in kit["lines"]], [("Bands", 4), ("Wire", 2)])
+        dup = self.kit("Braces", [{"item_id": wire["id"], "qty": 1}], expect=409)
+        self.assertEqual(dup["error"]["fields"], {"name": "duplicate"})
+        kit = self.kit("Braces, upper", [{"item_id": wire["id"], "qty": 1}], method="PUT", kit_id=kit["id"], expect=200)["kit"]
+        self.assertEqual((kit["name"], [(l["name"], l["qty"]) for l in kit["lines"]]), ("Braces, upper", [("Wire", 1)]))
+        listed = call(self.doc, "GET", "/api/v1/inventory/kits").json()["kits"]
+        self.assertEqual([k["name"] for k in listed], ["Braces, upper"])
+        self.assertEqual(call(self.owner, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 200)
+        self.assertEqual(call(self.owner, "GET", "/api/v1/inventory/kits").json()["kits"], [])
+        self.assertEqual(call(self.owner, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 404)
+        with clinic_transaction(self.a.id, self.a.shard):  # setting a package never touches stock
+            self.assertEqual(Item.objects.get(clinic_id=self.a.id, id=wire["id"]).quantity, 20)
+
+    def test_a_package_save_sent_again_answers_the_same(self):
+        # Its answer was lost and the same key comes again (backend review, 2026-11-25): the package, not a crash.
+        wire = self.item("Wire")
+        body = {"name": "Braces", "lines": [{"item_id": wire["id"], "qty": 1}]}
+        first = call(self.owner, "POST", "/api/v1/inventory/kits", body, key="0b7c1a52-5d4e-4c39-9d1e-2f1a7a6e9c01")
+        again = call(self.owner, "POST", "/api/v1/inventory/kits", body, key="0b7c1a52-5d4e-4c39-9d1e-2f1a7a6e9c01")
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(again.json()["kit"]["id"], first.json()["kit"]["id"])
+        self.assertEqual(len(call(self.owner, "GET", "/api/v1/inventory/kits").json()["kits"]), 1)
+
+    def test_only_stock_managers_change_packages_and_never_another_places(self):
+        wire = self.item("Wire")
+        self.kit("Braces", [{"item_id": wire["id"], "qty": 1}], client=self.doc, expect=403)
+        empty = call(self.owner, "POST", "/api/v1/inventory/kits", {"name": "Empty", "lines": []})
+        self.assertEqual(empty.status_code, 400)
+        kit = self.kit("Braces", [{"item_id": wire["id"], "qty": 1}])["kit"]
+        other = self.b.client("owner")
+        self.assertEqual(call(other, "GET", "/api/v1/inventory/kits").json()["kits"], [])
+        self.kit("Mine", [{"item_id": wire["id"], "qty": 1}], client=other, method="PUT", kit_id=kit["id"], expect=400)  # A's item is not B's
+        self.assertEqual(call(other, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 404)
+        self.kit("Theirs", [{"item_id": wire["id"], "qty": 1}], client=other, expect=400)
+        r = call(self.owner, "PATCH", f"/api/v1/inventory/items/{wire['id']}", {"is_active": False})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.kit("Old wire", [{"item_id": wire["id"], "qty": 1}], expect=400)
+
+    def test_the_visit_shows_items_packages_and_what_was_taken_by_hand(self):
+        wire = self.item("Wire", quantity=20)
+        self.kit("Braces", [{"item_id": wire["id"], "qty": 2}])
+        visit = self.in_room()
+        html = self.doc.get(f"/visits/{visit['id']}").content.decode()
+        self.assertIn("data-use-card", html)
+        self.assertIn("js/use.js", html)
+        self.assertNotIn("{#", html)
+        r = call(self.doc, "POST", "/api/v1/inventory/uses",
+                 {"lines": [{"item_id": wire["id"], "qty": 3}], "appointment_id": visit["id"]})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["items"][0]["quantity"], 17)
+        html = self.doc.get(f"/visits/{visit['id']}").content.decode()
+        data = html.split('id="visit-data" type="application/json">')[1].split("</script>")[0]
+        import json
+
+        stock = json.loads(data)["stock"]
+        self.assertEqual([(i["name"], i["quantity"]) for i in stock["items"]], [("Wire", 17)])
+        self.assertEqual([(k["name"], k["lines"]) for k in stock["kits"]], [("Braces", [{"item_id": wire["id"], "qty": 2}])])
+        self.assertEqual([(u["name"], u["qty"]) for u in stock["used"]], [("Wire", 3)])
+        self.assertNotIn("unit_cost", data)  # stock only: no money in the visit's list
+        with clinic_transaction(self.a.id, self.a.shard):  # never the bill
+            from billing.models import InvoiceLine
+
+            self.assertFalse(InvoiceLine.objects.filter(clinic_id=self.a.id, kind="material").exists())
+
+    def test_a_doctor_locked_out_of_stock_sees_no_use_card(self):
+        self.set_codes("doctor", revoked=["inventory.use"])
+        visit = self.in_room()
+        html = self.doc.get(f"/visits/{visit['id']}").content.decode()
+        self.assertNotIn("data-use-card", html)
+        self.assertNotIn('"stock"', html)

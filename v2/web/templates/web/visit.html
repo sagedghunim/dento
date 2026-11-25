@@ -205,6 +205,30 @@
   </section>
   {% endif %}
 
+  {% if perms.stock %}
+  {% comment %}What the doctor takes from stock (Saged, 2026-11-25): a tap drops the packages and the items, each letter
+  filters them; the picks wait in a list with their quantities until "Take from stock". Stock only, never the bill.{% endcomment %}
+  <section class="card" aria-labelledby="use-title" data-use-card>
+    <h2 id="use-title">{% translate "Used from stock" %}</h2>
+    <p class="card-sub">{% translate "What you used with this patient beyond the procedures' own materials. It comes off the stock, not the bill." %}</p>
+    <div class="combo">
+      <label class="field">{% translate "Pick a package or an item" %}<input name="use_pick" dir="auto" autocomplete="off" maxlength="60"
+        role="combobox" aria-expanded="false" aria-controls="use-list" aria-autocomplete="list"
+        placeholder="{% translate "Tap, or type the first letters" %}"></label>
+      <ul class="combo-list use-list" id="use-list" role="listbox" hidden></ul>
+    </div>
+    <ol class="rx-write-lines" data-use-lines></ol>
+    <div class="use-foot" data-use-foot hidden>
+      <p class="form-error" data-use-error role="alert"></p>
+      <button type="button" class="btn" data-use-save>{% translate "Take from stock" %}</button>
+    </div>
+    <div data-used-box hidden>
+      <h3 class="use-done-title">{% translate "Taken in this visit" %}</h3>
+      <ul class="proc-list" data-used></ul>
+    </div>
+  </section>
+  {% endif %}
+
   {% if perms.finish %}
   <div class="visit-foot">
     <p class="form-error" data-finish-error role="alert"></p>
@@ -260,4 +284,4 @@
 {% endif %}
 {{ config|json_script:"visit-data" }}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/room.js' %}"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/room.js' %}"></script>{% if perms.stock %}<script type="module" src="{% static 'js/use.js' %}"></script>{% endif %}{% endblock %}

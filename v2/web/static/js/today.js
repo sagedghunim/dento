@@ -233,7 +233,11 @@ function settle(before) {
     const anchor = list.querySelector(`.appt[data-id="${before.anchorId}"]`);
     if (anchor) {
       const delta = anchor.getBoundingClientRect().top - before.anchorTop;
-      if (Math.abs(delta) >= 1) window.scrollBy(0, delta);
+      if (Math.abs(delta) >= 1) {
+        window.scrollBy(0, delta);  // narrow screens: the window scrolls
+        const main = document.getElementById("main");  // wide screens: the page box scrolls
+        if (main) main.scrollBy(0, delta);
+      }
     }
   }
   const now = Date.now();
@@ -250,7 +254,7 @@ function tooSoon(row) {
   row.classList.add("flash");
   return true;
 }
-window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true });
+window.addEventListener("scroll", () => { lastActivity = Date.now(); }, { passive: true, capture: true });  // capture: the page box's scroll too
 card.addEventListener("pointerleave", () => { lastActivity = 0; flushDeferred(); setTimeout(flushHeld, 0); });
 // A row held because the mouse was on it is updated once the mouse moves off that row (Instinct review, 2026-11-21).
 card.addEventListener("pointerout", (event) => {

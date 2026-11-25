@@ -17,4 +17,6 @@ urlpatterns = [
     path("api/v1/inventory/materials/<int:procedure_id>",
          by_method(GET=views.materials_view, PUT=views.set_materials_view)),
     path("api/v1/inventory/defaults", views.defaults_view),
+    path("api/v1/inventory/kits", by_method(GET=views.kits_view, POST=views.create_kit_view)),
+    path("api/v1/inventory/kits/<int:kit_id>", by_method(PUT=views.update_kit_view, DELETE=views.delete_kit_view)),
 ]

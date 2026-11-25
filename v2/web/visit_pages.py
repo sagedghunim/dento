@@ -196,6 +196,20 @@ def visit_page(request, ctx, appointment_id):
                                                     "WHERE clinic_id = %s AND section_id = %s AND is_active "
                                                     "ORDER BY sort, id LIMIT 300",
                                                [ctx.clinic_id, visit["section_id"]])]
+    # What the doctor takes from stock in this visit (Saged, 2026-11-25): the section's items with what is left, the
+    # packages, and what was already taken by hand. Stock only: no prices, never the bill.
+    perms["stock"] = ctx.can("inventory.use")
+    if perms["stock"]:
+        from inventory import services as stock
+
+        config["stock"] = {
+            "items": [{k: i[k] for k in ("id", "name", "unit", "quantity", "allow_negative")}
+                      for i in stock.items(ctx, section_id=visit["section_id"])],
+            "kits": [{"id": k["id"], "name": k["name"],
+                      "lines": [{"item_id": l["item_id"], "qty": l["qty"]} for l in k["lines"] if l["is_active"]]}
+                     for k in stock.kits(ctx)],
+            "used": stock.visit_uses(ctx, visit["id"]),
+        }
     return render(request, "web/visit.html", {
         "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms, "services": services,
         "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
