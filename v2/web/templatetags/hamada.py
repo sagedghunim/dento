@@ -89,6 +89,16 @@ def alerts_unseen(ctx):
 
 
 @register.simple_tag
+def order_drafts(ctx):
+    """Purchase orders waiting to be sent, for the side bar (design H1): one count on the drafts' index."""
+    if ctx is None or not ctx.can("inventory.order"):
+        return 0
+    from inventory import orders
+
+    return orders.draft_count(ctx)
+
+
+@register.simple_tag
 def money_pattern():
     """For scripts. {% translate %} escapes "%" in literals, so it can't look this one up."""
     from django.utils.translation import gettext as _

@@ -45,6 +45,10 @@ class Item(models.Model):
     allow_negative = models.BooleanField(default=False)  # F2: "unless the place allows it", per item
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
+    # Who sells it (design H1): low stock prepares an order to this supplier; the backup is a name for the desk.
+    supplier = _ref("inventory.Supplier", null=True)
+    backup_supplier = _ref("inventory.Supplier", null=True)
+    max_qty = models.IntegerField(default=0, db_default=0)  # what an order fills up to; 0 = twice the minimum
 
     class Meta:
         db_table = "inventory_item"
@@ -54,7 +58,14 @@ class Item(models.Model):
             models.CheckConstraint(condition=Q(quantity__gte=0) | Q(allow_negative=True), name="item_quantity_not_negative"),
             models.CheckConstraint(condition=Q(threshold__gte=0, unit_cost__gte=0), name="item_threshold_cost_valid"),
             _fk("section", "clinics.Section", "item_section_fk"),
+            # Added NOT VALID on the live table, validated in 0008 (design H1).
+            models.CheckConstraint(condition=Q(max_qty__gte=0), name="item_max_qty_valid"),
+            models.CheckConstraint(condition=~Q(supplier=F("backup_supplier")), name="item_backup_not_supplier"),
+            _fk("supplier", "inventory.Supplier", "item_supplier_fk"),
+            _fk("backup_supplier", "inventory.Supplier", "item_backup_supplier_fk"),
         ]
+        indexes = [models.Index(fields=["clinic", "supplier"], condition=Q(supplier__isnull=False),
+                                name="item_supplier")]
         # No partial low-stock index (design 4.7): it would make every stock use a non-HOT update.
 
 
@@ -111,3 +122,115 @@ class Material(models.Model):
             _fk("procedure", "clinical.Procedure", "material_procedure_fk"),
             _fk("item", "inventory.Item", "material_item_fk"),
         ]
+
+
+# --- Suppliers and purchase orders (design H1) ------------------------------------------------------------------
+
+SUPPLIER_KINDS = ["supplier", "lab"]
+ORDER_STATUSES = ["draft", "sent", "done", "cancelled"]
+ENTRY_KINDS = ["bill", "payment"]
+
+
+class Supplier(models.Model):
+    """Who the place buys from: a supplier, or (H2) a dental lab. One table, so one account serves both."""
+
+    clinic = _clinic()
+    name = models.CharField(max_length=120)
+    phone = models.CharField(max_length=20, blank=True, default="")  # digits, with the country code (201...)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    kind = models.CharField(max_length=8, default="supplier")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    # When the supplier usually comes by (Saged, 2026-11-25): weekdays as bits, Monday = 1 << 0 (Python's weekday),
+    # and an optional time of day: the clinic's local clock time, not UTC (no date to convert it with).
+    visit_days = models.SmallIntegerField(default=0, db_default=0)
+    visit_time = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "inventory_supplier"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="supplier_clinic_id_uniq"),
+            models.UniqueConstraint(fields=["clinic", "kind", "name"], condition=Q(is_active=True),
+                                    name="supplier_active_name_uniq"),
+            models.CheckConstraint(condition=Q(kind__in=SUPPLIER_KINDS), name="supplier_kind_valid"),
+            models.CheckConstraint(condition=Q(phone__regex=r"^[0-9]*$"), name="supplier_phone_digits"),
+            models.CheckConstraint(condition=Q(visit_days__gte=0, visit_days__lte=127), name="supplier_visit_days_valid"),
+        ]
+
+
+class Order(models.Model):
+    clinic = _clinic()
+    supplier = _ref(Supplier)
+    status = models.CharField(max_length=10, default="draft")
+    note = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by_id = models.BigIntegerField(null=True, blank=True)  # null: the system (refill)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    sent_by_id = models.BigIntegerField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "inventory_order"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="order_clinic_id_uniq"),
+            # One draft per supplier: refill adds to it (INSERT ... ON CONFLICT).
+            models.UniqueConstraint(fields=["clinic", "supplier"], condition=Q(status="draft"), name="order_one_draft"),
+            models.CheckConstraint(condition=Q(status__in=ORDER_STATUSES), name="order_status_valid"),
+            models.CheckConstraint(condition=Q(status__in=["draft", "cancelled"]) | Q(sent_at__isnull=False),
+                                   name="order_sent_at_set"),
+            models.CheckConstraint(condition=Q(status__in=["done", "cancelled"], closed_at__isnull=False)
+                                   | Q(status__in=["draft", "sent"], closed_at__isnull=True), name="order_closed_at_set"),
+            _fk("supplier", "inventory.Supplier", "order_supplier_fk"),
+        ]
+        indexes = [models.Index("clinic", "status", F("created_at").desc(), F("id").desc(), name="order_status")]
+
+
+class OrderLine(models.Model):
+    clinic = _clinic()
+    order = _ref(Order)
+    item = _ref(Item)
+    qty = models.IntegerField()
+    received = models.IntegerField(default=0)
+    unit_price = models.BigIntegerField(default=0)  # piastres, from the last receipt
+
+    class Meta:
+        db_table = "inventory_order_line"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "order", "item"], name="order_line_uniq"),
+            models.CheckConstraint(condition=Q(qty__gt=0, received__gte=0, unit_price__gte=0), name="order_line_valid"),
+            _fk("order", "inventory.Order", "order_line_order_fk"),
+            _fk("item", "inventory.Item", "order_line_item_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "item"], name="order_line_item")]
+
+
+class VendorEntry(models.Model):
+    """What we owe a supplier or a lab: bills less payments. A payment is also an expense."""
+
+    clinic = _clinic()
+    supplier = _ref(Supplier)
+    kind = models.CharField(max_length=8)
+    amount = models.BigIntegerField()
+    day = models.DateField()
+    order = _ref(Order, null=True)
+    expense = _ref("finance.Expense", null=True)
+    note = models.CharField(max_length=200, blank=True, default="")
+    created_by_id = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "inventory_vendor_entry"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "id"], name="vendor_entry_clinic_id_uniq"),
+            models.CheckConstraint(condition=Q(kind__in=ENTRY_KINDS), name="vendor_entry_kind_valid"),
+            models.CheckConstraint(condition=Q(amount__gt=0), name="vendor_entry_amount_valid"),
+            models.CheckConstraint(condition=Q(voided_at__isnull=True, voided_by_id__isnull=True)
+                                   | Q(voided_at__isnull=False, voided_by_id__isnull=False), name="vendor_entry_void_valid"),
+            _fk("supplier", "inventory.Supplier", "vendor_entry_supplier_fk"),
+            _fk("order", "inventory.Order", "vendor_entry_order_fk"),
+            _fk("expense", "finance.Expense", "vendor_entry_expense_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "supplier"], include=["kind", "amount"],
+                                condition=Q(voided_at__isnull=True), name="vendor_entry_open")]

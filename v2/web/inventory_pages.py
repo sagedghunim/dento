@@ -10,6 +10,7 @@ import json
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
+from django.utils.dates import WEEKDAYS
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
@@ -17,18 +18,21 @@ from core import paging
 from core.api import page
 from core.days import zone
 from core.i18n import pick
-from inventory import catalog
+from inventory import catalog, orders
 
 from . import format as fmt
 from . import places
 from .http import clinic_page, fragment
 
-CODES = ("inventory.use", "inventory.manage")
+CODES = ("inventory.use", "inventory.manage", "inventory.order")
 MOVEMENTS_PAGE = 15
 
 
 def _perms(ctx):
     return {"use": ctx.can("inventory.use"), "manage": ctx.can("inventory.manage"),
+            # Purchase orders and suppliers (design H1); paying a supplier is an expense too.
+            "order": ctx.can("inventory.order"), "pay": ctx.can("expenses.manage"), "drawer": ctx.can("cash.collect"),
+            "owner": ctx.membership.is_owner,
             "view_patients": ctx.can("patients.view"),
             # Costs and purchases are money (Saged, 2026-11-16).
             "money": ctx.can("money.view")}
@@ -47,7 +51,7 @@ def _items_context(ctx, removed=False):
         item["section_name"] = names.get(item["section_id"], "") if len(sections) > 1 else ""
         item["json"] = json.dumps({k: item[k] for k in (
             "id", "name", "name_ar", "name_en", "category", "sku", "unit", "quantity", "threshold", "unit_cost", "notes",
-            "allow_negative", "section_id", "is_active")}, ensure_ascii=False)
+            "allow_negative", "section_id", "is_active", "supplier_id", "backup_supplier_id", "max_qty")}, ensure_ascii=False)
         # The bar shows the stock against four times the minimum, as the demo does (never wider than full).
         top = max(item["threshold"] * 4, item["quantity"], 1)
         item["bar_max"] = top
@@ -99,6 +103,21 @@ def inventory_page(request, ctx):
                         for r in catalog.ready_items(have)] if perms["manage"] else [],
         "sections": sections if len(sections) > 1 else [],
         "procedures": _materials(ctx) if perms["manage"] else [],
+        "suppliers": orders.suppliers(ctx, include_inactive=True) if perms["manage"] or perms["order"] else [],
+        # The supplier's usual days, Saturday first as the week runs in Egypt (Python's weekday numbers).
+        "supplier_days": [(d, WEEKDAYS[d]) for d in (5, 6, 0, 1, 2, 3, 4)],
+        # The desk opens on its orders; the owner on the items (design H1 flow 2).
+        "orders_first": perms["order"] and not perms["owner"],
+        "show_items": perms["use"] or perms["manage"],
+        # For the orders' pick lists and their first view (orders.js); prices only with money.view.
+        "order_data": {
+            "items": [{k: i[k] for k in ("id", "name", "unit", "quantity", "threshold", "supplier_id", "backup_supplier_id")}
+                      for i in context["items"] if i["is_active"]],
+            "orders": orders.orders(ctx),
+            "perms": {k: perms[k] for k in ("manage", "order", "money", "pay", "drawer", "owner")},
+            # The days on the orders are the clinic's, not the browser's.
+            "zone": str(zone(ctx.clinic)),
+        } if perms["order"] else None,
     })
 
 

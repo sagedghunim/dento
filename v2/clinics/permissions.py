@@ -28,6 +28,8 @@ CODES = {
     "cash.shift": _("Open and close the register and record cash in and out"),
     "inventory.use": _("Record stock use"),
     "inventory.manage": _("Manage items, purchases and stock counts"),
+    # Suppliers and orders (design H1): the desk's, not the doctor's.
+    "inventory.order": _("Prepare, send and receive purchase orders"),
     "finances.view": _("See the month's money and staff pay"),
     "finances.pay": _("Edit staff pay"),
     "expenses.manage": _("Add and void expenses"),
@@ -70,6 +72,7 @@ TEMPLATES = {
     "assistant": frozenset({
         "appointments.book", "appointments.queue", "patients.view", "patients.edit", "billing.collect", "inventory.use",
         "visits.vitals", "cash.collect", "cash.shift", "money.view", "clinical.view", "patients.tags", "prices.edit",
+        "inventory.order", "inventory.manage",
     }),
 }
 
@@ -139,7 +142,8 @@ GROUPS = (
      ("discounts.suggest",)),
     ("money", _("Finances"), _("Discounts, refunds, expenses, packages, the month's money and staff pay"),
      ("billing.discount", "billing.refund", "expenses.manage", "packages.manage", "finances.view", "finances.pay")),
-    ("stock", _("Inventory"), _("Stock use, items, purchases and counts"), ("inventory.use", "inventory.manage")),
+    ("stock", _("Inventory"), _("Stock use, items, purchases and counts"),
+     ("inventory.use", "inventory.manage", "inventory.order")),
     ("reports", _("Reports"), _("Clinic and staff performance and patient insights"), ("reports.view",)),
     ("settings", _("Settings"), _("The clinic profile, services, prices, schedules and medicines"),
      ("settings.manage", "settings.medicines")),

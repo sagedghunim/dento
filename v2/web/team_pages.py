@@ -120,4 +120,8 @@ def team_page(request, ctx):
         effective = clinic_settings.effective(clinic.settings)
         if ctx.membership.is_owner:  # money policies: the account's owner only (Saged, 2026-11-19)
             context["booking"] = {key: effective[key] for key in sorted(clinic_settings.OWNER_ONLY)}
+            from inventory.orders import default_message
+
+            # The order message box shows the built-in text until the owner writes their own (Saged, 2026-11-25).
+            context["order_message_default"] = default_message(effective["print_language"] == "ar")
     return render(request, "web/team.html", context)

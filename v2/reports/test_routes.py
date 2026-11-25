@@ -46,6 +46,22 @@ EXPECTED = {
     ("POST", "api/v1/inventory/uses"): ("inventory.use",),
     ("GET", "api/v1/inventory/materials/<int:procedure_id>"): ("inventory.use",),
     ("PUT", "api/v1/inventory/materials/<int:procedure_id>"): ("inventory.manage",),
+    ("GET", "api/v1/inventory/suppliers"): ("inventory.order",),
+    ("POST", "api/v1/inventory/suppliers"): ("inventory.manage",),
+    ("PATCH", "api/v1/inventory/suppliers/<int:supplier_id>"): ("inventory.manage",),
+    ("GET", "api/v1/inventory/suppliers/<int:supplier_id>/account"): ("inventory.order", "money.view"),
+    ("POST", "api/v1/inventory/suppliers/<int:supplier_id>/bills"): ("inventory.order", "money.view"),
+    ("POST", "api/v1/inventory/suppliers/<int:supplier_id>/payments"): ("inventory.order", "money.view",
+                                                                        "expenses.manage"),
+    ("POST", "api/v1/inventory/vendor-entries/<int:entry_id>/void"): ("inventory.order", "money.view"),
+    ("GET", "api/v1/inventory/orders"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders/refill"): ("inventory.order",),
+    ("GET", "api/v1/inventory/orders/<int:order_id>"): ("inventory.order",),
+    ("PUT", "api/v1/inventory/orders/<int:order_id>"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders/<int:order_id>/send"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders/<int:order_id>/cancel"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders/<int:order_id>/receive"): ("inventory.order",),
     ("POST", "api/v1/inventory/defaults"): ("inventory.manage",),
     # Packages (Saged, 2026-11-25)
     # F6, F8
@@ -97,7 +113,7 @@ class M3RouteTests(M2TestCase):
                 continue
             path = "/" + pattern.replace("<slug:name>", "never_came_back")
             for part in ("shift_id", "category_id", "expense_id", "membership_id", "item_id", "procedure_id",
-                         "package_id", "appointment_id", "patient_id", "tag_id", "request_id", "deduction_id"):
+                         "package_id", "appointment_id", "patient_id", "tag_id", "request_id", "deduction_id", "supplier_id", "order_id", "entry_id"):
                 path = path.replace(f"<int:{part}>", "1")
             r = call(self.desk, method, path, {})
             self.assertEqual(r.status_code, 403, (method, path, r.content))

@@ -16,8 +16,9 @@
     {% for section in sections %}
       {% if section.ready and section.parts %}
       <details class="nav-group" data-nav-group{% if section.key == nav_active %} open{% endif %}>
-        <summary class="nav-btn" data-href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}</summary>
-        <div class="nav-parts">{% for part in section.parts %}<a class="nav-part" href="{{ part.url }}" data-nav-part>{{ part.label }}</a>{% endfor %}</div>
+        {% if section.key == "inventory" %}{% order_drafts ctx as drafts %}{% endif %}
+        <summary class="nav-btn" data-href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}{% if section.key == "inventory" and drafts %} <span class="nav-count num">{{ drafts|digits }}</span>{% endif %}</summary>
+        <div class="nav-parts">{% for part in section.parts %}<a class="nav-part" href="{{ part.url }}" data-nav-part>{{ part.label }}{% if section.key == "inventory" and part.key == "orders" and drafts %} (<span class="num">{{ drafts|digits }}</span>){% endif %}</a>{% endfor %}</div>
       </details>
       {% elif section.ready %}
       <a class="nav-btn" href="{{ section.url }}"{% if section.key == nav_active %} aria-current="page"{% endif %}>{{ section.label }}{% if section.key == "alerts" %}{% alerts_unseen ctx as fresh %}{% if fresh %} <span class="nav-count num">{{ fresh|digits }}</span>{% endif %}{% endif %}</a>

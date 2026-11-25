@@ -33,8 +33,11 @@ SECTIONS = (
     Section("followups", _("Follow-ups"), "/follow-ups", ("appointments.book",), True),                    # plans
     Section("overview", _("Overview"), "/overview", ("reports.view",), True),                              # M3
     Section("patients", _("Patients"), "/patients", ("patients.view",), True),
-    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage"), True, (
+    Section("inventory", _("Inventory"), "/inventory", ("inventory.use", "inventory.manage", "inventory.order"), True, (
         Part("items", _("Stock items"), "/inventory?part=items", ("inventory.use", "inventory.manage")),
+        # Design H1: the drafts' count shows beside "Purchase orders" (_side.html).
+        Part("orders", _("Purchase orders"), "/inventory?part=orders", ("inventory.order",)),
+        Part("suppliers", _("Suppliers"), "/inventory?part=suppliers", ("inventory.order",)),
         Part("materials", _("Materials of each procedure"), "/inventory?part=materials", ("inventory.manage",)),
     )),
     Section("finances", _("Finances"), "/finances", ("finances.view", "expenses.manage", "cash.collect", "cash.shift"), True, (

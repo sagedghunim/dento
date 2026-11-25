@@ -1,0 +1,175 @@
+{% load i18n %}{# Purchase orders and suppliers (design H1). orders.js runs them; the server checks every action again. #}
+<dialog class="sheet" id="order-dialog" aria-labelledby="order-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="order-title">{% translate "Order from" %} <bdi dir="auto" data-order-supplier></bdi> <span class="pill" data-order-status></span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="muted" data-order-meta></p>
+    <ul class="lines order-lines" data-order-lines></ul>
+    <div class="combo" data-order-add hidden>
+      <label class="field">{% translate "Add an item" %}<input data-item-q maxlength="60" dir="auto" autocomplete="off"
+        role="combobox" aria-expanded="false" aria-controls="order-item-list" aria-autocomplete="list" placeholder="{% translate "Type to pick an item" %}"></label>
+      <ul class="combo-list" id="order-item-list" role="listbox" data-item-list hidden></ul>
+    </div>
+    <label class="field" data-order-note-wrap hidden>{% translate "Note to the supplier (optional)" %}<textarea name="note" maxlength="300" dir="auto" rows="2"></textarea></label>
+    <p data-order-note hidden></p>
+    <div class="notice wa-box" data-wa-box hidden>
+      <p>{% translate "If WhatsApp didn't open by itself:" %}</p>
+      <a class="btn solid wide" data-wa-link target="_blank" rel="noopener">{% translate "Open WhatsApp" %}</a>
+    </div>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="button" class="btn ghost danger" data-run data-cancel-order hidden>{% translate "Cancel the order" %}</button>
+    <button type="button" class="btn ghost" data-run data-save-order hidden>{% translate "Save" %}</button>
+    <button type="button" class="btn ghost" data-run data-resend hidden>{% translate "Send again" %}</button>
+    <button type="submit" class="btn" data-submit></button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet" id="receive-dialog" aria-labelledby="receive-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="receive-title">{% translate "Receive the order" %} · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    {% if perms.money %}<p class="receive-total" data-receive-total></p>{% endif %}
+    <p class="muted">{% translate "Write what actually came. An item that didn't come stays at 0." %}</p>
+    <ul class="lines receive-lines" data-receive-lines></ul>
+    {% if perms.money %}
+    <fieldset class="group">
+      <legend>{% translate "How was it paid?" %}</legend>
+      <div class="chips" role="radiogroup">
+        <label class="chip"><input type="radio" name="paid" value="drawer"{% if not perms.drawer %} disabled{% endif %}><span>{% translate "From the drawer" %}</span></label>
+        <label class="chip"><input type="radio" name="paid" value="outside"><span>{% translate "Paid outside the drawer" %}</span></label>
+        <label class="chip"><input type="radio" name="paid" value="account"><span>{% translate "On account" %}</span></label>
+      </div>
+      {% if not perms.drawer %}<p class="muted">{% translate "Paying from the drawer needs the cash permission." %}</p>{% endif %}
+      <p class="muted">{% translate "On account: it is added to what the clinic owes this supplier." %}</p>
+    </fieldset>
+    {% else %}
+    <p class="muted">{% translate "Prices and payment are added later by someone who sees the money." %}</p>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="close">{% translate "The rest won't come: close the order" %}</label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Receive" %}</button>
+  </footer>
+</form>
+</dialog>
+
+<dialog class="sheet small" id="new-order-dialog" aria-labelledby="new-order-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="new-order-title">{% translate "New order" %}</h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Supplier" %}<select name="supplier_id" data-autofocus data-supplier-select data-no-none>
+      <option value="">{% translate "Pick a supplier" %}</option>
+    </select></label>
+    <div class="combo">
+      <label class="field">{% translate "First item" %}<input data-item-q maxlength="60" dir="auto" autocomplete="off"
+        role="combobox" aria-expanded="false" aria-controls="new-order-item-list" aria-autocomplete="list" placeholder="{% translate "Type to pick an item" %}"></label>
+      <ul class="combo-list" id="new-order-item-list" role="listbox" data-item-list hidden></ul>
+    </div>
+    <p class="picked" data-picked role="status"></p>
+    <label class="field">{% translate "Quantity" %}<input name="qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="1"></label>
+    <p class="muted">{% translate "Add more items in the order after this. If this supplier has an order not sent yet, the item goes on it." %}</p>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Start the order" %}</button>
+  </footer>
+</form>
+</dialog>
+
+{% if perms.manage %}
+<dialog class="sheet small" id="supplier-dialog" aria-labelledby="supplier-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="supplier-title"><span data-title-new>{% translate "New supplier" %}</span><span data-title-edit hidden>{% translate "Edit the supplier" %}</span></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+    <label class="field">{% translate "WhatsApp number" %}<input name="phone" type="tel" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01xxxxxxxxx"></label>
+    {# When the supplier usually comes by (Saged, 2026-11-25): any days, and a time if there is one. #}
+    <fieldset class="group">
+      <legend>{% translate "Usually comes on" %}</legend>
+      <div class="chips">{% for day, label in supplier_days %}<label class="chip"><input type="checkbox" name="visit_day" value="{{ day }}"><span>{{ label }}</span></label>{% endfor %}</div>
+    </fieldset>
+    <label class="field time-field">{% translate "At (optional)" %}<input name="visit_time" type="time" dir="ltr"></label>
+    {# Tick the items this supplier brings: a ticked item moves here from any other supplier. #}
+    <fieldset class="group">
+      <legend id="supplier-items-title">{% translate "Items we order from this supplier" %} <span class="muted" data-link-count role="status"></span></legend>
+      <input class="link-filter" type="search" dir="auto" autocomplete="off" placeholder="{% translate "Search the items" %}" aria-label="{% translate "Search the items" %}" data-link-filter>
+      <ul class="link-items" role="group" aria-labelledby="supplier-items-title" data-link-items></ul>
+      <p class="muted" data-link-empty hidden>{% translate "No items yet. Add the items first." %}</p>
+    </fieldset>
+    <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="300" dir="auto" rows="2"></textarea></label>
+    <label class="check" data-title-edit hidden><input type="checkbox" name="is_active">{% translate "We still order from this supplier" %}</label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}
+
+{% if perms.money %}
+<dialog class="sheet" id="account-dialog" aria-labelledby="account-title">
+  <div class="sheet-inner">
+  <header class="dialog-head">
+    <h2 id="account-title">{% translate "Account" %} · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <p class="receive-total" data-owed></p>
+    <div class="row-actions wrap">
+      <button type="button" class="btn ghost" data-entry="bill">{% translate "Add a bill" %}</button>
+      {% if perms.pay %}<button type="button" class="btn" data-entry="payment">{% translate "Add a payment" %}</button>{% endif %}
+    </div>
+    <ul class="lines" data-entries></ul>
+    <p class="muted" data-entries-status role="status"></p>
+  </div>
+  </div>
+</dialog>
+
+<dialog class="sheet small" id="entry-dialog" aria-labelledby="entry-title">
+<form novalidate>
+  <header class="dialog-head">
+    <h2 id="entry-title"><span data-title-bill>{% translate "A bill from the supplier" %}</span><span data-title-payment hidden>{% translate "A payment to the supplier" %}</span> · <bdi dir="auto" data-name></bdi></h2>
+    <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="dialog-body tight">
+    <div class="grid-form">
+      <label class="field">{% translate "Amount (EGP)" %}<input name="amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12" data-autofocus></label>
+      <label class="field">{% translate "Day" %}<input name="day" type="date" dir="ltr"></label>
+    </div>
+    {% if perms.drawer %}<label class="check" data-payment-only hidden><input type="checkbox" name="from_shift">{% translate "Paid from the cash drawer now" %}</label>{% endif %}
+    <label class="field">{% translate "Note (optional)" %}<input name="note" maxlength="200" dir="auto" autocomplete="off"></label>
+  </div>
+  <footer class="dialog-foot">
+    <p class="form-error" data-error role="alert"></p>
+    <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
+    <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
+    <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>
+  </footer>
+</form>
+</dialog>
+{% endif %}

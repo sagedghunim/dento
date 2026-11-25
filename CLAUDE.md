@@ -6,13 +6,13 @@ Django multi-clinic backend with a plain JavaScript front end. Replaces the demo
 
 The platform is being rebuilt from scratch to grow to 250,000 doctors. Requirements: `docs/v2/requirements.md`, design: `docs/v2/design.md`, reviews: `docs/v2/reviews/`. For v2 work, those documents override the rules below. The rest of this file describes the prototype in `clinic/`, which is now a domain reference only.
 
-- Never read `docs/v2/design.md` whole (about 950 lines). Search it, or read only the sections you need.
+- `docs/v2/design.md` is a short index; each section is its own file in `docs/v2/design/`. Read only the section you need.
 - v2 code is in `v2/`: Django 6.1 on PostgreSQL 18 (the portable copy in `C:\work\pgsql`, port 5433, shared with the warehouse project; database and role `hamada`). It is served on port 8002.
 - First-time setup: `powershell -ExecutionPolicy Bypass -File v2\scripts\pg.ps1 init` creates the database and writes `v2\.env`. Start and stop PostgreSQL only through `v2\scripts\pg.ps1`; stopping it stops it for the warehouse too.
 - Python is 3.15 (`py -3.15`); `python` on PATH is the Microsoft Store stub. Use `v2\.venv\Scripts\python.exe`.
 - Tests run against PostgreSQL: `cd v2` then `.venv\Scripts\python manage.py test`.
 - Screens follow the first demo (`C:\work\hamada-app`, https://hamada-app-ghunim.vercel.app/): the same sections, layout and look, in Arabic right to left first (requirements 1).
-- Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout, simplifier (makes an idea simple and says where it belongs). A design or a milestone goes to the three seniors and the judge for review, then the chief judge decides.
+- Agents in `.claude/agents/`: senior-backend, senior-frontend, senior-database, judge, chief-judge, code-scout, simplifier (makes an idea simple and says where it belongs). A new design, a milestone, or a change to money, permissions, the data model or security goes to the three seniors and the judge for review, then the chief judge decides. Any other change gets one reviewer, the senior closest to it. Each reviewer gets a short brief and the diff, not the whole project (token rules in `~/.claude/CLAUDE.md`).
 
 ## Commands (Windows)
 

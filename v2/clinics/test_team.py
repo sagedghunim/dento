@@ -26,7 +26,7 @@ class GroupTests(SimpleTestCase):
 
     def test_wanted_codes_switches_groups_then_codes(self):
         wanted = perms.wanted_codes({"reports.view"}, {"stock": True, "reports": False}, {"inventory.manage": False})
-        self.assertEqual(wanted, {"inventory.use"})
+        self.assertEqual(wanted, {"inventory.use", "inventory.order"})
         self.assertEqual(perms.lists_for("assistant", perms.TEMPLATES["assistant"] - {"cash.shift"}), ([], ["cash.shift"]))
 
     def test_the_retired_others_code_is_gone_and_ignored_when_stored(self):
@@ -161,7 +161,7 @@ class EscalationTests(TeamCase):
     def test_a_manager_cant_give_a_code_they_dont_hold(self):
         target = self.member("assistant")
         r = call(self.manager, "PUT", f"/api/v1/team/members/{target.id}/permissions",
-                 {"version": target.version, "codes": {"inventory.manage": True}})
+                 {"version": target.version, "codes": {"reports.view": True}})
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["error"]["code"], "not_held")
 
@@ -195,7 +195,7 @@ class EscalationTests(TeamCase):
         self.assertEqual(r.status_code, 403)
 
     def test_a_manager_cant_deactivate_someone_with_codes_they_dont_hold(self):
-        self.grant("assistant", "inventory.manage")
+        self.grant("assistant", "reports.view")
         target = self.member("assistant")
         r = call(self.manager, "PATCH", f"/api/v1/team/members/{target.id}", {"version": target.version, "is_active": False})
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (403, "not_held"))

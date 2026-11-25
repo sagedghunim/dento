@@ -1,0 +1,18 @@
+{% load i18n %}{# Purchase orders (design H1 flow 2): low stock prepares them; the desk checks, sends and receives. orders.js fills the list. #}
+<section class="card" aria-labelledby="orders-title" data-part="orders" data-orders-card>
+  <div class="card-head">
+    <h2 id="orders-title">{% translate "Purchase orders" %}</h2>
+    <div class="row-actions wrap">
+      <button type="button" class="btn ghost" data-refill data-run>{% translate "Order all that's short" %}</button>
+      <button type="button" class="btn" data-new-order>{% translate "New order" %}</button>
+    </div>
+  </div>
+  <p class="card-sub">{% translate "When an item reaches its alert line it goes on its supplier's order by itself. Check the order, then send it on WhatsApp." %}</p>
+  <div class="chips" role="group" aria-label="{% translate "Which orders" %}">
+    <button type="button" class="chip-btn" data-orders-state="open" aria-pressed="true">{% translate "Open" %}</button>
+    <button type="button" class="chip-btn" data-orders-state="closed" aria-pressed="false">{% translate "Received or cancelled" %}</button>
+  </div>
+  <ul class="lines order-list" data-orders aria-live="polite"></ul>
+  <p class="muted" data-orders-status role="status"></p>
+  <div class="list-foot" data-orders-foot hidden><button type="button" class="btn ghost" data-orders-more>{% translate "Load more" %}</button></div>
+</section>

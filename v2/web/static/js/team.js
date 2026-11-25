@@ -786,6 +786,16 @@ function initBooking() {
     let body = submitter.unknown && submitter.unknown.body;
     if (!body) {
       const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked };
+      const autoSend = form.elements.namedItem("orders_auto_send");
+      if (autoSend) changes.orders_auto_send = autoSend.checked;
+      const message = form.elements.namedItem("order_message");
+      if (message) {
+        const lines = (value) => value.replace(/
+?/g, "
+").trim();
+        const text = lines(message.value);
+        changes.order_message = text === lines(message.dataset.default) ? "" : text;  // the built-in text stays ""
+      }
       const whole = (name, low, high) => {
         const n = Number(asciiDigits(form.elements.namedItem(name).value.trim()));
         return Number.isInteger(n) && n >= low && n <= high ? n : null;
@@ -819,7 +829,7 @@ function initBooking() {
       now.booking_deposit_amount = fresh.booking_deposit_amount;
       now.consultation_free_with_procedure = fresh.consultation_free_with_procedure;
       now.booking_deposit_percent = fresh.booking_deposit_percent;
-      for (const k of ["installment_down_percent", "installment_count", "installment_every"]) now[k] = fresh[k];
+      for (const k of ["installment_down_percent", "installment_count", "installment_every", "orders_auto_send", "order_message"]) now[k] = fresh[k];
       toast(t("settings_saved"));
       return;
     }

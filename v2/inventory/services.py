@@ -17,7 +17,7 @@ from core.errors import ApiError
 from summaries.services import Deltas
 
 ITEM_COLUMNS = ("id, section_id, name, name_en, category, sku, unit, quantity, threshold, unit_cost, notes, allow_negative, "
-                "is_active")
+                "is_active, supplier_id, backup_supplier_id, max_qty")
 ITEM_TEXT = {"name": 120, "name_en": 120, "category": 40, "sku": 40, "unit": 20, "notes": 500}
 LOW_STOCK_LIMIT = 20
 
@@ -121,17 +121,23 @@ def create_item(ctx, values, quantity=0):
     """A new item; a starting quantity is recorded as a count (an `adjust` movement)."""
     found = _savepoint(ctx, f"""
         INSERT INTO "inventory_item" (clinic_id, section_id, name, name_en, category, sku, unit, quantity, threshold,
-                                      unit_cost, notes, allow_negative, is_active, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s) RETURNING {ITEM_COLUMNS}""", [
+                                      unit_cost, notes, allow_negative, is_active, created_at, supplier_id,
+                                      backup_supplier_id, max_qty)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s, %s) RETURNING {ITEM_COLUMNS}""", [
         ctx.clinic_id, values.get("section_id"), values["name"], values.get("name_en", ""), values.get("category", ""), values.get("sku", ""),
         values.get("unit") or "unit", quantity, values.get("threshold", 0), values.get("unit_cost", 0),
-        values.get("notes", ""), values.get("allow_negative", False), timezone.now()])
+        values.get("notes", ""), values.get("allow_negative", False), timezone.now(), values.get("supplier_id"),
+        values.get("backup_supplier_id"), values.get("max_qty", 0)])
     item = item_row(found)
     if quantity:
         _insert_movements(ctx, [_movement(ctx, item["id"], "adjust", quantity, quantity, item["unit_cost"],
                                           reason=_("Opening stock"))])
     if item["low"]:
         Deltas().clinic_day(business_day(ctx.clinic)).write_clinics(ctx)
+        if item["supplier_id"]:
+            from . import orders
+
+            orders.refill(ctx, [item["id"]])
     return item
 
 
@@ -139,11 +145,17 @@ def update_item(ctx, item_id, values):
     """Absolute values for the item's details. The quantity changes only through movements; a cost change is audited."""
     if not values:
         raise ApiError("invalid", _("Send the changes."), fields={"changes": "required"})
-    before = sql.row(ctx, 'SELECT quantity, threshold, unit_cost, is_active FROM "inventory_item" '
-                          "WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE", [ctx.clinic_id, item_id])
+    before = sql.row(ctx, 'SELECT quantity, threshold, unit_cost, is_active, supplier_id, backup_supplier_id '
+                          'FROM "inventory_item" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+                     [ctx.clinic_id, item_id])
     if before is None:
         raise not_found("item")
-    quantity, threshold, unit_cost, active = before
+    quantity, threshold, unit_cost, active, supplier_id, backup_id = before
+    if "supplier_id" in values or "backup_supplier_id" in values:
+        from . import orders
+
+        orders.check_item_suppliers(ctx, values.get("supplier_id", supplier_id),
+                                    values.get("backup_supplier_id", backup_id))
     if values.get("allow_negative") is False and quantity < 0:
         raise ApiError("negative_stock", _("Count the stock back to zero or more first."), 409)
     assignments = ", ".join(f"{name} = %s" for name in values)
@@ -155,6 +167,10 @@ def update_item(ctx, item_id, values):
     was_low = active and quantity <= threshold
     if was_low != (item["is_active"] and item["low"]):
         Deltas().clinic_day(business_day(ctx.clinic)).write_clinics(ctx)
+    if item["supplier_id"] and item["supplier_id"] != supplier_id:
+        from . import orders
+
+        orders.refill(ctx, [item_id])  # a supplier newly set on a low item (design H1)
     return item
 
 
@@ -194,7 +210,7 @@ def take(ctx, lines, kind="use", *, patient_id=None, appointment_id=None, visit_
              if not locked[i]["allow_negative"] and locked[i]["quantity"] < q]
     if short:
         raise _out_of_stock(short)
-    crossed, taken, movements = False, {}, []
+    crossed, taken, movements, down = False, {}, [], []
     now = timezone.now()
     for item_id in sorted(lines):
         qty = lines[item_id]
@@ -205,11 +221,17 @@ def take(ctx, lines, kind="use", *, patient_id=None, appointment_id=None, visit_
             raise _out_of_stock([(locked[item_id], qty)])
         balance, unit_cost, threshold = found
         crossed = crossed or _crossed(balance + qty, balance, threshold)
+        if balance + qty > threshold >= balance:
+            down.append(item_id)
         taken[item_id] = (qty, unit_cost)
         movements.append(_movement(ctx, item_id, kind, -qty, balance, unit_cost, patient_id=patient_id,
                                    appointment_id=appointment_id, visit_procedure_id=visit_procedure_id, reason=reason,
                                    at=now))
     ids = _insert_movements(ctx, movements)
+    if down:
+        from . import orders
+
+        orders.refill(ctx, down)  # low stock prepares its supplier's order (design H1)
     if crossed:
         if deltas is not None:
             deltas.clinic_day(business_day(ctx.clinic))
@@ -297,6 +319,10 @@ def adjust(ctx, item_id, counted, expected, reason):
                       reason=reason)
         if _crossed(expected, counted, threshold):
             Deltas().clinic_day(business_day(ctx.clinic)).write_clinics(ctx)
+        if expected > threshold >= counted:
+            from . import orders
+
+            orders.refill(ctx, [item_id])
     return get_item(ctx, item_id)
 
 

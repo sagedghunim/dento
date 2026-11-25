@@ -1,0 +1,9 @@
+{% load i18n %}{# Suppliers (design H1): who each item is ordered from and, with money.view, what we owe them. orders.js fills the list. #}
+<section class="card" aria-labelledby="suppliers-title" data-part="suppliers" data-suppliers-card>
+  <div class="card-head">
+    <h2 id="suppliers-title">{% translate "Suppliers" %}</h2>
+    {% if perms.manage %}<button type="button" class="btn" data-new-supplier>{% translate "New supplier" %}</button>{% endif %}
+  </div>
+  <ul class="lines supplier-list" data-suppliers aria-live="polite"></ul>
+  <p class="muted" data-suppliers-status role="status"></p>
+</section>

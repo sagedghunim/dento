@@ -170,6 +170,7 @@ class StockTests(M2TestCase):
     def test_codes_and_another_places_items(self):
         mine = self.item()
         theirs = self.item("Theirs", client=self.b.client("owner"))
+        self.set_codes("assistant", revoked=["inventory.manage"])  # the desk has it by default (Saged, 2026-11-25)
         self.assertEqual(call(self.desk, "POST", "/api/v1/inventory/items", {"name": "x"}).status_code, 403)
         for method, url, body in (
                 ("PATCH", f"/api/v1/inventory/items/{theirs['id']}", {"name": "y"}),

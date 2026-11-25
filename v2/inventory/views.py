@@ -45,6 +45,11 @@ def _item_values(data, partial):
         values["section_id"] = validate.ident(section, "section_id") if section is not None else None
     if partial and "is_active" in data:
         values["is_active"] = validate.boolean(data, "is_active")
+    for name in ("supplier_id", "backup_supplier_id"):  # design H1
+        if name in data:
+            values[name] = validate.ident(data[name], name) if data[name] is not None else None
+    if "max_qty" in data:
+        values["max_qty"] = parse_int(data.get("max_qty"), "max_qty", 0, MAX_QTY)
     return values
 
 

@@ -1314,3 +1314,23 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .use-done-title { font-size: .95rem; margin-block: 16px 4px; color: var(--muted); }
 .rx-write-line.use-line { grid-template-columns: minmax(0, 1fr) 96px 44px; }
 @media (max-width: 600px) { .rx-write-line.use-line { grid-template-columns: minmax(0, 1fr) 80px 44px; } .rx-write-line.use-line input { grid-column: auto; } .rx-write-line.use-line .icon-btn { grid-column: auto; grid-row: auto; } }
+
+/* Purchase orders (design H1): a short number box per line, the receive total first, the WhatsApp fallback. */
+.qty-input { width: 5.5em; min-height: 44px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; font: inherit; text-align: center; }
+.small-field { width: 9em; margin: 0; }
+.warn-text { color: var(--warn-text); font-size: .9rem; font-weight: 700; flex-basis: 100%; }
+.receive-total { font-size: 1.2rem; font-weight: 800; margin-block-end: 8px; }
+.wa-box { display: grid; gap: 8px; margin-block-start: 12px; }
+.wa-box .btn { min-height: 52px; font-size: 1.05rem; }
+.picked { font-weight: 700; margin: 0; }
+.picked:empty { display: none; }
+
+/* The supplier's dialog (Saged, 2026-11-25): its usual days, and tick boxes for the items it brings. */
+.time-field input { max-width: 10rem; }
+.link-filter { width: 100%; min-height: 44px; margin-block-end: 6px; padding-inline: 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.link-items { list-style: none; margin: 0; padding: 4px 8px; max-height: min(40dvh, 15rem); overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 10px; }
+.link-items li { padding-block: 2px; }
+.link-items .check { min-height: 44px; }
+.link-items .muted { font-size: .85rem; }

@@ -30,11 +30,18 @@ DEFAULTS = {
     # drawer, "line" a line removed from a bill, "price" a price changed. Not listed: it happens and the owner gets
     # an alert.
     "approvals": [],
+    # Prepared orders go to the supplier by themselves (design H1): off; does nothing until a WhatsApp provider is set.
+    "orders_auto_send": False,
+    # The WhatsApp text of a purchase order (Saged, 2026-11-25), with {supplier}, {clinic} and {items} (or their
+    # Arabic names); "" is the built-in text (inventory.orders.default_message).
+    "order_message": "",
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
 OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure",
-              "installment_down_percent", "installment_every", "installment_count", "approvals"}
+              "installment_down_percent", "installment_every", "installment_count", "approvals",
+              "orders_auto_send", "order_message"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
+ORDER_MESSAGE_MAX = 1000
 # Every action someone does that can wait (Saged, 2026-11-25: "بإذن" on everything). Not here: money put into the
 # drawer, the register closing short or by itself, and a file changed after its visit (events, not requests).
 APPROVAL_KINDS = ("cash", "line", "price", "discount", "refund", "void", "expense", "patient", "stock")
@@ -56,6 +63,8 @@ _RULES = {
     "installment_down_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
     "installment_every": lambda v: v in ("week", "2weeks", "month"),
     "installment_count": lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 24,
+    "orders_auto_send": lambda v: isinstance(v, bool),
+    "order_message": lambda v: isinstance(v, str) and len(v) <= ORDER_MESSAGE_MAX,
     "approvals": lambda v: isinstance(v, list) and len(set(v)) == len(v) and all(k in APPROVAL_KINDS for k in v),
 }
 

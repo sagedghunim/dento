@@ -120,6 +120,12 @@
       </div>
       <p class="muted">{% translate "The desk or the doctor changes these for each patient." %}</p>
     </fieldset>
+    {# Prepared orders go out by themselves (design H1): off by default; nothing goes until WhatsApp is linked. #}
+    <label class="check"><input type="checkbox" name="orders_auto_send"{% if booking.orders_auto_send %} checked{% endif %}> {% translate "Send purchase orders to suppliers by themselves" %}</label>
+    <p class="muted">{% translate "Off: the desk checks each order and sends it. Works only after the clinic's WhatsApp is linked." %}</p>
+    {# The order's WhatsApp text (Saged, 2026-11-25): the words in braces are filled in for each order. #}
+    <label class="field">{% translate "The order message to suppliers" %}<textarea name="order_message" maxlength="1000" dir="auto" rows="4" data-default="{{ order_message_default }}">{{ booking.order_message|default:order_message_default }}</textarea></label>
+    <p class="muted">{% translate "These words are filled in for each order: {supplier} the supplier's name, {clinic} the clinic's name, {items} the items and quantities." %}</p>
     <div class="form-actions">
       <p class="form-error" data-error role="alert"></p>
       <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>

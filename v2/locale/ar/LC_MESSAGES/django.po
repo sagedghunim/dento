@@ -5142,8 +5142,419 @@ msgstr ""
 msgid "At most 30 items in one visit."
 msgstr "أقصى حاجة 30 صنف في الكشف الواحد."
 
+msgid "Prepare, send and receive purchase orders"
+msgstr "تجهيز طلبات الشراء وبعتها واستلامها"
+
+msgid "This supplier wasn't found."
+msgstr "المورد ده مش موجود."
+
+msgid "This order wasn't found."
+msgstr "الطلب ده مش موجود."
+
+msgid "This entry wasn't found."
+msgstr "القيد ده مش موجود."
+
+msgid "This supplier is already in the list."
+msgstr "المورد ده موجود في القايمة."
+
+msgid "The backup supplier can't be the same as the supplier."
+msgstr "المورد البديل ما ينفعش يبقى هو نفس المورد."
+
+msgid "This order hasn't been sent yet."
+msgstr "الطلب ده لسه ما اتبعتش."
+
+msgid "This order was already sent."
+msgstr "الطلب ده اتبعت خلاص."
+
+msgid "This order was already received."
+msgstr "الطلب ده اتستلم خلاص."
+
+msgid "This order was cancelled."
+msgstr "الطلب ده اتلغى."
+
+msgid "Add an item to the order first."
+msgstr "ضيف صنف للطلب الأول."
+
+msgid "This item isn't on the order."
+msgstr "الصنف ده مش في الطلب."
+
+msgid "Choose how it was paid."
+msgstr "اختار اتدفع إزاي."
+
+msgid "The day can't be after today."
+msgstr "اليوم ما ينفعش يبقى بعد النهارده."
+
+msgid "The day can't be more than a year back."
+msgstr "اليوم ما ينفعش يبقى أقدم من سنة."
+
+msgid "Only the account's owner can do this."
+msgstr "صاحب الحساب بس اللي يقدر يعمل ده."
+
+msgid "Not sent yet"
+msgstr "لسه ما اتبعتش"
+
+msgid "Sent, waiting for it"
+msgstr "اتبعت ومستنيينه"
+
+msgid "Received"
+msgstr "اتسلّم"
+
+msgid "No open orders. Short items that have a supplier show here by themselves."
+msgstr "مفيش طلبات مفتوحة. الأصناف الناقصة اللي ليها مورد بتظهر هنا لوحدها."
+
+msgid "No received or cancelled orders yet."
+msgstr "مفيش طلبات اتسلمت أو اتلغت لسه."
+
+msgid "Sent {day}"
+msgstr "اتبعت {day}"
+
+msgid "Started {day}"
+msgstr "اتعمل {day}"
+
+msgid "{n} items"
+msgstr "{n} صنف"
+
+msgid "Check and send"
+msgstr "راجع وابعت"
+
+msgid "Open and receive"
+msgstr "افتح واستلم"
+
+msgid "Not sure it was saved. Check the list before trying again."
+msgstr "مش متأكد إنه اتحفظ. بص على القايمة قبل ما تجرب تاني."
+
+msgid "{n} items went on their suppliers' orders."
+msgstr "{n} صنف اتضافوا لطلبات الموردين."
+
+msgid "Nothing to add: no short item has a supplier."
+msgstr "مفيش حاجة تتضاف: مفيش صنف ناقص ليه مورد."
+
+msgid "You have {n} {unit}"
+msgstr "عندك {n} {unit}"
+
+msgid "No item with this name."
+msgstr "مفيش صنف بالاسم ده."
+
+msgid "Sure? Tap again"
+msgstr "متأكد؟ اضغط تاني"
+
+msgid "Your changes to the order aren't saved. Save them, or close again to leave them."
+msgstr "تعديلاتك على الطلب ما اتحفظتش. احفظها، أو اقفل تاني تسيبها."
+
+msgid "Quantity of {name}"
+msgstr "كمية {name}"
+
+msgid "Take it off"
+msgstr "شيل"
+
+msgid "Take {name} off the order"
+msgstr "شيل {name} من الطلب"
+
+msgid "{n} came"
+msgstr "وصل {n}"
+
+msgid "Ordered {n} {unit}"
+msgstr "مطلوب {n} {unit}"
+
+msgid "No WhatsApp number"
+msgstr "مفيش رقم واتساب"
+
+msgid "No items on the order. Add one below."
+msgstr "مفيش أصناف في الطلب. ضيف من تحت."
+
+msgid "Cancel the order"
+msgstr "الغي الطلب"
+
+msgid "Send on WhatsApp"
+msgstr "ابعت على واتساب"
+
+msgid "Receive what came"
+msgstr "استلم اللي وصل"
+
+msgid "Order saved: {name}"
+msgstr "الطلب اتحفظ: {name}"
+
+msgid "Order sent: {name}"
+msgstr "الطلب اتبعت: {name}"
+
+msgid "Order cancelled: {name}"
+msgstr "الطلب اتلغى: {name}"
+
+msgid "More than what's left ({n}). It is recorded as it came."
+msgstr "ده أكتر من الباقي ({n}). هيتسجل زي ما وصل."
+
+msgid "{n} came before"
+msgstr "وصل {n} قبل كده"
+
+msgid "What came"
+msgstr "اللي وصل"
+
+msgid "Write the price of each item that came."
+msgstr "اكتب سعر كل صنف وصل."
+
+msgid "Write what came, or tick “The rest won't come”."
+msgstr "اكتب اللي وصل، أو علّم على «الباقي مش جاي»."
+
+msgid "Order received: {name}"
+msgstr "استلام طلب: {name}"
+
+msgid "Received and the order is closed: {name}"
+msgstr "اتسلم والطلب اتقفل: {name}"
+
+msgid "Received. The rest is still awaited: {name}"
+msgstr "اتسلم. الباقي لسه مستنيينه: {name}"
+
+msgid "Type to pick an item"
+msgstr "اكتب واختار الصنف"
+
+msgid "Add a supplier first, under Suppliers."
+msgstr "ضيف مورد الأول من جزء الموردين."
+
+msgid "Pick the supplier."
+msgstr "اختار المورد."
+
+msgid "Pick the item from the list."
+msgstr "اختار الصنف من القايمة."
+
+msgid "Order started"
+msgstr "الطلب اتعمل"
+
+msgid "We owe them {amount}"
+msgstr "علينا ليه {amount}"
+
+msgid "They owe us {amount}"
+msgstr "لينا عنده {amount}"
+
+msgid "Nothing owed"
+msgstr "مفيش حاجة علينا"
+
+msgid "No suppliers yet."
+msgstr "مفيش موردين لسه."
+
+msgid "No suppliers yet. Add the ones the clinic buys from."
+msgstr "مفيش موردين لسه. ضيف اللي العيادة بتشتري منهم."
+
+msgid "Order from them"
+msgstr "اطلب منه"
+
+msgid "Write the supplier's name."
+msgstr "اكتب اسم المورد."
+
+msgid "Supplier saved: {name}"
+msgstr "المورد اتحفظ: {name}"
+
+msgid "Supplier bill"
+msgstr "فاتورة"
+
+msgid "Void it"
+msgstr "الغيها"
+
+msgid "Voided. Its expense is voided too."
+msgstr "اتلغت، ومصروفها اتلغى معاها."
+
+msgid "No bills or payments yet."
+msgstr "مفيش فواتير ولا دفعات لسه."
+
+msgid "Bill added: {name}"
+msgstr "الفاتورة اتضافت: {name}"
+
+msgid "Payment added: {name}"
+msgstr "الدفعة اتضافت: {name}"
+
+msgid "Pick the main supplier before the backup."
+msgstr "اختار المورد الأساسي قبل الاحتياطي."
+
+msgid "The backup supplier must be a different one."
+msgstr "المورد الاحتياطي لازم يكون غير الأساسي."
+
+msgid "Purchase orders"
+msgstr "طلبات الشراء"
+
+msgid "Suppliers"
+msgstr "الموردين"
+
+msgid "Send purchase orders to suppliers by themselves"
+msgstr "ابعت طلبات الشراء للموردين لوحدها"
+
+msgid "Off: the desk checks each order and sends it. Works only after the clinic's WhatsApp is linked."
+msgstr "لو مقفول: الاستقبال بيراجع كل طلب ويبعته. بيشتغل بس بعد ما واتساب العيادة يتربط."
+
+msgid "Ordering"
+msgstr "الطلب من المورد"
+
+msgid "Supplier"
+msgstr "المورد"
+
+msgid "Backup supplier (optional)"
+msgstr "مورد احتياطي (اختياري)"
+
+msgid "Most to keep (optional)"
+msgstr "أقصى كمية تتخزن (اختياري)"
+
+msgid "Order from"
+msgstr "طلب من"
+
+msgid "Note to the supplier (optional)"
+msgstr "ملاحظة للمورد (اختياري)"
+
+msgid "If WhatsApp didn't open by itself:"
+msgstr "لو واتساب ما فتحش لوحده:"
+
+msgid "Open WhatsApp"
+msgstr "افتح واتساب"
+
+msgid "Send again"
+msgstr "ابعت تاني"
+
+msgid "Receive the order"
+msgstr "استلام الطلب"
+
+msgid "Write what actually came. An item that didn't come stays at 0."
+msgstr "اكتب اللي وصل فعلاً. الصنف اللي ما وصلش سيبه صفر."
+
+msgid "How was it paid?"
+msgstr "اتدفع إزاي؟"
+
+msgid "Paid outside the drawer"
+msgstr "دفعت من برة الدرج"
+
+msgid "On account"
+msgstr "على الحساب"
+
+msgid "Paying from the drawer needs the cash permission."
+msgstr "الدفع من الدرج محتاج صلاحية الخزنة."
+
+msgid "On account: it is added to what the clinic owes this supplier."
+msgstr "على الحساب: بيتضاف على اللي على العيادة للمورد ده."
+
+msgid "Prices and payment are added later by someone who sees the money."
+msgstr "الأسعار والدفع بيضيفهم بعدين حد بيشوف الفلوس."
+
+msgid "The rest won't come: close the order"
+msgstr "الباقي مش جاي: اقفل الطلب"
+
+msgid "Receive"
+msgstr "استلم"
+
+msgid "New order"
+msgstr "طلب جديد"
+
+msgid "Pick a supplier"
+msgstr "اختار مورد"
+
+msgid "First item"
+msgstr "أول صنف"
+
+msgid "Add more items in the order after this. If this supplier has an order not sent yet, the item goes on it."
+msgstr "تقدر تضيف أصناف تانية في الطلب بعد كده. لو المورد ده عنده طلب لسه ما اتبعتش، الصنف هيتضاف عليه."
+
+msgid "Start the order"
+msgstr "ابدأ الطلب"
+
+msgid "New supplier"
+msgstr "مورد جديد"
+
+msgid "Edit the supplier"
+msgstr "تعديل المورد"
+
+msgid "WhatsApp number"
+msgstr "رقم الواتساب"
+
+msgid "We still order from this supplier"
+msgstr "لسه بنطلب من المورد ده"
+
+msgid "Add a bill"
+msgstr "ضيف فاتورة"
+
+msgid "Add a payment"
+msgstr "ضيف دفعة"
+
+msgid "A bill from the supplier"
+msgstr "فاتورة من المورد"
+
+msgid "A payment to the supplier"
+msgstr "دفعة للمورد"
+
+msgid "Order all that's short"
+msgstr "اطلب كل الناقص"
+
+msgid "Which orders"
+msgstr "أنهي طلبات"
+
+msgid "Received or cancelled"
+msgstr "اتسلمت أو اتلغت"
+
+msgid "Add the clinic's suppliers under Suppliers, then pick each item's supplier here so short items are ordered on their own."
+msgstr "ضيف موردين العيادة من جزء الموردين، وبعدين اختار مورد كل صنف هنا علشان الناقص يتطلب لوحده."
+
+msgid "When an item reaches its alert line it goes on its supplier's order by itself. Check the order, then send it on WhatsApp."
+msgstr "لما صنف يوصل لحد التنبيه بيتضاف لطلب المورد بتاعه لوحده. راجع الطلب وابعته على واتساب."
+
+msgid "When the stock reaches the alert line, the item goes on its supplier's order up to this number (empty: twice the alert line)."
+msgstr "لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الرقم ده (لو فاضي: ضعف حد التنبيه)."
+
+msgid "Item: {name}"
+msgstr "الصنف: {name}"
+
 msgid "Your phone's clock is about %(minutes)s minutes off. In the phone's settings, turn on automatic date and time, then enter the new code."
 msgstr "ساعة موبايلك متأخرة أو متقدمة حوالي %(minutes)s دقيقة. من إعدادات الموبايل شغّل «التاريخ والوقت تلقائي»، وبعدين اكتب الكود الجديد."
 
 msgid "Too many wrong codes today. Try again in %(hours)s hours, or enter a recovery code."
 msgstr "أكواد غلط كتير النهارده. جرّب تاني بعد %(hours)s ساعة، أو اكتب كود استرداد."
+
+msgid "Usually comes on"
+msgstr "بيعدي عادةً يوم"
+
+msgid "At (optional)"
+msgstr "الساعة (اختياري)"
+
+msgid "Items we order from this supplier"
+msgstr "الأصناف اللي بنطلبها من المورد ده"
+
+msgid "No items yet. Add the items first."
+msgstr "مفيش أصناف لسه. ضيف الأصناف الأول."
+
+msgid "Comes on {days}"
+msgstr "بيعدي {days}"
+
+msgid "Comes on {days} at {time}"
+msgstr "بيعدي {days} الساعة {time}"
+
+msgid "({n} ticked)"
+msgstr "(اخترت {n})"
+
+msgid "now from {name}"
+msgstr "دلوقتي من {name}"
+
+msgid "No item has this name."
+msgstr "مفيش صنف بالاسم ده."
+
+msgid "Monday"
+msgstr "الاثنين"
+
+msgid "Tuesday"
+msgstr "الثلاثاء"
+
+msgid "Wednesday"
+msgstr "الأربعاء"
+
+msgid "Thursday"
+msgstr "الخميس"
+
+msgid "Friday"
+msgstr "الجمعة"
+
+msgid "Saturday"
+msgstr "السبت"
+
+msgid "Sunday"
+msgstr "الأحد"
+
+msgid "Items can't be linked to a supplier we no longer order from."
+msgstr "مينفعش تربط أصناف بمورد وقفنا نطلب منه."
+
+msgid "The order message to suppliers"
+msgstr "رسالة الطلب للموردين"
+
+msgid "These words are filled in for each order: {supplier} the supplier's name, {clinic} the clinic's name, {items} the items and quantities."
+msgstr "الكلمات دي بتتملى في كل طلب: {المورد} اسم المورد، {العيادة} اسم العيادة، {الأصناف} الأصناف والكميات."

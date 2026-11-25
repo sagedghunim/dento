@@ -58,10 +58,12 @@ class InventoryPageTests(BackOfficeCase):
         self.assertIn("≈ 170 ج.م", row)
         self.assertNotIn('data-ready="جوانتي لاتكس"', html)
         self.assertNotIn("{#", html)  # a comment never shows as text
+        self.revoke("assistant", "inventory.manage")
         self.assertNotIn("ready-items", self.desk.get("/inventory").content.decode())  # adding items is the manager's
 
     def test_someone_with_use_only_sees_the_list_and_records_use(self):
         self.item()
+        self.revoke("assistant", "inventory.manage", "inventory.order")
         r = self.desk.get("/inventory")
         html = r.content.decode()
         self.assertEqual(r.status_code, 200)
@@ -74,7 +76,7 @@ class InventoryPageTests(BackOfficeCase):
             self.assertNotIn(marker, html, marker)
 
     def test_someone_without_a_stock_code_is_refused(self):
-        self.revoke("assistant", "inventory.use")
+        self.revoke("assistant", "inventory.use", "inventory.order", "inventory.manage")
         desk = self.a.client("assistant")
         self.assertEqual(desk.get("/inventory").status_code, 403)
         self.assertEqual(fragment(desk, "/inventory/items").status_code, 403)
@@ -91,6 +93,9 @@ class InventoryPageTests(BackOfficeCase):
         removed = fragment(self.owner, "/inventory/items?removed=1").content.decode()
         self.assertIn("Gloves box", removed)
         self.assertIn('data-inv="restore"', removed)
+        # The desk manages the stock by default (Saged, 2026-11-25); the owner's switch takes it away.
+        self.assertIn("Gloves box", fragment(self.desk, "/inventory/items?removed=1").content.decode())
+        self.revoke("assistant", "inventory.manage")
         self.assertNotIn("Gloves box", fragment(self.desk, "/inventory/items?removed=1").content.decode())
 
     def test_an_items_history_newest_first(self):
@@ -149,3 +154,65 @@ class PrescriptionPageTests(BackOfficeCase):
         self.assertEqual(fragment(self.desk, "/prescriptions/templates").status_code, 403)
         self.assertNotIn('href="/prescriptions"', self.desk.get("/patients").content.decode())
         self.assertIn('href="/prescriptions"', self.doctor.get("/patients").content.decode())
+
+
+class OrderPageTests(BackOfficeCase):
+    """Purchase orders and suppliers on the Inventory page (design H1)."""
+
+    def supplier(self, name="Dental Co"):
+        r = call(self.owner, "POST", "/api/v1/inventory/suppliers", {"name": name, "phone": "01001234567"})
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["supplier"]
+
+    def draft(self, supplier, item):
+        r = call(self.desk, "POST", "/api/v1/inventory/orders",
+                 {"supplier_id": supplier["id"], "lines": [{"item_id": item["id"], "qty": 4}]})
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_the_desk_opens_on_its_orders_and_the_side_bar_counts_the_drafts(self):
+        supplier = self.supplier()
+        self.draft(supplier, self.item())
+        html = self.desk.get("/inventory").content.decode()
+        for marker in ('data-part="orders"', 'data-part="suppliers"', 'id="order-dialog"', 'id="receive-dialog"',
+                       'id="new-order-dialog"', 'id="order-data"', "orders.js", "data-refill"):
+            self.assertIn(marker, html, marker)
+        self.assertLess(html.index('data-part="orders"'), html.index("Gloves box"))  # orders first for the desk
+        self.assertIn("طلبات الشراء (<span class=\"num\">1</span>)", html)  # the side bar counts the unsent drafts (Latin digits here)
+        self.assertIn('id="account-dialog"', html)  # the desk sees money
+        self.assertIn('id="supplier-dialog"', html)  # the desk manages suppliers by default (Saged, 2026-11-25)
+        self.revoke("assistant", "inventory.manage")
+        self.assertNotIn('id="supplier-dialog"', self.desk.get("/inventory").content.decode())  # unless the owner says no
+
+    def test_the_owner_opens_on_the_items_and_manages_suppliers(self):
+        self.supplier()
+        html = self.owner.get("/inventory").content.decode()
+        self.assertLess(html.index("Gloves box" if "Gloves box" in html else 'data-new-item'),
+                        html.index('data-part="orders"'))
+        for marker in ('id="supplier-dialog"', "data-new-supplier", 'name="backup_supplier_id"', 'name="max_qty"'):
+            self.assertIn(marker, html, marker)
+
+    def test_without_the_order_code_there_are_no_orders(self):
+        self.supplier()
+        html = self.doctor.get("/inventory").content.decode()
+        for marker in ('data-part="orders"', 'id="order-dialog"', "orders.js", 'id="order-data"'):
+            self.assertNotIn(marker, html, marker)
+        self.revoke("assistant", "inventory.order")
+        self.assertNotIn("طلبات الشراء", self.a.client("assistant").get("/inventory").content.decode())
+
+    def test_the_desk_without_money_gets_no_prices_or_account(self):
+        self.revoke("assistant", "money.view")
+        html = self.a.client("assistant").get("/inventory").content.decode()
+        self.assertIn('id="receive-dialog"', html)
+        self.assertNotIn('id="account-dialog"', html)
+        self.assertNotIn("data-receive-total", html)
+
+    def test_order_only_sees_the_orders_without_the_items(self):
+        self.revoke("assistant", "inventory.use")
+        r = self.a.client("assistant").get("/inventory")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-part="orders"', r.content.decode())
+        self.assertNotIn('data-inv="use"', r.content.decode())
+
+    def test_the_owner_switches_auto_send_on_team(self):
+        html = self.owner.get("/team").content.decode()
+        self.assertIn('name="orders_auto_send"', html)

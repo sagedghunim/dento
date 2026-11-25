@@ -87,12 +87,12 @@ class TeamPageTests(ShardTestCase):
     def test_a_switch_saved_through_the_api_shows_on_the_next_load(self):
         owner = self.a.client("owner")
         assistant = next(m for m in team_data(owner.get("/team").content.decode())["members"] if m["role"] == "assistant")
-        self.assertEqual(assistant["groups"]["stock"], "partial")
+        self.assertEqual(assistant["groups"]["stock"], "on")  # the desk runs the stock by default (Saged, 2026-11-25)
         r = call(owner, "PUT", f"/api/v1/team/members/{assistant['id']}/permissions",
-                 {"version": assistant["version"], "groups": {"stock": True}})
+                 {"version": assistant["version"], "groups": {"stock": False}})
         self.assertEqual(r.status_code, 200, r.content)
         again = next(m for m in team_data(owner.get("/team").content.decode())["members"] if m["id"] == assistant["id"])
-        self.assertEqual(again["groups"]["stock"], "on")
+        self.assertEqual(again["groups"]["stock"], "off")
         stale = call(owner, "PUT", f"/api/v1/team/members/{assistant['id']}/permissions",
                      {"version": assistant["version"], "groups": {"stock": False}})
         self.assertEqual((stale.status_code, stale.json()["error"]["code"]), (409, "stale"))

@@ -12,6 +12,9 @@
 
 <div class="pending-bar" data-pending-bar hidden></div>
 
+{% if orders_first %}{% include "web/_orders_part.html" %}{% endif %}
+
+{% if show_items %}
 <section class="card" aria-labelledby="items-title" data-part="items">
   <h2 id="items-title" class="visually-hidden">{% translate "Items" %}</h2>
   <div class="list-tools">
@@ -25,6 +28,10 @@
   </div>
   <div data-items aria-live="polite">{% include "web/_inventory_items.html" %}</div>
 </section>
+{% endif %}
+
+{% if perms.order and not orders_first %}{% include "web/_orders_part.html" %}{% endif %}
+{% if perms.order %}{% include "web/_suppliers_part.html" %}{% endif %}
 
 {% if perms.manage %}
 <section class="card" aria-labelledby="materials-title" data-part="materials">
@@ -47,5 +54,6 @@
 {% endif %}
 
 {% include "web/_inventory_dialogs.html" %}
+{% if perms.order %}{% include "web/_order_dialogs.html" %}{{ order_data|json_script:"order-data" }}{{ suppliers|json_script:"suppliers-data" }}{% endif %}
 {% endblock %}
-{% block scripts %}<script type="module" src="{% static 'js/inventory.js' %}"></script>{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'js/inventory.js' %}"></script>{% if perms.order %}<script type="module" src="{% static 'js/orders.js' %}"></script>{% endif %}{% endblock %}

@@ -1,0 +1,922 @@
+// Purchase orders and suppliers (design H1). Low stock prepares a draft per supplier; the desk checks it, sends it on
+// WhatsApp and receives what came. Each save goes through a dialog's Submitter (one request key until a definite
+// answer); buttons stay disabled while a request runs and an unconfirmed one offers only "Try again" or "Discard".
+// The server checks every permission again: the buttons here only follow what the page was told.
+import { errorMessage, get, isOk, newKey, save } from "./api.js";
+import { Submitter, clockNode, el, openDialog, wireClose } from "./dialogs.js";
+import { amountInput, localDigits, moneyText, parsePiastres, parseWhole, phoneText } from "./numbers.js";
+import { alertMessage, toast } from "./shell.js";
+import { t } from "./strings.js";
+
+const readJson = (id) => { const node = document.getElementById(id); return node ? JSON.parse(node.textContent) : null; };
+const data = readJson("order-data") || { items: [], orders: [], perms: {} };
+const perms = data.perms || {};
+const items = data.items || [];
+let suppliers = readJson("suppliers-data") || [];
+let ordersState = "open";
+
+const ordersList = document.querySelector("[data-orders]");
+const ordersStatus = document.querySelector("[data-orders-status]");
+const suppliersList = document.querySelector("[data-suppliers]");
+const suppliersStatus = document.querySelector("[data-suppliers-status]");
+
+const STATUS = { draft: ["amber", "ord_status_draft"], sent: ["teal", "ord_status_sent"], done: ["green", "ord_status_done"],
+                 cancelled: ["grey", "ord_status_cancelled"] };
+
+function pill(node, status) {
+  const [colour, key] = STATUS[status] || ["grey", status];
+  node.className = `pill ${colour}`;
+  node.textContent = t(key);
+}
+
+function dayText(iso) {
+  if (!iso) return "";
+  const date = new Date(/T/.test(iso) ? iso : `${iso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  const lang = document.documentElement.lang || "ar";
+  const options = { day: "numeric", month: "long", numberingSystem: "latn" };
+  if (/T/.test(iso) && data.zone) options.timeZone = data.zone;  // the clinic's day, not the browser's
+  try { return localDigits(new Intl.DateTimeFormat(lang, options).format(date)); }
+  catch (e) { delete options.timeZone; return localDigits(new Intl.DateTimeFormat(lang, options).format(date)); }
+}
+
+const bdi = (text, className) => { const node = el("bdi", className, text); node.dir = "auto"; return node; };
+const button = (text, attrs, className = "btn ghost") => {
+  const node = el("button", className, text);
+  node.type = "button";
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+};
+
+// --- the side bar's count (design H1 flow 2) ---
+
+function showDrafts(n) {
+  const link = document.querySelector('[data-nav-part][href$="part=orders"]');
+  if (link) {
+    if (!link.dataset.base) link.dataset.base = link.textContent.replace(/\s*\(.*\)\s*$/, "");
+    link.textContent = n ? `${link.dataset.base} (${localDigits(n)})` : link.dataset.base;
+  }
+  const group = link && link.closest("[data-nav-group]");
+  const summary = group && group.querySelector("summary");
+  if (!summary) return;
+  let count = summary.querySelector(".nav-count");
+  if (!n) { if (count) count.remove(); return; }
+  if (!count) { count = el("span", "nav-count num"); summary.append(" ", count); }
+  count.textContent = localDigits(n);
+}
+
+// --- the orders list ---
+
+function renderOrders(list, more = false) {
+  if (!ordersList) return;
+  if (!more) ordersList.replaceChildren();
+  if (!list.length && !more) {
+    ordersList.append(el("li", "empty-note", t(ordersState === "open" ? "ord_none_open" : "ord_none_closed")));
+    return;
+  }
+  for (const order of list) {
+    const li = el("li");
+    const main = el("div", "mat-main");
+    const head = el("strong");
+    head.append(bdi(order.supplier_name));
+    const status = el("span");
+    pill(status, order.status);
+    main.append(head, " ", status);
+    const when = order.status === "sent" ? t("ord_sent_on", { day: dayText(order.sent_at) })
+      : order.closed_at ? dayText(order.closed_at) : t("ord_started_on", { day: dayText(order.created_at) });
+    main.append(el("p", "muted", `${t("ord_lines", { n: localDigits(order.lines) })} · ${when}`));
+    const action = order.status === "draft" ? "ord_check_send" : order.status === "sent" ? "ord_open_receive" : "ord_open";
+    li.append(main, button(t(action), { "data-open-order": String(order.id) }));
+    ordersList.append(li);
+  }
+}
+
+// Received or cancelled orders come 50 at a time; "Load more" asks for the next ones.
+const ordersFoot = document.querySelector("[data-orders-foot]");
+const moreButton = document.querySelector("[data-orders-more]");
+let ordersNext = null;
+let ordersTicket = 0;
+
+async function loadOrders(more = false) {
+  if (!ordersList) return;
+  const ticket = ++ordersTicket;
+  ordersStatus.textContent = t("loading");
+  if (moreButton) moreButton.disabled = true;
+  const after = more && ordersNext ? `&after=${encodeURIComponent(ordersNext)}` : "";
+  const result = await get(`/api/v1/inventory/orders?state=${ordersState}${after}`);
+  if (ticket !== ordersTicket) return;  // a newer load won
+  if (moreButton) moreButton.disabled = false;
+  if (!isOk(result)) { ordersStatus.textContent = errorMessage(result, t("failed")); return; }
+  ordersStatus.textContent = "";
+  renderOrders(result.data.orders, more);
+  ordersNext = result.data.next || null;
+  if (ordersFoot) ordersFoot.hidden = !ordersNext;
+  showDrafts(result.data.drafts);
+}
+if (moreButton) moreButton.addEventListener("click", () => { if (!moreButton.disabled) loadOrders(true); });
+
+document.querySelectorAll("[data-orders-state]").forEach((chip) => chip.addEventListener("click", () => {
+  ordersState = chip.dataset.ordersState;
+  document.querySelectorAll("[data-orders-state]").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  loadOrders();
+}));
+
+// "Order all that's short": every low item with a supplier goes on its supplier's draft.
+const refillButton = document.querySelector("[data-refill]");
+if (refillButton) refillButton.addEventListener("click", async () => {
+  if (refillButton.disabled) return;
+  refillButton.disabled = true;
+  const result = await save("POST", "/api/v1/inventory/orders/refill", {}, { key: newKey(), label: refillButton.textContent.trim() });
+  refillButton.disabled = false;
+  window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
+  if (!result.settled) { alertMessage(t("ord_not_sure")); loadOrders(); return; }
+  if (!isOk(result)) { alertMessage(errorMessage(result, t("failed"))); return; }
+  const n = (result.data.touched || []).length;
+  toast(n ? t("ord_refilled", { n: localDigits(n) }) : t("ord_refill_none"));
+  ordersState = "open";
+  document.querySelectorAll("[data-orders-state]").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.ordersState === "open")));
+  loadOrders();
+});
+
+// --- a pick list that drops under the field and filters on each letter (Saged, 2026-11-25) ---
+
+const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
+  .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+
+function picker(input, list, source, onPick) {
+  let shown = [];
+  let active = -1;
+  const mark = () => {
+    [...list.children].forEach((li, i) => { li.classList.toggle("active", i === active); li.setAttribute("aria-selected", String(i === active)); });
+    const li = list.children[active];
+    if (li && li.id) { input.setAttribute("aria-activedescendant", li.id); li.scrollIntoView({ block: "nearest" }); }
+    else input.removeAttribute("aria-activedescendant");
+  };
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+  const open = () => {
+    const q = plain(input.value.trim());
+    shown = source().filter((item) => !q || plain(item.name).includes(q))
+      .sort((a, b) => (q && plain(a.name).startsWith(q) ? 0 : 1) - (q && plain(b.name).startsWith(q) ? 0 : 1)).slice(0, 40);
+    list.replaceChildren(...shown.map((item, i) => {
+      const li = el("li");
+      li.id = `${list.id}-${i}`;
+      li.setAttribute("role", "option");
+      const side = el("small", "muted", t("ord_have", { n: localDigits(item.quantity), unit: item.unit || "" }));
+      li.append(bdi(item.name), side);
+      li.addEventListener("mousedown", (e) => e.preventDefault());
+      li.addEventListener("click", () => { onPick(item); input.value = ""; close(); });
+      return li;
+    }));
+    if (!shown.length) {
+      const none = el("li", "muted", t("ord_no_item"));
+      none.setAttribute("aria-disabled", "true");
+      list.append(none);
+    }
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    active = -1;
+    mark();
+  };
+  input.addEventListener("focus", open);
+  input.addEventListener("click", () => { if (list.hidden) open(); });
+  input.addEventListener("input", open);
+  input.addEventListener("blur", close);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (list.hidden) { open(); return; }
+      if (!shown.length) return;
+      active = (active + (event.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length;
+      mark();
+    } else if (event.key === "Enter") {
+      event.preventDefault();  // never submits the form from the pick list
+      if (!list.hidden && shown[active]) { onPick(shown[active]); input.value = ""; close(); }
+    } else if (event.key === "Escape" && !list.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+  });
+  return { close };
+}
+
+// Two taps for what can't be undone: the first changes the words for a few seconds.
+function twoTaps(node) {
+  if (node.dataset.armed) { delete node.dataset.armed; node.textContent = node.dataset.label; return true; }
+  node.dataset.label = node.textContent;
+  node.dataset.armed = "1";
+  node.textContent = t("ord_tap_again");
+  setTimeout(() => { if (node.dataset.armed) { delete node.dataset.armed; node.textContent = node.dataset.label; } }, 4000);
+  return false;
+}
+
+// --- one order (a draft is checked and sent here; a sent one received) ---
+
+const orderDialog = document.getElementById("order-dialog");
+let current = null;     // the order as the server last answered
+let shownAs = "";       // its lines and note when shown, to know what changed
+let openOrder = async () => {};
+
+if (orderDialog) {
+  const form = orderDialog.querySelector("form");
+  const submitter = new Submitter(orderDialog);
+  const lines = orderDialog.querySelector("[data-order-lines]");
+  const addBox = orderDialog.querySelector("[data-order-add]");
+  const noteWrap = orderDialog.querySelector("[data-order-note-wrap]");
+  const noteField = form.elements.namedItem("note");
+  const noteText = orderDialog.querySelector("[data-order-note]");
+  const waBox = orderDialog.querySelector("[data-wa-box]");
+  const waLink = orderDialog.querySelector("[data-wa-link]");
+  const submit = orderDialog.querySelector("[data-submit]");
+  const cancelButton = orderDialog.querySelector("[data-cancel-order]");
+  const saveButton = orderDialog.querySelector("[data-save-order]");
+  const resendButton = orderDialog.querySelector("[data-resend]");
+  let warned = false;
+
+  const draftNow = () => ({
+    lines: [...lines.querySelectorAll("[data-line]")].map((li) => ({
+      item_id: Number(li.dataset.line), qty: parseWhole(li.querySelector("input").value) })),
+    note: noteField.value.trim(),
+  });
+  const changed = () => current && current.status === "draft" && JSON.stringify(draftNow()) !== shownAs;
+
+  // Leaving a draft with changes not saved: the first close says so; the second closes.
+  const holdClose = (event) => {
+    if (!changed() || warned || orderDialog.dataset.busy || orderDialog.dataset.unknown) return;
+    warned = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    submitter.say(t("ord_unsaved"));
+  };
+  orderDialog.addEventListener("click", (event) => { if (event.target.closest("[data-close]")) holdClose(event); }, true);
+  orderDialog.addEventListener("cancel", holdClose);
+  wireClose(orderDialog);
+
+  function lineNode(line, draft) {
+    const li = el("li");
+    const main = el("div", "mat-main");
+    main.append(el("strong")); main.firstChild.append(bdi(line.name));
+    if (draft) {
+      li.dataset.line = String(line.item_id);
+      main.append(el("p", "muted", t("ord_have", { n: localDigits(line.quantity), unit: line.unit || "" })));
+      const qty = el("input", "qty-input");
+      Object.assign(qty, { dir: "ltr", inputMode: "numeric", autocomplete: "off", maxLength: 7, value: String(line.qty) });
+      qty.setAttribute("aria-label", t("ord_qty_of", { name: line.name }));
+      const unit = el("span", "muted", line.unit || "");
+      const remove = button(t("ord_remove"), { "data-remove-line": "", "aria-label": t("ord_remove_of", { name: line.name }) });
+      const side = el("div", "row-actions");
+      side.append(qty, unit, remove);
+      li.append(main, side);
+    } else {
+      const got = line.received ? t("ord_got", { n: localDigits(line.received) }) : "";
+      main.append(el("p", "muted", [t("ord_asked", { n: localDigits(line.qty), unit: line.unit || "" }), got].filter(Boolean).join(" · ")));
+      li.append(main);
+    }
+    return li;
+  }
+
+  function render(order) {
+    current = order;
+    warned = false;
+    const draft = order.status === "draft";
+    orderDialog.querySelector("[data-order-supplier]").textContent = order.supplier_name;
+    pill(orderDialog.querySelector("[data-order-status]"), order.status);
+    const meta = [order.supplier_phone ? phoneText(order.supplier_phone) : t("ord_no_phone")];
+    if (order.sent_at) meta.push(t("ord_sent_on", { day: dayText(order.sent_at) }));
+    orderDialog.querySelector("[data-order-meta]").textContent = meta.join(" · ");
+    lines.replaceChildren(...order.lines.map((line) => lineNode(line, draft)));
+    if (!order.lines.length) lines.append(el("li", "empty-note", t("ord_empty")));
+    addBox.hidden = !draft;
+    noteWrap.hidden = !draft;
+    noteField.value = order.note || "";
+    noteText.hidden = draft || !order.note;
+    noteText.textContent = order.note || "";
+    saveButton.hidden = !draft;
+    resendButton.hidden = order.status !== "sent";
+    cancelButton.hidden = !["draft", "sent"].includes(order.status);
+    cancelButton.textContent = t("ord_cancel");
+    delete cancelButton.dataset.armed;
+    submit.hidden = !["draft", "sent"].includes(order.status);
+    if (!submitter.unknown) submit.textContent = t(draft ? "ord_send" : "ord_receive");
+    shownAs = draft ? JSON.stringify(draftNow()) : "";
+  }
+
+  const addLine = (item) => {
+    const there = lines.querySelector(`[data-line="${item.id}"]`);
+    if (there) { there.querySelector("input").focus(); return; }
+    const empty = lines.querySelector(".empty-note");
+    if (empty) empty.remove();
+    lines.append(lineNode({ item_id: item.id, name: item.name, unit: item.unit, quantity: item.quantity, qty: 1 }, true));
+    lines.lastElementChild.querySelector("input").select();
+    submitter.say("");
+  };
+  picker(addBox.querySelector("[data-item-q]"), addBox.querySelector("[data-item-list]"), () => items, addLine);
+
+  // Enter in a quantity never sends the order: it moves on to the next box, then to Save.
+  lines.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !event.target.classList.contains("qty-input")) return;
+    event.preventDefault();
+    const boxes = [...lines.querySelectorAll(".qty-input")];
+    const next = boxes[boxes.indexOf(event.target) + 1] || form.querySelector("[data-save-order]:not([hidden])");
+    if (next) next.focus();
+  });
+
+  lines.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-line]");
+    if (remove && !orderDialog.dataset.busy && !submitter.unknown) remove.closest("li").remove();
+  });
+
+  let loading = 0;
+  openOrder = async (id, opener) => {
+    if (orderDialog.open) return;  // a second tap must not wipe what is being typed
+    if (submitter.holdsUnknown()) { openDialog(orderDialog, opener); return; }
+    const ticket = ++loading;
+    const result = await get(`/api/v1/inventory/orders/${id}`);
+    if (ticket !== loading || orderDialog.open) return;  // only the last tap opens
+    if (!isOk(result)) { alertMessage(errorMessage(result, t("failed"))); return; }
+    submitter.reset();
+    waBox.hidden = true;
+    render(result.data.order);
+    openDialog(orderDialog, opener);
+  };
+
+  // A draft's lines as left, checked here first.
+  function draftBody() {
+    const now = draftNow();
+    for (const line of now.lines) if (!line.qty || line.qty > 100000) { submitter.say(t("bad_qty")); return null; }
+    return now;
+  }
+
+  async function saveDraft() {
+    const body = draftBody();
+    if (!body) return null;
+    const result = await submitter.run("PUT", `/api/v1/inventory/orders/${current.id}`, body, t("ord_saved_label", { name: current.supplier_name }));
+    if (!result || !isOk(result)) return null;
+    render(result.data.order);
+    return result;
+  }
+
+  // WhatsApp: a blank window opens inside the tap (before any wait), then gets the link. If the browser blocked
+  // it, the big "Open WhatsApp" button stays (design H1 flow 3).
+  async function sendNow() {
+    const win = window.open("", "_blank");
+    if (win) { try { win.opener = null; } catch (e) { /* ignore */ } }
+    if (current.status === "draft") {
+      if (!lines.querySelector("[data-line]")) { if (win) win.close(); submitter.say(t("ord_add_first")); return; }
+      if (changed() && !(await saveDraft())) { if (win) win.close(); return; }
+    }
+    const result = await submitter.run("POST", `/api/v1/inventory/orders/${current.id}/send`, {}, t("ord_sent_label", { name: current.supplier_name }));
+    if (!result || !isOk(result)) { if (win) win.close(); return; }
+    afterSend(result.data, win);
+  }
+
+  function afterSend(answer, win) {
+    render(answer.order);
+    const link = /^https:\/\/wa\.me\//.test(answer.link || "") ? answer.link : "";
+    waLink.href = link;
+    waBox.hidden = !link;
+    if (win && !win.closed) { if (link) win.location.href = link; else win.close(); }
+    toast(t("ord_sent_toast", { name: answer.order.supplier_name }));
+    loadOrders();
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (orderDialog.dataset.busy || !current) return;
+    if (submitter.unknown) {  // "Try again": the same request with the same key
+      const result = await submitter.run();
+      if (!result || !isOk(result)) return;
+      if (result.data.link) afterSend(result.data, null);
+      else if (result.data.order) { render(result.data.order); loadOrders(); }
+      return;
+    }
+    if (current.status === "draft") { await sendNow(); return; }
+    if (current.status === "sent") {
+      const order = current;
+      orderDialog.close();
+      openReceive(order, ordersList);
+    }
+  });
+
+  saveButton.addEventListener("click", async () => {
+    if (orderDialog.dataset.busy || submitter.unknown) return;
+    if (!changed()) { toast(t("saved")); return; }
+    if (await saveDraft()) { toast(t("ord_saved_label", { name: current.supplier_name })); loadOrders(); }
+  });
+
+  resendButton.addEventListener("click", () => { if (!orderDialog.dataset.busy && !submitter.unknown) sendNow(); });
+
+  cancelButton.addEventListener("click", async () => {
+    if (orderDialog.dataset.busy || submitter.unknown || !twoTaps(cancelButton)) return;
+    const result = await submitter.run("POST", `/api/v1/inventory/orders/${current.id}/cancel`, {}, t("ord_cancelled_label", { name: current.supplier_name }));
+    if (!result || !isOk(result)) return;
+    render(result.data.order);
+    toast(t("ord_cancelled_label", { name: current.supplier_name }));
+    loadOrders();
+  });
+}
+
+// --- receive what came (design H1 flow 5) ---
+
+const receiveDialog = document.getElementById("receive-dialog");
+let openReceive = () => {};
+if (receiveDialog) {
+  const form = receiveDialog.querySelector("form");
+  const submitter = new Submitter(receiveDialog);
+  const list = receiveDialog.querySelector("[data-receive-lines]");
+  const total = receiveDialog.querySelector("[data-receive-total]");
+  wireClose(receiveDialog);
+  let order = null;
+
+  const rows = () => [...list.querySelectorAll("[data-line]")];
+  const sum = () => {
+    let piastres = 0;
+    for (const li of rows()) {
+      const qty = parseWhole(li.querySelector('[name="qty"]').value) || 0;
+      const priceField = li.querySelector('[name="unit_price"]');
+      const price = priceField ? parsePiastres(priceField.value || "0") || 0 : 0;
+      piastres += qty * price;
+      const over = li.querySelector("[data-over]");
+      const left = Number(li.dataset.left);
+      over.hidden = qty <= left;
+      over.textContent = t("ord_more_than_left", { n: localDigits(left) });
+    }
+    if (total) total.textContent = t("ord_total", { amount: moneyText(piastres) });
+    return piastres;
+  };
+  receiveDialog.addEventListener("input", sum);
+
+  openReceive = (o, opener) => {
+    if (submitter.holdsUnknown()) { openDialog(receiveDialog, opener); return; }
+    order = o;
+    form.reset();
+    submitter.reset();
+    receiveDialog.querySelector("[data-name]").textContent = o.supplier_name;
+    list.replaceChildren(...o.lines.map((line) => {
+      const left = Math.max(line.qty - line.received, 0);
+      const li = el("li");
+      li.dataset.line = String(line.item_id);
+      li.dataset.left = String(left);
+      const main = el("div", "mat-main");
+      main.append(el("strong")); main.firstChild.append(bdi(line.name));
+      const said = [t("ord_asked", { n: localDigits(line.qty), unit: line.unit || "" })];
+      if (line.received) said.push(t("ord_got_before", { n: localDigits(line.received) }));
+      main.append(el("p", "muted", said.join(" · ")));
+      const over = el("p", "warn-text", "");
+      over.dataset.over = "";
+      over.hidden = true;
+      main.append(over);
+      const side = el("div", "row-actions wrap");
+      const qty = el("label", "field small-field", t("ord_came"));
+      const qtyInput = el("input");
+      Object.assign(qtyInput, { name: "qty", dir: "ltr", inputMode: "numeric", autocomplete: "off", maxLength: 7, value: String(left) });
+      qty.append(qtyInput);
+      side.append(qty);
+      if (perms.money) {
+        const price = el("label", "field small-field", t("ord_unit_price"));
+        const priceInput = el("input");
+        Object.assign(priceInput, { name: "unit_price", dir: "ltr", inputMode: "decimal", autocomplete: "off", maxLength: 12,
+                                    value: line.unit_cost ? amountInput(line.unit_cost) : "" });
+        price.append(priceInput);
+        side.append(price);
+      }
+      li.append(main, side);
+      return li;
+    }));
+    sum();
+    openDialog(receiveDialog, opener);
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (receiveDialog.dataset.busy) return;
+    let body = null;
+    if (!submitter.unknown) {
+      const sent = [];
+      for (const li of rows()) {
+        const qty = parseWhole(li.querySelector('[name="qty"]').value || "0");
+        if (qty === null || qty > 100000) { submitter.say(t("bad_qty")); li.querySelector('[name="qty"]').focus(); return; }
+        const line = { item_id: Number(li.dataset.line), qty };
+        const priceField = li.querySelector('[name="unit_price"]');
+        if (priceField && qty > 0) {
+          const price = parsePiastres(priceField.value);
+          if (price === null || !priceField.value.trim()) { submitter.say(t("ord_need_price")); priceField.focus(); return; }
+          line.unit_price = price;
+        }
+        sent.push(line);
+      }
+      const close = form.elements.namedItem("close").checked;
+      if (!sent.some((l) => l.qty > 0) && !close) { submitter.say(t("ord_nothing_came")); return; }
+      body = { lines: sent, close };
+      if (perms.money && sum() > 0) {
+        const paid = form.querySelector('[name="paid"]:checked');
+        if (!paid) { submitter.say(t("ord_need_paid")); return; }
+        body.paid = paid.value;
+      }
+    }
+    const result = await submitter.run("POST", `/api/v1/inventory/orders/${order.id}/receive`, body, t("ord_received_label", { name: order.supplier_name }));
+    if (!result || !isOk(result)) return;
+    // The pick lists' "you have" follows what came (until the page reloads).
+    for (const line of (body && body.lines) || []) {
+      const item = items.find((i) => i.id === line.item_id);
+      if (item) item.quantity += line.qty;
+    }
+    receiveDialog.close();
+    toast(t(result.data.order.status === "done" ? "ord_received_done" : "ord_received_part", { name: order.supplier_name }));
+    window.dispatchEvent(new CustomEvent("hamada:stock-changed"));
+    loadOrders();
+  });
+}
+
+// --- a new order by hand ---
+
+const newOrderDialog = document.getElementById("new-order-dialog");
+let startOrder = () => {};
+if (newOrderDialog) {
+  const form = newOrderDialog.querySelector("form");
+  const submitter = new Submitter(newOrderDialog);
+  const select = form.elements.namedItem("supplier_id");
+  const q = newOrderDialog.querySelector("[data-item-q]");
+  let picked = null;
+  wireClose(newOrderDialog);
+  // The supplier's own items first.
+  const source = () => {
+    const id = Number(select.value);
+    return [...items].sort((a, b) => (a.supplier_id === id ? 0 : 1) - (b.supplier_id === id ? 0 : 1));
+  };
+  const pickedLine = newOrderDialog.querySelector("[data-picked]");
+  const show = () => {
+    q.placeholder = t("ord_type_item");
+    pickedLine.textContent = picked ? t("ord_picked", { name: picked.name }) : "";
+  };
+  picker(q, newOrderDialog.querySelector("[data-item-list]"), source, (item) => { picked = item; show(); form.elements.namedItem("qty").focus(); });
+
+  startOrder = (supplierId, opener) => {
+    if (submitter.holdsUnknown()) { openDialog(newOrderDialog, opener); return; }
+    if (!suppliers.some((s) => s.is_active)) { alertMessage(t("ord_need_supplier")); return; }
+    form.reset();
+    submitter.reset();
+    picked = null;
+    show();
+    if (supplierId) select.value = String(supplierId);
+    openDialog(newOrderDialog, opener);
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (newOrderDialog.dataset.busy) return;
+    let body = null;
+    if (!submitter.unknown) {
+      if (!select.value) { submitter.say(t("ord_pick_supplier")); select.focus(); return; }
+      if (!picked) { submitter.say(t("ord_pick_item")); q.focus(); return; }
+      const qty = parseWhole(form.elements.namedItem("qty").value);
+      if (!qty || qty > 100000) { submitter.say(t("bad_qty")); return; }
+      body = { supplier_id: Number(select.value), lines: [{ item_id: picked.id, qty }] };
+    }
+    const result = await submitter.run("POST", "/api/v1/inventory/orders", body, t("ord_started_label"));
+    if (!result || !isOk(result)) return;
+    newOrderDialog.close();
+    loadOrders();
+    openOrder(result.data.order.id, ordersList);
+  });
+}
+
+// --- suppliers ---
+
+function fillSelects() {
+  document.querySelectorAll("[data-supplier-select]").forEach((select) => {
+    const value = select.value;
+    const first = select.options[0];
+    const options = suppliers.filter((s) => s.is_active || String(s.id) === value).map((s) => {
+      const option = document.createElement("option");
+      option.value = s.id;
+      option.textContent = s.name;
+      return option;
+    });
+    select.replaceChildren(first, ...options);
+    select.value = value;
+  });
+  const hint = document.querySelector("[data-no-suppliers]");
+  if (hint) hint.hidden = suppliers.length > 0;
+}
+
+function owedText(owed) {
+  if (owed > 0) return t("ord_we_owe", { amount: moneyText(owed) });
+  if (owed < 0) return t("ord_they_owe", { amount: moneyText(-owed) });
+  return t("ord_owe_nothing");
+}
+
+// "Comes on Saturday and Tuesday at 11:00 am", the week from Saturday as in Egypt.
+const WEEK = [5, 6, 0, 1, 2, 3, 4];
+
+function visitNode(s) {
+  const days = WEEK.filter((d) => (s.visit_days || []).includes(d)).map((d) => t(`wd_${d}`));
+  if (!days.length) return null;
+  let list = days.join("، ");
+  try { list = new Intl.ListFormat(document.documentElement.lang || "ar", { type: "conjunction" }).format(days); }
+  catch (e) { /* an old browser: commas */ }
+  if (!s.visit_time) return document.createTextNode(t("ord_comes", { days: list }));
+  const span = el("span");
+  const [before, after] = t("ord_comes_at", { days: list }).split("{time}");
+  span.append(before, clockNode(`T${s.visit_time}`), after || "");
+  return span;
+}
+
+function renderSuppliers() {
+  if (!suppliersList) return;
+  suppliersList.replaceChildren();
+  if (!suppliers.length) {
+    suppliersList.append(el("li", "empty-note", t(perms.manage ? "ord_no_suppliers_add" : "ord_no_suppliers")));
+    return;
+  }
+  for (const s of suppliers) {
+    const li = el("li");
+    li.dataset.supplier = String(s.id);
+    const main = el("div", "mat-main");
+    main.append(el("strong")); main.firstChild.append(bdi(s.name));
+    if (!s.is_active) main.append(" ", el("span", "pill grey", t("ord_stopped")));
+    const parts = [];
+    const p = el("p", "muted");
+    if (s.phone) { const phone = el("bdi", "ltr num", phoneText(s.phone)); p.append(phone); }
+    else p.append(t("ord_no_phone"));
+    if (s.owed != null) parts.push(owedText(s.owed));
+    if (parts.length) p.append(` · ${parts.join(" · ")}`);
+    main.append(p);
+    const visit = visitNode(s);
+    const count = items.filter((i) => i.supplier_id === s.id).length;
+    if (visit || count) {
+      const q = el("p", "muted");
+      if (visit) q.append(visit);
+      if (visit && count) q.append(" · ");
+      if (count) q.append(t("ord_items_count", { n: localDigits(String(count)) }));
+      main.append(q);
+    }
+    const side = el("div", "row-actions wrap");
+    if (s.is_active) side.append(button(t("ord_order_from"), { "data-order-from": String(s.id) }));
+    if (perms.money) side.append(button(t("ord_account"), { "data-account": String(s.id) }));
+    if (perms.manage) side.append(button(t("edit"), { "data-edit-supplier": String(s.id) }));
+    li.append(main, side);
+    suppliersList.append(li);
+  }
+}
+
+async function loadSuppliers() {
+  const result = await get("/api/v1/inventory/suppliers?all=1");
+  if (!isOk(result)) { if (suppliersStatus) suppliersStatus.textContent = errorMessage(result, t("failed")); return; }
+  if (suppliersStatus) suppliersStatus.textContent = "";
+  suppliers = result.data.suppliers;
+  renderSuppliers();
+  fillSelects();
+}
+
+// Add or edit a supplier; editing sends only what changed.
+const supplierDialog = document.getElementById("supplier-dialog");
+let editSupplier = () => {};
+if (supplierDialog) {
+  const form = supplierDialog.querySelector("form");
+  const submitter = new Submitter(supplierDialog);
+  const field = (name) => form.elements.namedItem(name);
+  let editing = null;
+  const linkList = supplierDialog.querySelector("[data-link-items]");
+  const linkFilter = supplierDialog.querySelector("[data-link-filter]");
+  const linkCount = supplierDialog.querySelector("[data-link-count]");
+  let linked = new Set();   // the item ids ticked now
+  let linkedBefore = new Set();
+  wireClose(supplierDialog);
+
+  const countText = () => (linked.size ? t("ord_link_count", { n: localDigits(String(linked.size)) }) : "");
+
+  // The tick boxes: this supplier's items first, then the rest by name; typing filters them.
+  function renderLinks() {
+    const own = editing ? editing.id : null;
+    const word = linkFilter.value.trim().toLowerCase();
+    const shown = items.filter((i) => !word || i.name.toLowerCase().includes(word))
+      .sort((a, b) => (linkedBefore.has(b.id) - linkedBefore.has(a.id)) || a.name.localeCompare(b.name, document.documentElement.lang || "ar"));
+    linkList.replaceChildren();
+    for (const i of shown) {
+      const li = el("li");
+      const label = el("label", "check");
+      const box = el("input");
+      box.type = "checkbox";
+      box.value = String(i.id);
+      box.checked = linked.has(i.id);
+      label.append(box, bdi(i.name));
+      if (i.supplier_id && i.supplier_id !== own) {
+        const other = suppliers.find((x) => x.id === i.supplier_id);
+        if (other) {
+          const note = el("span", "muted");
+          const [before, after] = t("ord_link_other").split("{name}");
+          note.append(before, bdi(other.name), after || "");
+          label.append(" ", note);
+        }
+      }
+      li.append(label);
+      linkList.append(li);
+    }
+    if (!shown.length && items.length) linkList.append(el("li", "muted", t("ord_link_none")));
+    supplierDialog.querySelector("[data-link-empty]").hidden = items.length > 0;
+    linkFilter.hidden = items.length < 8;
+    linkCount.textContent = countText();
+  }
+  linkList.addEventListener("change", (event) => {
+    const id = Number(event.target.value);
+    if (event.target.checked) linked.add(id); else linked.delete(id);
+    linkCount.textContent = countText();
+  });
+  linkFilter.addEventListener("input", renderLinks);
+  linkFilter.addEventListener("keydown", (event) => { if (event.key === "Enter") event.preventDefault(); });
+
+  const dayBoxes = () => [...form.querySelectorAll("[name=visit_day]")];
+  const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+
+  editSupplier = (supplier, opener) => {
+    if (submitter.holdsUnknown()) { openDialog(supplierDialog, opener); return; }
+    editing = supplier;
+    form.reset();
+    submitter.reset();
+    supplierDialog.querySelectorAll("[data-title-new]").forEach((n) => { n.hidden = Boolean(supplier); });
+    supplierDialog.querySelectorAll("[data-title-edit]").forEach((n) => { n.hidden = !supplier; });
+    if (supplier) {
+      field("name").value = supplier.name;
+      field("phone").value = supplier.phone || "";
+      field("notes").value = supplier.notes || "";
+      field("is_active").checked = supplier.is_active;
+      field("visit_time").value = supplier.visit_time || "";
+      dayBoxes().forEach((box) => { box.checked = (supplier.visit_days || []).includes(Number(box.value)); });
+    }
+    linkedBefore = new Set(supplier ? items.filter((i) => i.supplier_id === supplier.id).map((i) => i.id) : []);
+    linked = new Set(linkedBefore);
+    linkFilter.value = "";
+    renderLinks();
+    openDialog(supplierDialog, opener);
+  };
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (supplierDialog.dataset.busy) return;
+    let method = "POST";
+    let url = "/api/v1/inventory/suppliers";
+    let body = null;
+    if (!submitter.unknown) {
+      const v = { name: field("name").value.trim(), phone: field("phone").value.trim(), notes: field("notes").value.trim() };
+      if (!v.name) { submitter.say(t("ord_need_name")); return; }
+      const days = dayBoxes().filter((box) => box.checked).map((box) => Number(box.value)).sort((a, b) => a - b);
+      const time = field("visit_time").value;
+      if (editing) {
+        v.is_active = field("is_active").checked;
+        body = {};
+        for (const [k, value] of Object.entries(v)) if (value !== (editing[k] ?? "")) body[k] = value;
+        if (days.join() !== [...(editing.visit_days || [])].sort((a, b) => a - b).join()) body.visit_days = days;
+        if (time !== (editing.visit_time || "")) body.visit_time = time;
+        if (!sameSet(linked, linkedBefore)) body.item_ids = [...linked];
+        if (!Object.keys(body).length) { supplierDialog.close(); return; }
+        method = "PATCH";
+        url = `/api/v1/inventory/suppliers/${editing.id}`;
+      } else {
+        body = { ...v, visit_days: days, visit_time: time };
+        if (linked.size) body.item_ids = [...linked];
+      }
+    }
+    const result = await submitter.run(method, url, body, t("ord_supplier_saved", { name: field("name").value.trim() }));
+    if (!result || !isOk(result)) return;
+    supplierDialog.close();
+    toast(t("ord_supplier_saved", { name: result.data.supplier.name }));
+    // The page's own copy of who each item comes from, as the server now has it.
+    const id = result.data.supplier.id;
+    const now = new Set(result.data.item_ids || []);
+    let moved = false;
+    for (const i of items) {
+      const want = now.has(i.id) ? id : (i.supplier_id === id ? null : i.supplier_id);
+      if (want !== i.supplier_id) { i.supplier_id = want; moved = true; }
+      if (now.has(i.id) && i.backup_supplier_id === id) i.backup_supplier_id = null;
+    }
+    loadSuppliers();
+    if (moved) window.dispatchEvent(new CustomEvent("hamada:stock-changed"));
+  });
+}
+
+// --- a supplier's account: bills and payments (money.view) ---
+
+const accountDialog = document.getElementById("account-dialog");
+let openAccount = async () => {};
+let accountOf = null;
+if (accountDialog) {
+  const list = accountDialog.querySelector("[data-entries]");
+  const status = accountDialog.querySelector("[data-entries-status]");
+  wireClose(accountDialog);
+
+  function entryNode(entry) {
+    const li = el("li");
+    const main = el("div", "mat-main");
+    const head = el("strong", "", t(entry.kind === "bill" ? "ord_bill" : "ord_payment"));
+    main.append(head, " ", el("span", "muted", dayText(entry.day)));
+    if (entry.voided_at) main.append(" ", el("span", "pill grey", t("ord_voided")));
+    if (entry.note) { const p = el("p", "muted"); p.append(bdi(entry.note)); main.append(p); }
+    const side = el("div", "row-actions");
+    side.append(el("span", entry.voided_at ? "muted amt" : "amt", moneyText(entry.amount)));
+    if (perms.owner && !entry.voided_at) side.append(button(t("ord_void"), { "data-void": String(entry.id) }, "btn ghost danger"));
+    li.append(main, side);
+    return li;
+  }
+
+  // Closing it goes back to the supplier's "Account" button, even after the list was drawn again.
+  const backTo = (supplier) => ({
+    isConnected: true,
+    focus: () => { const node = document.querySelector(`[data-account="${supplier.id}"]`); if (node) node.focus(); },
+  });
+
+  openAccount = async (supplier) => {
+    accountOf = supplier;
+    accountDialog.querySelector("[data-name]").textContent = supplier.name;
+    status.textContent = t("loading");
+    list.replaceChildren();
+    accountDialog.querySelector("[data-owed]").textContent = "";
+    openDialog(accountDialog, backTo(supplier));
+    const result = await get(`/api/v1/inventory/suppliers/${supplier.id}/account`);
+    if (accountOf !== supplier) return;
+    if (!isOk(result)) { status.textContent = errorMessage(result, t("failed")); return; }
+    const entries = result.data.entries;
+    const owed = entries.filter((e) => !e.voided_at).reduce((n, e) => n + (e.kind === "bill" ? e.amount : -e.amount), 0);
+    accountDialog.querySelector("[data-owed]").textContent = owedText(owed);
+    status.textContent = entries.length ? "" : t("ord_no_entries");
+    list.replaceChildren(...entries.map(entryNode));
+  };
+
+  list.addEventListener("click", async (event) => {
+    const node = event.target.closest("[data-void]");
+    if (!node || node.disabled || !twoTaps(node)) return;
+    node.disabled = true;
+    const result = await save("POST", `/api/v1/inventory/vendor-entries/${node.dataset.void}/void`, {}, { key: newKey(), label: t("ord_void") });
+    node.disabled = false;
+    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
+    if (!result.settled) { alertMessage(t("ord_not_sure")); }
+    else if (!isOk(result)) { alertMessage(errorMessage(result, t("failed"))); return; }
+    else toast(t("ord_voided_toast"));
+    openAccount(accountOf);
+    loadSuppliers();
+  });
+}
+
+// A bill or a payment.
+const entryDialog = document.getElementById("entry-dialog");
+let addEntry = () => {};
+if (entryDialog) {
+  const form = entryDialog.querySelector("form");
+  const submitter = new Submitter(entryDialog);
+  const field = (name) => form.elements.namedItem(name);
+  let kind = "bill";
+  let supplier = null;
+  wireClose(entryDialog, () => { if (supplier) openAccount(supplier); });
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  addEntry = (which, who, opener) => {
+    if (submitter.holdsUnknown()) { accountDialog.close(); openDialog(entryDialog, opener); return; }
+    kind = which;
+    supplier = who;
+    form.reset();
+    submitter.reset();
+    entryDialog.querySelector("[data-title-bill]").hidden = kind !== "bill";
+    entryDialog.querySelector("[data-title-payment]").hidden = kind !== "payment";
+    entryDialog.querySelectorAll("[data-payment-only]").forEach((n) => { n.hidden = kind !== "payment"; });
+    entryDialog.querySelector("[data-name]").textContent = who.name;
+    field("day").value = today();
+    accountDialog.close();
+    openDialog(entryDialog, opener);
+  };
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (entryDialog.dataset.busy) return;
+    let body = null;
+    if (!submitter.unknown) {
+      const amount = parsePiastres(field("amount").value);
+      if (!amount || amount <= 0) { submitter.say(t("bad_amount")); return; }
+      if (!field("day").value) { submitter.say(t("ord_need_day")); return; }
+      body = { amount, day: field("day").value, note: field("note").value.trim() };
+      if (kind === "payment") body.from_shift = Boolean(field("from_shift") && field("from_shift").checked);
+    }
+    const url = `/api/v1/inventory/suppliers/${supplier.id}/${kind === "bill" ? "bills" : "payments"}`;
+    const result = await submitter.run("POST", url, body, t(kind === "bill" ? "ord_bill_saved" : "ord_payment_saved", { name: supplier.name }));
+    if (!result || !isOk(result)) return;
+    entryDialog.close();
+    toast(t(kind === "bill" ? "ord_bill_saved" : "ord_payment_saved", { name: supplier.name }));
+    loadSuppliers();
+    openAccount(supplier);
+  });
+}
+
+// --- one listener for the buttons in the lists ---
+
+const supplierOf = (id) => suppliers.find((s) => s.id === Number(id));
+document.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-open-order], [data-new-order], [data-order-from], [data-account], [data-edit-supplier], [data-new-supplier], [data-entry]");
+  if (!target) return;
+  if (target.dataset.openOrder) openOrder(Number(target.dataset.openOrder), target);
+  else if (target.hasAttribute("data-new-order")) startOrder(null, target);
+  else if (target.dataset.orderFrom) startOrder(Number(target.dataset.orderFrom), target);
+  else if (target.dataset.account) { const s = supplierOf(target.dataset.account); if (s) openAccount(s); }
+  else if (target.dataset.editSupplier) { const s = supplierOf(target.dataset.editSupplier); if (s) editSupplier(s, target); }
+  else if (target.hasAttribute("data-new-supplier")) editSupplier(null, target);
+  else if (target.dataset.entry && accountOf) addEntry(target.dataset.entry, accountOf, target);
+});
+
+renderOrders(data.orders || []);
+renderSuppliers();
+fillSelects();

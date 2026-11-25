@@ -38,6 +38,8 @@ async function reload() {
   applyFilter();
 }
 
+// A received order (orders.js) changes the stock: the cards come again.
+window.addEventListener("hamada:stock-changed", () => { if (holder) reload(); });
 if (filterInput) filterInput.addEventListener("input", applyFilter);
 if (lowButton) lowButton.addEventListener("click", () => {
   lowButton.setAttribute("aria-pressed", String(lowButton.getAttribute("aria-pressed") !== "true"));
@@ -225,7 +227,12 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     if (field("unit_cost")) field("unit_cost").value = item.unit_cost ? amountInput(item.unit_cost) : "";
     field("allow_negative").checked = item.allow_negative;
     if (field("section_id")) field("section_id").value = item.section_id || "";
-    if (item.name_en || item.category || item.sku || item.notes || item.allow_negative || item.section_id) dialog.querySelector("details").open = true;
+    if (field("supplier_id")) {  // design H1
+      field("supplier_id").value = item.supplier_id || "";
+      field("backup_supplier_id").value = item.backup_supplier_id || "";
+      field("max_qty").value = item.max_qty ? String(item.max_qty) : "";
+    }
+    if (item.name_en || item.category || item.sku || item.notes || item.allow_negative || item.section_id || item.supplier_id) dialog.querySelector("details").open = true;
   },
   request(item) {
     const v = {};
@@ -239,6 +246,14 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     }
     v.allow_negative = field("allow_negative").checked;
     if (field("section_id")) v.section_id = field("section_id").value ? Number(field("section_id").value) : null;
+    if (field("supplier_id")) {  // design H1
+      v.supplier_id = field("supplier_id").value ? Number(field("supplier_id").value) : null;
+      v.backup_supplier_id = field("backup_supplier_id").value ? Number(field("backup_supplier_id").value) : null;
+      if (v.backup_supplier_id && !v.supplier_id) { submitter.say(t("ord_need_main_supplier")); return null; }
+      if (v.backup_supplier_id && v.backup_supplier_id === v.supplier_id) { submitter.say(t("ord_backup_same")); return null; }
+      v.max_qty = parseWhole(field("max_qty").value || "0");
+      if (v.max_qty === null) { submitter.say(t("bad_qty")); return null; }
+    }
     if (!item) {
       v.quantity = parseWhole(field("quantity").value || "0");
       if (v.quantity === null) { submitter.say(t("bad_qty")); return null; }

@@ -1,6 +1,6 @@
 # Hamada v2
 
-The rebuild described in `docs/v2/design.md` (draft 2.2). Django 6.1 on PostgreSQL 18: a directory database and clinic shards, row-level security on every clinic table, server-rendered pages in Arabic (default, right to left) and English.
+The rebuild described in `docs/v2/design.md` (an index of `docs/v2/design/`) (draft 2.2). Django 6.1 on PostgreSQL 18: a directory database and clinic shards, row-level security on every clinic table, server-rendered pages in Arabic (default, right to left) and English.
 
 ## Run it
 

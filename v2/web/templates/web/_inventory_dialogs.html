@@ -80,6 +80,23 @@
         </select></label>
         {% endif %}
       </div>
+      {# Design H1: low stock goes on this supplier's order by itself, up to the most to keep. #}
+      <fieldset class="group">
+        <legend>{% translate "Ordering" %}</legend>
+        <div class="grid-form">
+          <label class="field">{% translate "Supplier" %}<select name="supplier_id" data-supplier-select>
+            <option value="">{% translate "None" %}</option>
+            {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+          </select></label>
+          <label class="field">{% translate "Backup supplier (optional)" %}<select name="backup_supplier_id" data-supplier-select>
+            <option value="">{% translate "None" %}</option>
+            {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+          </select></label>
+          <label class="field">{% translate "Most to keep (optional)" %}<input name="max_qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" placeholder="0"></label>
+        </div>
+        <p class="muted">{% translate "When the stock reaches the alert line, the item goes on its supplier's order up to this number (empty: twice the alert line)." %}</p>
+        <p class="muted" data-no-suppliers{% if suppliers %} hidden{% endif %}>{% translate "Add the clinic's suppliers under Suppliers, then pick each item's supplier here so short items are ordered on their own." %}</p>
+      </fieldset>
       <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="500" dir="auto"></textarea></label>
       <label class="check"><input type="checkbox" name="allow_negative">{% translate "Allow use when the stock shows zero" %}</label>
     </details>
