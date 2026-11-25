@@ -142,3 +142,31 @@ class OverviewPageTests(OverviewCase):
         r = viewer.get("/")
         self.assertEqual(r.status_code, 302)
         self.assertEqual(r["Location"], "/overview")
+
+
+from clinical.testing import M2TestCase  # noqa: E402
+
+
+class MaterialsPerDoctorTests(M2TestCase):
+    def test_the_team_shows_materials_per_visit_and_what_was_taken_beyond_the_recipes(self):
+        # Saged, 2026-11-25: the expected part is the procedures' materials; extra stock on a visit is flagged.
+        from inventory.models import Item, Movement
+        from summaries.models import DoctorDay
+
+        visit = self.in_room()
+        doctor = visit["doctor_id"] if "doctor_id" in visit else visit["doctor"]["id"]
+        with clinic_transaction(self.a.id, self.a.shard):
+            item = Item.objects.create(clinic_id=self.a.id, name="Composite", quantity=100, unit_cost=1000)
+            for qty, recipe in ((-2, 77), (-3, None)):  # 2 by a procedure's recipe, 3 taken on top
+                Movement.objects.create(clinic_id=self.a.id, item_id=item.id, kind="use", qty=qty, balance_after=95,
+                                        unit_cost=1000, appointment_id=visit["id"], visit_procedure_id=recipe)
+            day = DoctorDay.objects.get(clinic_id=self.a.id, doctor_id=doctor, day=visit["day"])
+            DoctorDay.objects.filter(clinic_id=self.a.id, id=day.id).update(done=1)
+        html = self.owner.get("/overview?period=today").content.decode()
+        team = html.split('id="team-title"')[1].split("</section>")[0]
+        self.assertIn("خامات لكل زيارة", team)
+        row = team.split(f'data-member="{doctor}"')[1].split("</tr>")[0]
+        cell = row.split("data-materials")[1].split("</td>")[0]
+        self.assertIn("50", cell)                 # 5 units × EGP 10 over 1 visit
+        self.assertIn("زيادة عن المتوقع", cell)
+        self.assertIn("30", cell.split("data-extra")[1])  # the 3 taken beyond the recipe

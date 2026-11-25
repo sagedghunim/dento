@@ -5035,3 +5035,9 @@ msgstr "مسح مريض"
 
 msgid "Change the stock count"
 msgstr "تغيير كمية في الجرد"
+
+msgid "Materials per visit"
+msgstr "خامات لكل زيارة"
+
+msgid "extra over expected"
+msgstr "زيادة عن المتوقع"

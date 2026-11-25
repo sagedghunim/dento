@@ -1268,3 +1268,4 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .perm-dot { width: 16px; height: 16px; border-radius: 4px; background: var(--red, #A93327); }
 .perm-box[aria-pressed="true"] .perm-dot { background: var(--teal, #1b8a6b); }
 .perm-box[aria-pressed="true"] { border-color: var(--teal, #1b8a6b); }
+.ov-team small.extra { color: var(--red, #A93327); font-weight: 700; }

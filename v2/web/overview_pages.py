@@ -87,9 +87,26 @@ def _team(ctx, first, today, money):
         r["before"] = before.get(r["membership_id"])
         r["trend"] = None if r["per_visit"] is None or r["before"] is None else (
             "up" if r["per_visit"] > r["before"] else "down" if r["per_visit"] < r["before"] else None)
+    # Materials per doctor (Saged, 2026-11-25, an accountant's advice): what each visit used from stock. The expected
+    # part is the procedures' own materials (the price list's recipes); "extra" is stock taken beyond them on the
+    # doctor's visits. One grouped read on the stock-use index, by the visits' days.
+    used = {d: (int(expected or 0), int(extra or 0)) for d, expected, extra in sql.rows(ctx, """
+        SELECT a.doctor_id,
+               sum(-m.qty * m.unit_cost) FILTER (WHERE m.visit_procedure_id IS NOT NULL),
+               sum(-m.qty * m.unit_cost) FILTER (WHERE m.visit_procedure_id IS NULL)
+          FROM "inventory_movement" m
+          JOIN "scheduling_appointment" a ON a.clinic_id = m.clinic_id AND a.id = m.appointment_id
+         WHERE m.clinic_id = %s AND m.kind IN ('use', 'return') AND m.at >= %s AND a.day BETWEEN %s AND %s
+         GROUP BY a.doctor_id""", [ctx.clinic_id, dt.datetime.combine(first - dt.timedelta(days=1), dt.time(),
+                                                                       tzinfo=dt.UTC), first, today])}
+    for r in rows:
+        expected, extra = used.get(r["membership_id"], (0, 0))
+        r["materials"] = (expected + extra) // r["visits"] if r["visits"] else None
+        r["materials_extra"] = extra if extra > 0 else 0
     visits = sum(r["visits"] for r in rows)
     average = sum(r["revenue"] for r in rows) // visits if visits else None
-    return {"rows": rows, "average": average}
+    materials = sum(sum(v) for v in used.values())
+    return {"rows": rows, "average": average, "materials_average": materials // visits if visits else None}
 
 
 def _per_visit(row):
