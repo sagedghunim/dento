@@ -5107,55 +5107,11 @@ msgstr "اكتب واختار من القايمة الجاهزة"
 msgid "Not in the ready list. Your name is kept as typed."
 msgstr "مش في القايمة الجاهزة. الاسم هيتسجل زي ما كتبته."
 
-msgid "Packages"
-msgstr "الباكجات"
-
-msgid "New package"
-msgstr "باكج جديد"
-
-msgid "Edit the package"
-msgstr "تعديل الباكج"
-
-msgid "Package name"
-msgstr "اسم الباكج"
-
-msgid "e.g. Braces"
-msgstr "مثلاً: تقويم"
-
-msgid "Delete the package"
-msgstr "امسح الباكج"
-
-msgid ""
-"A set of items the doctor takes in one pick during a visit, such as braces. "
-"Only stock changes, never the bill."
-msgstr ""
-"مجموعة حاجات الدكتور بياخدها بدوسة واحدة في الكشف، زي التقويم. بتتخصم من "
-"المخزون بس، ومش بتدخل في الفاتورة."
-
-msgid "No packages yet. Make one for what you use together often."
-msgstr "مفيش باكجات لسه. اعمل باكج للحاجات اللي بتستخدمها مع بعض كتير."
-
-msgid "A package with this name is already in the list."
-msgstr "فيه باكج بالاسم ده بالفعل."
-
 msgid "Used from stock"
 msgstr "الاستهلاك"
 
-msgid ""
-"What you used with this patient beyond the procedures' own materials. It "
-"comes off the stock, not the bill."
-msgstr ""
-"اللي استخدمته مع المريض ده غير المكوّنات اللي بتتخصم مع الإجراءات لوحدها. "
-"بيتخصم من المخزون، مش من الفاتورة."
-
-msgid "Pick a package or an item"
-msgstr "اختار باكج أو صنف"
-
 msgid "Tap, or type the first letters"
 msgstr "دوس، أو اكتب أول حروف"
-
-msgid "Take from stock"
-msgstr "اخصم من المخزون"
 
 msgid "Taken in this visit"
 msgstr "اللي اتخصم في الكشف ده"
@@ -5163,40 +5119,25 @@ msgstr "اللي اتخصم في الكشف ده"
 msgid "{n} {unit} left"
 msgstr "فاضل {n} {unit}"
 
-msgid "{n} left"
-msgstr "فاضل {n}"
-
-msgid "Package · {n} items"
-msgstr "باكج · {n} أصناف"
-
 msgid "Nothing with this name in stock."
 msgstr "مفيش حاجة بالاسم ده في المخزون."
 
-msgid "Added the package: {name}"
-msgstr "اتضاف الباكج: {name}"
+msgid "A visit used more than the stock showed"
+msgstr "كشف صرف أكتر من المكتوب في المخزون"
 
-msgid "Not enough in stock: {list}"
-msgstr "مش كفاية في المخزون: {list}"
-
-msgid "Taken from stock."
-msgstr "اتخصم من المخزون."
-
-msgid "Enter the package name."
-msgstr "اكتب اسم الباكج."
-
-msgid "Package saved: {name}"
-msgstr "اتحفظ الباكج: {name}"
-
-msgid "Package deleted: {name}"
-msgstr "اتمسح الباكج: {name}"
+#, python-format
+msgid ""
+"%(item)s · the stock showed %(had)s, the visit used %(used)s. Count it."
+msgstr ""
+"%(item)s · المخزون كان مكتوب فيه %(had)s والكشف صرف %(used)s. اعمله جرد."
 
 msgid ""
-"Added {n} of the package's {all} items: {name} (the rest aren't in this "
-"section)"
-msgstr "اتضاف {n} من {all} أصناف الباكج: {name} (الباقي مش في القسم ده)"
+"The procedures bring their materials here. Change a quantity, remove a line "
+"or add an item; it all comes off the stock when you finish the visit, not "
+"the bill."
+msgstr ""
+"مواد الإجراءات بتنزل هنا لوحدها. عدّل الكمية أو امسح سطر أو زوّد صنف، وكله "
+"بيتخصم من المخزون لما تدوس «خلصت الكشف»، مش من الفاتورة."
 
-msgid "The list of packages is full. Delete one you no longer use."
-msgstr "قايمة الباكجات اتملت. امسح باكج مش بتستخدمه."
-
-msgid "At most 30 items at a time. Take these, then add the rest."
-msgstr "أقصى حاجة 30 صنف في المرة. اخصم دول، وبعدين ضيف الباقي."
+msgid "At most 30 items in one visit."
+msgstr "أقصى حاجة 30 صنف في الكشف الواحد."

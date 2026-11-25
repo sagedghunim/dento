@@ -128,6 +128,12 @@ class RemoveProcedureTests(RemoveProcedureCase):
                  {"lines": [{"item_id": item["id"], "qty": 1}]})
         self.assertEqual(r.status_code, 200, r.content)
         record = self.record(self.filling, tooth=11, qty=1)
+        # A record from before 2026-11-25 took its materials when it was recorded: that use is made here by hand.
+        with clinic_transaction(self.a.id, self.a.shard):
+            Item.objects.filter(clinic_id=self.a.id, id=item["id"]).update(quantity=2)
+            Movement.objects.create(clinic_id=self.a.id, item_id=item["id"], kind="use", qty=-1, balance_after=2,
+                                    unit_cost=4000, patient_id=self.patient, appointment_id=record["appointment_id"],
+                                    visit_procedure_id=record["id"])
         # A purchase between: the return is averaged in at the cost it left at.
         r = call(self.owner, "POST", f"/api/v1/inventory/items/{item['id']}/purchases", {"qty": 2, "unit_price": 6000})
         self.assertEqual(r.json()["item"]["unit_cost"], 5000)

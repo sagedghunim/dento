@@ -345,6 +345,8 @@ function addProcedure(answer) {
   procList.append(li);
   if (answer.invoice && procTotal) procTotal.textContent = moneyText(answer.invoice.total);
   offerRecipe(catalogue.get(p.procedure_id), p);
+  // Its materials come into the visit's use card (Saged, 2026-11-25).
+  window.dispatchEvent(new CustomEvent("hamada:use-add", { detail: { record: p.id, procedure_id: p.procedure_id, qty: p.qty || 1 } }));
 }
 window.addEventListener("hamada:procedure-recorded", (event) => addProcedure(event.detail));
 
@@ -370,6 +372,7 @@ procList.addEventListener("click", async (event) => {
   li.removeKey = null;
   if (!isOk(result) && result.status !== 404) { say(errorMessage(result, t("failed"))); return; }
   li.remove();  // a 404 is a record already gone (another tab, or an answer lost before)
+  window.dispatchEvent(new CustomEvent("hamada:use-drop", { detail: { record: Number(li.dataset.record) } }));
   if (isOk(result)) {
     if (result.data.invoice && procTotal) procTotal.textContent = moneyText(result.data.invoice.total);
     window.dispatchEvent(new CustomEvent("hamada:procedure-removed", { detail: result.data }));  // the chart
@@ -1049,7 +1052,16 @@ if (finishButton) {
         return;
       }
       if (!box.value.trim() && !charted) { finishError.textContent = t("finish_need_notes"); box.focus(); return; }
-      const result = await save("POST", `/api/v1/appointments/${id}/finish`, { status: "in_room", check_record: true },
+      const body = { status: "in_room", check_record: true };
+      // What the use card holds comes off the stock with the finish (Saged, 2026-11-25).
+      const useCard = document.querySelector("[data-use-card]");
+      if (useCard && useCard.useLines) {
+        const uses = useCard.useLines();
+        if (uses.error) { finishError.textContent = uses.error; return; }
+        body.uses = uses.lines;
+        body.records = uses.records;
+      }
+      const result = await save("POST", `/api/v1/appointments/${id}/finish`, body,
         { label: t("finish"), auto: true });  // carries the status it expects: a resend is harmless
       if (!result.settled) { renderPending(); finishError.textContent = t("finish_unknown"); return; }
       const code = result.data && result.data.error && result.data.error.code;
@@ -1057,6 +1069,7 @@ if (finishButton) {
         leaving = true;
         try {
           sessionStorage.removeItem(draftKey);
+          if (isOk(result) && useCard && useCard.clearUses) useCard.clearUses();
           // "Back to the visit" on Today for five minutes, the timer still running (Saged, 2026-11-24).
           sessionStorage.setItem("hamada.finished", JSON.stringify({ id, name: data.patient_name, called_at: data.called_at,
             finished_at: Date.now() + skew, skew }));

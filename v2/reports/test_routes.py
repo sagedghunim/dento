@@ -48,10 +48,6 @@ EXPECTED = {
     ("PUT", "api/v1/inventory/materials/<int:procedure_id>"): ("inventory.manage",),
     ("POST", "api/v1/inventory/defaults"): ("inventory.manage",),
     # Packages (Saged, 2026-11-25)
-    ("GET", "api/v1/inventory/kits"): ("inventory.use",),
-    ("POST", "api/v1/inventory/kits"): ("inventory.manage",),
-    ("PUT", "api/v1/inventory/kits/<int:kit_id>"): ("inventory.manage",),
-    ("DELETE", "api/v1/inventory/kits/<int:kit_id>"): ("inventory.manage",),
     # F6, F8
     ("GET", "api/v1/reports/insights"): ("reports.view",),
     ("GET", "api/v1/reports/patients/<slug:name>"): ("reports.view",),
@@ -101,7 +97,7 @@ class M3RouteTests(M2TestCase):
                 continue
             path = "/" + pattern.replace("<slug:name>", "never_came_back")
             for part in ("shift_id", "category_id", "expense_id", "membership_id", "item_id", "procedure_id",
-                         "package_id", "appointment_id", "patient_id", "tag_id", "request_id", "deduction_id", "kit_id"):
+                         "package_id", "appointment_id", "patient_id", "tag_id", "request_id", "deduction_id"):
                 path = path.replace(f"<int:{part}>", "1")
             r = call(self.desk, method, path, {})
             self.assertEqual(r.status_code, 403, (method, path, r.content))

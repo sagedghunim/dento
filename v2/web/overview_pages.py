@@ -87,18 +87,28 @@ def _team(ctx, first, today, money):
         r["before"] = before.get(r["membership_id"])
         r["trend"] = None if r["per_visit"] is None or r["before"] is None else (
             "up" if r["per_visit"] > r["before"] else "down" if r["per_visit"] < r["before"] else None)
-    # Materials per doctor (Saged, 2026-11-25, an accountant's advice): what each visit used from stock. The expected
-    # part is the procedures' own materials (the price list's recipes); "extra" is stock taken beyond them on the
-    # doctor's visits. One grouped read on the stock-use index, by the visits' days.
-    used = {d: (int(expected or 0), int(extra or 0)) for d, expected, extra in sql.rows(ctx, """
-        SELECT a.doctor_id,
-               sum(-m.qty * m.unit_cost) FILTER (WHERE m.visit_procedure_id IS NOT NULL),
-               sum(-m.qty * m.unit_cost) FILTER (WHERE m.visit_procedure_id IS NULL)
+    # Materials per doctor (Saged, 2026-11-25, an accountant's advice): what each visit used from stock, against the
+    # expected: the recorded procedures' own materials (the price list's recipes) at today's average cost. Since
+    # 2026-11-25 the doctor edits the list before it comes off at the finish, so "extra" is what was used minus that.
+    since = dt.datetime.combine(first - dt.timedelta(days=1), dt.time(), tzinfo=dt.UTC)
+    actual = dict(sql.rows(ctx, """
+        SELECT a.doctor_id, sum(-m.qty * m.unit_cost)
           FROM "inventory_movement" m
           JOIN "scheduling_appointment" a ON a.clinic_id = m.clinic_id AND a.id = m.appointment_id
          WHERE m.clinic_id = %s AND m.kind IN ('use', 'return') AND m.at >= %s AND a.day BETWEEN %s AND %s
-         GROUP BY a.doctor_id""", [ctx.clinic_id, dt.datetime.combine(first - dt.timedelta(days=1), dt.time(),
-                                                                       tzinfo=dt.UTC), first, today])}
+         GROUP BY a.doctor_id""", [ctx.clinic_id, since, first, today]))
+    recipes = dict(sql.rows(ctx, """
+        SELECT a.doctor_id, sum(m.qty * v.qty * i.unit_cost)
+          FROM "clinical_visit_procedure" v
+          JOIN "scheduling_appointment" a ON a.clinic_id = v.clinic_id AND a.id = v.appointment_id
+          JOIN "inventory_material" m ON m.clinic_id = v.clinic_id AND m.procedure_id = v.procedure_id
+          JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id AND i.is_active
+         WHERE v.clinic_id = %s AND a.day BETWEEN %s AND %s AND a.status = 'done'
+         GROUP BY a.doctor_id""", [ctx.clinic_id, first, today]))
+    used = {}
+    for d in set(actual) | set(recipes):
+        expected, total = int(recipes.get(d) or 0), int(actual.get(d) or 0)
+        used[d] = (expected, total - expected)
     for r in rows:
         expected, extra = used.get(r["membership_id"], (0, 0))
         r["materials"] = (expected + extra) // r["visits"] if r["visits"] else None

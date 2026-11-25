@@ -397,7 +397,10 @@ class VisitProcedure(models.Model):
     unit_price = models.BigIntegerField()
     amount = models.BigIntegerField()
     invoice_line_id = models.BigIntegerField(null=True, blank=True)  # the line can be removed; this keeps the record
-    internal_cost = models.BigIntegerField(db_default=0)  # its materials at average cost (F2)
+    internal_cost = models.BigIntegerField(db_default=0)  # its materials at average cost (F2); 0 since 2026-11-25
+    # Its materials came off the stock (Saged, 2026-11-25): at "Done with this visit", not when it is recorded.
+    # True by default for the code that deducted at recording (until the deploy); new records write false.
+    stock_taken = models.BooleanField(db_default=True)
     patient_package = _ref("billing.PatientPackage", null=True)  # a prepaid session it used (F7)
     # What removing a record made by mistake puts back (Saged, 2026-11-17): the plan item's status before it was
     # done, and the tooth's row before this record set its state ({} when the tooth had no row; null: none set).

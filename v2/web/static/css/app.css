@@ -1306,8 +1306,6 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 /* ---------- the visit's use from stock (Saged, 2026-11-25) ---------- */
 .use-list .use-side { font-size: .8rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .use-list .use-side.use-out { color: var(--red); }
-.use-list li.use-kit { color: var(--teal-dark); }
-.use-list li.use-kit .use-side { color: var(--teal-dark); }
 .use-list li.use-none { cursor: default; font-weight: 600; }
 .use-list li.use-none:hover { background: none; }
 .use-name { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }

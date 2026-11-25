@@ -111,35 +111,3 @@ class Material(models.Model):
             _fk("procedure", "clinical.Procedure", "material_procedure_fk"),
             _fk("item", "inventory.Item", "material_item_fk"),
         ]
-
-
-class Kit(models.Model):
-    """A package of items the doctor takes from stock in one pick during a visit (Saged, 2026-11-25), e.g.
-    "Braces": its items and quantities. Set once in Inventory; never tied to money or to a procedure."""
-
-    clinic = _clinic()
-    name = models.CharField(max_length=80)
-    created_at = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        db_table = "inventory_kit"
-        constraints = [
-            models.UniqueConstraint(fields=["clinic", "id"], name="kit_clinic_id_uniq"),
-            models.UniqueConstraint(fields=["clinic", "name"], name="kit_name_uniq"),
-        ]
-
-
-class KitLine(models.Model):
-    clinic = _clinic()
-    kit = _ref(Kit)
-    item = _ref(Item)
-    qty = models.IntegerField()
-
-    class Meta:
-        db_table = "inventory_kit_line"
-        constraints = [
-            models.UniqueConstraint(fields=["clinic", "kit", "item"], name="kit_line_uniq"),
-            models.CheckConstraint(condition=Q(qty__gt=0, qty__lte=10000), name="kit_line_qty_valid"),
-            _fk("kit", "inventory.Kit", "kit_line_kit_fk"),
-            _fk("item", "inventory.Item", "kit_line_item_fk"),
-        ]

@@ -196,8 +196,9 @@ def visit_page(request, ctx, appointment_id):
                                                     "WHERE clinic_id = %s AND section_id = %s AND is_active "
                                                     "ORDER BY sort, id LIMIT 300",
                                                [ctx.clinic_id, visit["section_id"]])]
-    # What the doctor takes from stock in this visit (Saged, 2026-11-25): the section's items with what is left, the
-    # packages, and what was already taken by hand. Stock only: no prices, never the bill.
+    # The visit's use card (Saged, 2026-11-25): the section's items with what is left, each procedure's materials,
+    # the procedures recorded whose materials haven't come off yet, and what this visit already took. What the card
+    # holds comes off the stock at "Done with this visit". Stock only: no prices, never the bill.
     perms["stock"] = ctx.can("inventory.use")
     if perms["stock"]:
         from inventory import services as stock
@@ -205,9 +206,11 @@ def visit_page(request, ctx, appointment_id):
         config["stock"] = {
             "items": [{k: i[k] for k in ("id", "name", "unit", "quantity", "allow_negative")}
                       for i in stock.items(ctx, section_id=visit["section_id"])],
-            "kits": [{"id": k["id"], "name": k["name"],
-                      "lines": [{"item_id": l["item_id"], "qty": l["qty"]} for l in k["lines"] if l["is_active"]]}
-                     for k in stock.kits(ctx)],
+            "recipes": stock.recipes(ctx, visit["section_id"]),
+            "pending": [{"id": r[0], "procedure_id": r[1], "qty": r[2]} for r in sql.rows(ctx, """
+                SELECT id, procedure_id, qty FROM "clinical_visit_procedure"
+                 WHERE clinic_id = %s AND appointment_id = %s AND NOT stock_taken ORDER BY id""",
+                                                                                  [ctx.clinic_id, visit["id"]])],
             "used": stock.visit_uses(ctx, visit["id"]),
         }
     return render(request, "web/visit.html", {

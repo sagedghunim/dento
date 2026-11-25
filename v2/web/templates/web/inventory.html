@@ -44,29 +44,6 @@
   </ul>
   {% else %}<p class="empty-note">{% translate "The procedures list is empty." %}</p>{% endif %}
 </section>
-
-{# Packages (Saged, 2026-11-25): the doctor picks one in the visit and its items come into the visit's use together. #}
-<section class="card" aria-labelledby="kits-title" data-part="kits">
-  <div class="card-head">
-    <div>
-      <h2 id="kits-title">{% translate "Packages" %}</h2>
-      <p class="card-sub">{% translate "A set of items the doctor takes in one pick during a visit, such as braces. Only stock changes, never the bill." %}</p>
-    </div>
-    <button type="button" class="btn ghost" data-new-kit><svg class="icon"><use href="#i-plus"/></svg>{% translate "New package" %}</button>
-  </div>
-  <ul class="lines mat-list" data-kits>
-    {% for k in kits %}
-    <li data-kit="{{ k.json }}">
-      <div class="mat-main">
-        <strong><bdi dir="auto">{{ k.name }}</bdi></strong>
-        <p class="muted" data-mat-text>{% for line in k.lines %}<bdi dir="auto">{{ line.name }}</bdi> × <bdi class="ltr num">{{ line.qty|digits }}</bdi>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
-      </div>
-      <button type="button" class="btn ghost" data-edit-kit>{% translate "Edit" %}</button>
-    </li>
-    {% endfor %}
-  </ul>
-  <p class="empty-note" data-kits-empty{% if kits %} hidden{% endif %}>{% translate "No packages yet. Make one for what you use together often." %}</p>
-</section>
 {% endif %}
 
 {% include "web/_inventory_dialogs.html" %}

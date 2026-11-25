@@ -459,40 +459,14 @@ if (materialsDialog) {
     if (remove && !materialsDialog.dataset.busy && !submitter.unknown) remove.closest("li").remove();
   });
 
-  // The same dialog edits a package (Saged, 2026-11-25): a name above the lines, and a delete button.
-  const kitList = document.querySelector("[data-kits]");
-  const kitName = form.elements.namedItem("kit_name");
-  const deleteKit = materialsDialog.querySelector("[data-delete-kit]");
-  let kitRow = null;     // the package's row, or null for a new one
-  let kitMode = false;
-
   function linesText(items) {
     return items.length ? items.map((i) => `${i.name} × ${localDigits(i.qty)}`).join(" · ") : t("nothing_taken");
-  }
-
-  function showKit(kit) {
-    const li = kitRow || document.createElement("li");
-    if (!kitRow) {
-      li.innerHTML = '<div class="mat-main"><strong><bdi dir="auto"></bdi></strong><p class="muted" data-mat-text></p></div>';
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "btn ghost";
-      edit.dataset.editKit = "";
-      edit.textContent = t("edit");
-      li.append(edit);
-      kitList.append(li);
-    }
-    li.dataset.kit = JSON.stringify({ id: kit.id, name: kit.name, lines: kit.lines.map((l) => ({ item_id: l.item_id, qty: l.qty })) });
-    li.querySelector("bdi").textContent = kit.name;
-    li.querySelector("[data-mat-text]").textContent = linesText(kit.lines);
-    document.querySelector("[data-kits-empty]").hidden = true;
   }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (materialsDialog.dataset.busy) return;
-    const procedure = kitMode ? null : JSON.parse(materialsRow.dataset.procedure);
-    const kit = kitMode && kitRow ? JSON.parse(kitRow.dataset.kit) : null;
+    const procedure = JSON.parse(materialsRow.dataset.procedure);
     let body = null;
     if (!submitter.unknown) {
       const picked = [];
@@ -505,21 +479,6 @@ if (materialsDialog) {
         picked.push({ item_id: itemId, qty });
       }
       body = { lines: picked };
-      if (kitMode) {
-        const name = kitName.value.trim();
-        if (!name) { submitter.say(t("need_kit_name")); kitName.focus(); return; }
-        if (!picked.length) { submitter.say(t("need_line_item")); return; }
-        body.name = name;
-      }
-    }
-    if (kitMode) {
-      const label = t("kit_saved", { name: body ? body.name : kitName.value.trim() });
-      const result = await submitter.run(kit ? "PUT" : "POST", kit ? `/api/v1/inventory/kits/${kit.id}` : "/api/v1/inventory/kits", body, label);
-      if (!result || !isOk(result)) return;
-      materialsDialog.close();
-      showKit(result.data.kit);
-      toast(t("kit_saved", { name: result.data.kit.name }));
-      return;
     }
     const result = await submitter.run("PUT", `/api/v1/inventory/materials/${procedure.id}`, body, t("materials_saved", { name: procedure.name }));
     if (!result || !isOk(result)) return;
@@ -530,52 +489,18 @@ if (materialsDialog) {
     toast(t("materials_saved", { name: procedure.name }));
   });
 
-  deleteKit.addEventListener("click", async () => {
-    if (!kitRow || materialsDialog.dataset.busy || deleteKit.disabled) return;
-    const kit = JSON.parse(kitRow.dataset.kit);
-    deleteKit.disabled = true;
-    const result = await save("DELETE", `/api/v1/inventory/kits/${kit.id}`, null, { key: newKey(), label: kit.name });
-    deleteKit.disabled = false;
-    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
-    if (!result.settled) { alertMessage(t("unknown")); return; }
-    if (!isOk(result) && result.status !== 404) { alertMessage(errorMessage(result, t("failed"))); return; }
-    materialsDialog.close();
-    kitRow.remove();
-    kitRow = null;
-    document.querySelector("[data-kits-empty]").hidden = Boolean(kitList.children.length);
-    toast(t("kit_deleted", { name: kit.name }));
-  });
-
-  function openLines(opener, title, currentLines, asKit) {
-    kitMode = asKit;
-    submitter.reset();
-    materialsDialog.querySelectorAll("[data-kit-hide]").forEach((n) => { n.hidden = asKit; });
-    materialsDialog.querySelectorAll("[data-kit-show]").forEach((n) => { n.hidden = !asKit; });
-    materialsDialog.querySelector("[data-kit-new]").hidden = !asKit || Boolean(kitRow);
-    materialsDialog.querySelector("[data-kit-edit]").hidden = !asKit || !kitRow;
-    deleteKit.hidden = !asKit || !kitRow;
-    if (asKit) kitName.value = title;
-    else materialsDialog.querySelector("[data-name]").textContent = title;
-    lines.replaceChildren();
-    for (const line of currentLines) addLine(line.item_id, line.qty);
-    if (!currentLines.length) addLine(null, 1);
-    openDialog(materialsDialog, opener);
-    if (asKit && !kitRow) kitName.focus();
-  }
-
   document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-materials], [data-edit-kit], [data-new-kit]");
+    const button = event.target.closest("[data-materials]");
     if (!button) return;
     if (submitter.holdsUnknown()) { openDialog(materialsDialog, button); return; }
-    if (button.matches("[data-materials]")) {
-      materialsRow = button.closest("[data-procedure]");
-      const procedure = JSON.parse(materialsRow.dataset.procedure);
-      openLines(button, procedure.name, procedure.lines, false);
-      return;
-    }
-    kitRow = button.matches("[data-edit-kit]") ? button.closest("[data-kit]") : null;
-    const kit = kitRow ? JSON.parse(kitRow.dataset.kit) : { name: "", lines: [] };
-    openLines(button, kit.name, kit.lines, true);
+    materialsRow = button.closest("[data-procedure]");
+    const procedure = JSON.parse(materialsRow.dataset.procedure);
+    submitter.reset();
+    materialsDialog.querySelector("[data-name]").textContent = procedure.name;
+    lines.replaceChildren();
+    for (const line of procedure.lines) addLine(line.item_id, line.qty);
+    if (!procedure.lines.length) addLine(null, 1);
+    openDialog(materialsDialog, button);
   });
 }
 

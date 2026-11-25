@@ -352,23 +352,6 @@ def set_materials(ctx, procedure_id, lines):
     return materials(ctx, procedure_id)
 
 
-def deduct_materials(ctx, procedure_id, times, *, patient_id, appointment_id, visit_procedure_id, deltas):
-    """Recording a procedure (F2): take its active materials `times` over and return their cost at average cost.
-
-    Runs under the appointment and invoice locks; items are locked here (lock order 9). Short stock is 409
-    out_of_stock, which rolls the whole recording back.
-    """
-    rows = sql.rows(ctx, """
-        SELECT m.item_id, m.qty FROM "inventory_material" m
-          JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id
-         WHERE m.clinic_id = %s AND m.procedure_id = %s AND i.is_active""", [ctx.clinic_id, procedure_id])
-    if not rows:
-        return 0
-    taken, _ids = take(ctx, {item_id: qty * times for item_id, qty in rows}, "use", patient_id=patient_id,
-                       appointment_id=appointment_id, visit_procedure_id=visit_procedure_id, deltas=deltas)
-    return sum(qty * cost for qty, cost in taken.values())
-
-
 def return_materials(ctx, visit_procedure_id, *, patient_id, appointment_id, deltas):
     """Removing a procedure recorded by mistake (Saged, 2026-11-17): what its recording took goes back to stock.
 
@@ -500,100 +483,84 @@ def seed_place(clinic_id, sections, language="ar"):
             for key, qty in lines])
 
 
-# --- Packages (Saged, 2026-11-25) ------------------------------------------------------------------------------
-# A named set of items and quantities the doctor takes from stock in one pick during a visit (e.g. "Braces"). Set
-# once by a stock manager. Picking one only fills the visit's list; the use itself goes through `use`.
-
-KIT_NAME = 80
-MAX_KITS = 200
-
-
-def _kit_not_found():
-    return ApiError("not_found", _("This package wasn't found."), 404)
-
-
-def kits(ctx, kit_id=None):
-    """The place's packages by name (at most MAX_KITS), each with its lines (two queries); or one package."""
-    from core.i18n import pick
-
-    one = " AND id = %s" if kit_id is not None else ""
-    found = {r[0]: {"id": r[0], "name": r[1], "lines": []} for r in sql.rows(
-        ctx, f'SELECT id, name FROM "inventory_kit" WHERE clinic_id = %s{one} ORDER BY name, id LIMIT %s',
-        [ctx.clinic_id, *([kit_id] if kit_id is not None else []), MAX_KITS])}
-    if found:
-        for kit_id, item_id, qty, name, name_en, unit, active in sql.rows(ctx, """
-            SELECT k.kit_id, k.item_id, k.qty, i.name, i.name_en, i.unit, i.is_active FROM "inventory_kit_line" k
-              JOIN "inventory_item" i ON i.clinic_id = k.clinic_id AND i.id = k.item_id
-             WHERE k.clinic_id = %s AND k.kit_id = ANY(%s::bigint[]) ORDER BY i.name, k.item_id""",
-                                                                                [ctx.clinic_id, list(found)]):
-            if kit_id in found:
-                found[kit_id]["lines"].append({"item_id": item_id, "name": pick(name, name_en), "unit": unit, "qty": qty,
-                                               "is_active": active})
-    return list(found.values())
-
-
-def _kit(ctx, kit_id):
-    found = kits(ctx, kit_id)
-    if not found:
-        raise _kit_not_found()
-    return found[0]
-
-
-def save_kit(ctx, kit_id, name, lines):
-    """Create (kit_id None) or replace a package: its name and all its lines. Items must be active ones."""
-    found = {r[0] for r in sql.rows(ctx, 'SELECT id FROM "inventory_item" WHERE clinic_id = %s AND is_active '
-                                         "AND id = ANY(%s::bigint[])", [ctx.clinic_id, list(lines)])}
-    missing = sorted(set(lines) - found)
-    if missing:
-        raise ApiError("invalid", _("This item isn't used any more."), fields={"items": "unknown"},
-                       extra={"item_ids": missing})
-    try:
-        with transaction.atomic(using=ctx.alias):
-            if kit_id is None:
-                if sql.row(ctx, 'SELECT count(*) FROM "inventory_kit" WHERE clinic_id = %s', [ctx.clinic_id])[0] >= MAX_KITS:
-                    raise ApiError("too_many", _("The list of packages is full. Delete one you no longer use."), 409)
-                kit_id = sql.row(ctx, 'INSERT INTO "inventory_kit" (clinic_id, name, created_at) VALUES (%s, %s, %s) '
-                                      "RETURNING id", [ctx.clinic_id, name, timezone.now()])[0]
-            else:  # the kit row first, then its lines: the same order as a delete
-                if sql.row(ctx, 'UPDATE "inventory_kit" SET name = %s WHERE clinic_id = %s AND id = %s RETURNING id',
-                           [name, ctx.clinic_id, kit_id]) is None:
-                    raise _kit_not_found()
-                sql.run(ctx, 'DELETE FROM "inventory_kit_line" WHERE clinic_id = %s AND kit_id = %s',
-                        [ctx.clinic_id, kit_id])
-            values = ", ".join(["(%s, %s, %s, %s)"] * len(lines))
-            sql.run(ctx, f'INSERT INTO "inventory_kit_line" (clinic_id, kit_id, item_id, qty) VALUES {values}',
-                    [p for item_id in sorted(lines) for p in (ctx.clinic_id, kit_id, item_id, lines[item_id])])
-    except IntegrityError as error:
-        if getattr(getattr(error.__cause__, "diag", None), "constraint_name", None) == "kit_name_uniq":
-            raise ApiError("duplicate", _("A package with this name is already in the list."), 409,
-                           fields={"name": "duplicate"})
-        raise
-    return _kit(ctx, kit_id)
-
-
-def delete_kit(ctx, kit_id):
-    """A package goes with its lines. What visits already took stays in the stock history."""
-    with transaction.atomic(using=ctx.alias):
-        _delete_kit(ctx, kit_id)
-
-
-def _delete_kit(ctx, kit_id):
-    # The kit row first (as save_kit does), so an edit at the same moment waits instead of adding lines under it.
-    if sql.row(ctx, 'SELECT id FROM "inventory_kit" WHERE clinic_id = %s AND id = %s FOR UPDATE',
-               [ctx.clinic_id, kit_id]) is None:
-        raise _kit_not_found()
-    sql.run(ctx, 'DELETE FROM "inventory_kit_line" WHERE clinic_id = %s AND kit_id = %s', [ctx.clinic_id, kit_id])
-    if sql.row(ctx, 'DELETE FROM "inventory_kit" WHERE clinic_id = %s AND id = %s RETURNING id',
-               [ctx.clinic_id, kit_id]) is None:
-        raise _kit_not_found()
-
-
 def visit_uses(ctx, appointment_id):
-    """What was taken from stock by hand in this visit (not a procedure's own materials), by item."""
+    """What this visit already took from stock (net of what came back), by item."""
     from core.i18n import pick
 
     return [{"item_id": r[0], "name": pick(r[1], r[2]), "unit": r[3], "qty": r[4]} for r in sql.rows(ctx, """
         SELECT m.item_id, i.name, i.name_en, i.unit, -sum(m.qty) FROM "inventory_movement" m
           JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id
-         WHERE m.clinic_id = %s AND m.appointment_id = %s AND m.kind = 'use' AND m.visit_procedure_id IS NULL
-         GROUP BY m.item_id, i.name, i.name_en, i.unit ORDER BY min(m.at), m.item_id""", [ctx.clinic_id, appointment_id])]
+         WHERE m.clinic_id = %s AND m.appointment_id = %s AND m.kind IN ('use', 'return')
+         GROUP BY m.item_id, i.name, i.name_en, i.unit HAVING sum(m.qty) < 0 ORDER BY min(m.at), m.item_id""",
+                                                                                        [ctx.clinic_id, appointment_id])]
+
+
+def recipes(ctx, section_id):
+    """Each procedure's materials, for the visit screen to add when one is recorded: {procedure_id: [{item_id, qty}]}."""
+    found = {}
+    for procedure_id, item_id, qty in sql.rows(ctx, """
+        SELECT m.procedure_id, m.item_id, m.qty FROM "inventory_material" m
+          JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id AND i.is_active
+          JOIN "clinical_procedure" p ON p.clinic_id = m.clinic_id AND p.id = m.procedure_id
+         WHERE m.clinic_id = %s AND (p.section_id = %s OR p.section_id IS NULL) ORDER BY m.procedure_id, i.name""",
+                                               [ctx.clinic_id, section_id]):
+        found.setdefault(procedure_id, []).append({"item_id": item_id, "qty": qty})
+    return found
+
+
+def finish_visit(ctx, appointment, uses, deltas, records=None):
+    """"Done with this visit" (Saged, 2026-11-25): what the visit used comes off the stock, in the finish's transaction.
+
+    `uses` is the visit card's list {item_id: qty} as the doctor left it; None when the visit was finished without
+    the card (from the day's list), and then the recorded procedures' own materials are taken as they are. Either
+    way those procedures are marked taken, so a finish after going back in takes only what is new. `records`: the
+    procedures the card's list already holds; one recorded since (another tab) comes off with its own recipe.
+    These movements carry no procedure, so taking a procedure off after the finish puts nothing back (the owner
+    fixes the stock by a count); return_materials only serves records from before 2026-11-25.
+
+    Never refused for short stock: the patient was already treated, so the stock's number was wrong. A short item is
+    first raised to what was used (an `adjust` movement), then taken to zero, and the owner is told (item.short) so
+    it gets counted. Items removed from the list since are skipped. Items are locked by id (lock order 9).
+    """
+    marked = sql.rows(ctx, 'UPDATE "clinical_visit_procedure" SET stock_taken = true WHERE clinic_id = %s '
+                           "AND appointment_id = %s AND NOT stock_taken RETURNING procedure_id, qty, id",
+                      [ctx.clinic_id, appointment["id"]])
+    if uses is None:
+        uses = {}
+    elif records is not None:
+        # A procedure recorded (in another tab) after the card was read isn't in its list: its recipe as it is.
+        marked = [r for r in marked if r[2] not in records]
+        uses = dict(uses)
+    else:
+        marked = []
+    times = {}
+    for procedure_id, qty, _id in marked:
+        times[procedure_id] = times.get(procedure_id, 0) + qty
+    if times:
+        for procedure_id, item_id, qty in sql.rows(ctx, """
+            SELECT procedure_id, item_id, qty FROM "inventory_material"
+             WHERE clinic_id = %s AND procedure_id = ANY(%s::bigint[]) ORDER BY procedure_id, item_id""",
+                                               [ctx.clinic_id, list(times)]):
+            uses[item_id] = uses.get(item_id, 0) + qty * times[procedure_id]
+    if not uses:
+        return {}
+    rows = {r[0]: r[1:] for r in sql.rows(ctx, """
+        SELECT id, name, quantity, unit_cost, allow_negative FROM "inventory_item"
+         WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND is_active ORDER BY id FOR NO KEY UPDATE""",
+                                          [ctx.clinic_id, sorted(uses)])}
+    lines = {item_id: qty for item_id, qty in uses.items() if item_id in rows}
+    now = timezone.now()
+    for item_id in sorted(lines):
+        name, quantity, unit_cost, allow_negative = rows[item_id]
+        if allow_negative or quantity >= lines[item_id]:
+            continue
+        sql.run(ctx, 'UPDATE "inventory_item" SET quantity = %s WHERE clinic_id = %s AND id = %s',
+                [lines[item_id], ctx.clinic_id, item_id])
+        _insert_movements(ctx, [_movement(ctx, item_id, "adjust", lines[item_id] - quantity, lines[item_id], unit_cost,
+                                          patient_id=appointment["patient_id"], appointment_id=appointment["id"],
+                                          reason="used in a visit beyond the stock's number", at=now)])
+        record_change(ctx, "item.short", "item", item_id,
+                      before={"quantity": quantity}, after={"used": lines[item_id]}, appointment=appointment["id"])
+    taken, _ids = take(ctx, lines, "use", patient_id=appointment["patient_id"], appointment_id=appointment["id"],
+                       deltas=deltas)
+    return taken

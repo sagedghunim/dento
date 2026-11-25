@@ -55,34 +55,106 @@ class StockTests(M2TestCase):
         moves = call(self.owner, "GET", f"/api/v1/inventory/items/{item['id']}/movements").json()["items"]
         self.assertEqual([(m["kind"], m["qty"], m["balance_after"]) for m in moves], [("adjust", -3, 7), ("adjust", 10, 10)])
 
-    def test_recording_a_procedure_deducts_its_materials_and_costs_the_line(self):
+    def recipe(self, procedure, *lines):
+        r = call(self.owner, "PUT", f"/api/v1/inventory/materials/{procedure['id']}",
+                 {"lines": [{"item_id": item["id"], "qty": qty} for item, qty in lines]})
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def quantities(self, *items):
+        with clinic_transaction(self.a.id, self.a.shard):
+            return [Item.objects.get(clinic_id=self.a.id, id=i["id"]).quantity for i in items]
+
+    def finish(self, visit, uses=None, client=None, expect=200):
+        body = {"status": "in_room"} if uses is None else {"status": "in_room", "uses": uses}
+        r = call(client or self.doc, "POST", f"/api/v1/appointments/{visit['id']}/finish", body)
+        self.assertEqual(r.status_code, expect, r.content)
+        return r
+
+    def test_recording_takes_nothing_the_finish_takes_the_cards_list(self):
+        # Saged, 2026-11-25: the materials come into the visit's card; what it holds comes off at the finish.
         composite = self.item("Composite", quantity=3, unit_cost=4000)
         gloves = self.item("Gloves", quantity=1, unit_cost=300)
+        bond = self.item("Bond", quantity=10, unit_cost=100)
         filling = self.procedure("Composite filling, one surface")
-        r = call(self.owner, "PUT", f"/api/v1/inventory/materials/{filling['id']}",
-                 {"lines": [{"item_id": composite["id"], "qty": 1}, {"item_id": gloves["id"], "qty": 1}]})
-        self.assertEqual(r.status_code, 200, r.content)
+        self.recipe(filling, (composite, 1), (gloves, 1))
         visit = self.in_room()
         url = f"/api/v1/appointments/{visit['id']}/procedures"
-        r = call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 11})
-        self.assertEqual(r.status_code, 201, r.content)
-        with clinic_transaction(self.a.id, self.a.shard):
-            from billing.models import InvoiceLine
-            from clinical.models import VisitProcedure
+        for tooth in (11, 12):
+            self.assertEqual(call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": tooth}).status_code, 201)
+        self.assertEqual(self.quantities(composite, gloves), [3, 1])  # nothing taken yet, even past what is left
+        from clinical.models import VisitProcedure
 
-            record = VisitProcedure.objects.get(clinic_id=self.a.id, appointment_id=visit["id"])
-            self.assertEqual(record.internal_cost, 4300)
-            self.assertEqual(InvoiceLine.objects.get(clinic_id=self.a.id, id=record.invoice_line_id).internal_cost, 4300)
-            self.assertEqual(Movement.objects.filter(clinic_id=self.a.id, kind="use", visit_procedure_id=record.id,
-                                                     patient_id=visit["patient"]["id"]).count(), 2)
-        # The gloves ran out: the next recording is refused whole, nothing taken.
-        r = call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 12})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "out_of_stock"))
         with clinic_transaction(self.a.id, self.a.shard):
-            self.assertEqual(Item.objects.get(clinic_id=self.a.id, id=composite["id"]).quantity, 2)
-        # An item the place allows below zero doesn't stop the doctor.
-        call(self.owner, "PATCH", f"/api/v1/inventory/items/{gloves['id']}", {"allow_negative": True})
-        self.assertEqual(call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 12}).status_code, 201)
+            self.assertFalse(Movement.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"]).exists())
+            self.assertEqual(set(VisitProcedure.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"])
+                                 .values_list("stock_taken", "internal_cost")), {(False, 0)})
+        # The doctor lowered the composite, raised the gloves past the stock's number and added bond.
+        self.finish(visit, [{"item_id": composite["id"], "qty": 1}, {"item_id": gloves["id"], "qty": 3},
+                            {"item_id": bond["id"], "qty": 2}])
+        self.assertEqual(self.quantities(composite, gloves, bond), [2, 0, 8])
+        with clinic_transaction(self.a.id, self.a.shard):
+            from audit.models import AuditChange as Change
+
+            moves = list(Movement.objects.filter(clinic_id=self.a.id, item_id=gloves["id"]).order_by("id")
+                         .values_list("kind", "qty", "balance_after"))
+            self.assertEqual(moves[-2:], [("adjust", 2, 3), ("use", -3, 0)])  # the stock's number was 2 short
+            self.assertTrue(Change.objects.filter(clinic_id=self.a.id, action="item.short", target_id=gloves["id"]).exists())
+            self.assertEqual(set(VisitProcedure.objects.filter(clinic_id=self.a.id, appointment_id=visit["id"])
+                                 .values_list("stock_taken", flat=True)), {True})
+        self.assertIn("Gloves", self.owner.get("/alerts").content.decode())
+
+    def test_a_finish_without_the_card_takes_the_procedures_materials_once(self):
+        composite = self.item("Composite", quantity=5, unit_cost=4000)
+        filling = self.procedure("Composite filling, one surface")
+        self.recipe(filling, (composite, 2))
+        visit = self.in_room()
+        url = f"/api/v1/appointments/{visit['id']}/procedures"
+        call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 11})
+        self.finish(visit, client=self.desk)  # from the day's list: no card, the recipe as it is
+        self.assertEqual(self.quantities(composite), [3])
+        self.finish(visit, client=self.desk)  # a repeat takes nothing more
+        self.assertEqual(self.quantities(composite), [3])
+        # Back in the room: only what is recorded after it comes off at the next finish.
+        r = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/reopen", {"status": "done"})
+        self.assertEqual(r.status_code, 200, r.content)
+        call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 12})
+        html = self.doc.get(f"/visits/{visit['id']}").content.decode()
+        data = html.split('id="visit-data" type="application/json">')[1].split("</script>")[0]
+        import json
+
+        stock = json.loads(data)["stock"]
+        self.assertEqual([u["qty"] for u in stock["used"]], [2])
+        self.assertEqual(len(stock["pending"]), 1)
+        self.finish(visit)
+        self.assertEqual(self.quantities(composite), [1])
+
+    def test_recorded_after_the_finish_or_in_another_tab_still_comes_off(self):
+        # Reviews, 2026-11-25: no finish is coming for a record on a done visit; a record the card never saw
+        # comes off with its recipe at the finish.
+        composite = self.item("Composite", quantity=10, unit_cost=4000)
+        filling = self.procedure("Composite filling, one surface")
+        self.recipe(filling, (composite, 2))
+        visit = self.in_room()
+        url = f"/api/v1/appointments/{visit['id']}/procedures"
+        seen = call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 11}).json()["procedure"]["id"]
+        call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 12})  # another tab: not on the card
+        r = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/finish",
+                 {"status": "in_room", "uses": [{"item_id": composite["id"], "qty": 1}], "records": [seen]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.quantities(composite), [7])  # 1 from the card + 2 by the unseen one's recipe
+        r = call(self.doc, "POST", url, {"procedure_id": filling["id"], "tooth": 13})
+        self.assertEqual(r.status_code, 201, r.content)  # a late record on the finished visit comes off at once
+        self.assertEqual(self.quantities(composite), [5])
+
+    def test_the_cards_list_needs_the_stock_code(self):
+        composite = self.item("Composite", quantity=5)
+        visit = self.in_room()
+        bad = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/finish",
+                   {"status": "in_room", "uses": [{"item_id": composite["id"], "qty": 0}]})
+        self.assertEqual(bad.status_code, 400)
+        self.set_codes("doctor", revoked=["inventory.use"])
+        self.finish(visit, [{"item_id": composite["id"], "qty": 1}], expect=403)
+        self.assertEqual(self.quantities(composite), [5])
 
     def test_low_stock_shows_on_today_and_moves_its_version(self):
         item = self.item("Needles", quantity=3, threshold=2)
@@ -171,79 +243,29 @@ class StockConcurrencyTests(TransactionTestCase):
             self.assertEqual(Movement.objects.filter(clinic_id=self.a.id, item_id=item["id"], kind="use").count(), 1)
 
 
-class KitTests(M2TestCase):
-    """Packages (Saged, 2026-11-25): a stock manager sets them once; the doctor picks one in the visit and its items
-    come into the visit's use together. Stock only, never the bill."""
-
+class VisitUseTests(M2TestCase):
     item = StockTests.item
 
-    def kit(self, name, lines, client=None, method="POST", kit_id=None, expect=201):
-        url = "/api/v1/inventory/kits" + (f"/{kit_id}" if kit_id else "")
-        r = call(client or self.owner, method, url, {"name": name, "lines": lines})
-        self.assertEqual(r.status_code, expect, r.content)
-        return r.json()
-
-    def test_a_manager_makes_edits_and_deletes_a_package(self):
-        wire, bands = self.item("Wire", quantity=20), self.item("Bands", quantity=40)
-        kit = self.kit("Braces", [{"item_id": wire["id"], "qty": 2}, {"item_id": bands["id"], "qty": 4}])["kit"]
-        self.assertEqual([(l["name"], l["qty"]) for l in kit["lines"]], [("Bands", 4), ("Wire", 2)])
-        dup = self.kit("Braces", [{"item_id": wire["id"], "qty": 1}], expect=409)
-        self.assertEqual(dup["error"]["fields"], {"name": "duplicate"})
-        kit = self.kit("Braces, upper", [{"item_id": wire["id"], "qty": 1}], method="PUT", kit_id=kit["id"], expect=200)["kit"]
-        self.assertEqual((kit["name"], [(l["name"], l["qty"]) for l in kit["lines"]]), ("Braces, upper", [("Wire", 1)]))
-        listed = call(self.doc, "GET", "/api/v1/inventory/kits").json()["kits"]
-        self.assertEqual([k["name"] for k in listed], ["Braces, upper"])
-        self.assertEqual(call(self.owner, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 200)
-        self.assertEqual(call(self.owner, "GET", "/api/v1/inventory/kits").json()["kits"], [])
-        self.assertEqual(call(self.owner, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 404)
-        with clinic_transaction(self.a.id, self.a.shard):  # setting a package never touches stock
-            self.assertEqual(Item.objects.get(clinic_id=self.a.id, id=wire["id"]).quantity, 20)
-
-    def test_a_package_save_sent_again_answers_the_same(self):
-        # Its answer was lost and the same key comes again (backend review, 2026-11-25): the package, not a crash.
-        wire = self.item("Wire")
-        body = {"name": "Braces", "lines": [{"item_id": wire["id"], "qty": 1}]}
-        first = call(self.owner, "POST", "/api/v1/inventory/kits", body, key="0b7c1a52-5d4e-4c39-9d1e-2f1a7a6e9c01")
-        again = call(self.owner, "POST", "/api/v1/inventory/kits", body, key="0b7c1a52-5d4e-4c39-9d1e-2f1a7a6e9c01")
-        self.assertEqual(first.status_code, 201, first.content)
-        self.assertEqual(again.json()["kit"]["id"], first.json()["kit"]["id"])
-        self.assertEqual(len(call(self.owner, "GET", "/api/v1/inventory/kits").json()["kits"]), 1)
-
-    def test_only_stock_managers_change_packages_and_never_another_places(self):
-        wire = self.item("Wire")
-        self.kit("Braces", [{"item_id": wire["id"], "qty": 1}], client=self.doc, expect=403)
-        empty = call(self.owner, "POST", "/api/v1/inventory/kits", {"name": "Empty", "lines": []})
-        self.assertEqual(empty.status_code, 400)
-        kit = self.kit("Braces", [{"item_id": wire["id"], "qty": 1}])["kit"]
-        other = self.b.client("owner")
-        self.assertEqual(call(other, "GET", "/api/v1/inventory/kits").json()["kits"], [])
-        self.kit("Mine", [{"item_id": wire["id"], "qty": 1}], client=other, method="PUT", kit_id=kit["id"], expect=400)  # A's item is not B's
-        self.assertEqual(call(other, "DELETE", f"/api/v1/inventory/kits/{kit['id']}").status_code, 404)
-        self.kit("Theirs", [{"item_id": wire["id"], "qty": 1}], client=other, expect=400)
-        r = call(self.owner, "PATCH", f"/api/v1/inventory/items/{wire['id']}", {"is_active": False})
-        self.assertEqual(r.status_code, 200, r.content)
-        self.kit("Old wire", [{"item_id": wire["id"], "qty": 1}], expect=400)
-
-    def test_the_visit_shows_items_packages_and_what_was_taken_by_hand(self):
+    def test_the_visit_card_has_the_items_the_recipes_and_what_is_pending(self):
         wire = self.item("Wire", quantity=20)
-        self.kit("Braces", [{"item_id": wire["id"], "qty": 2}])
+        filling = self.procedure("Composite filling, one surface")
+        r = call(self.owner, "PUT", f"/api/v1/inventory/materials/{filling['id']}", {"lines": [{"item_id": wire["id"], "qty": 2}]})
+        self.assertEqual(r.status_code, 200, r.content)
         visit = self.in_room()
+        r = call(self.doc, "POST", f"/api/v1/appointments/{visit['id']}/procedures", {"procedure_id": filling["id"], "tooth": 11})
+        self.assertEqual(r.status_code, 201, r.content)
         html = self.doc.get(f"/visits/{visit['id']}").content.decode()
         self.assertIn("data-use-card", html)
         self.assertIn("js/use.js", html)
         self.assertNotIn("{#", html)
-        r = call(self.doc, "POST", "/api/v1/inventory/uses",
-                 {"lines": [{"item_id": wire["id"], "qty": 3}], "appointment_id": visit["id"]})
-        self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(r.json()["items"][0]["quantity"], 17)
-        html = self.doc.get(f"/visits/{visit['id']}").content.decode()
         data = html.split('id="visit-data" type="application/json">')[1].split("</script>")[0]
         import json
 
         stock = json.loads(data)["stock"]
-        self.assertEqual([(i["name"], i["quantity"]) for i in stock["items"]], [("Wire", 17)])
-        self.assertEqual([(k["name"], k["lines"]) for k in stock["kits"]], [("Braces", [{"item_id": wire["id"], "qty": 2}])])
-        self.assertEqual([(u["name"], u["qty"]) for u in stock["used"]], [("Wire", 3)])
+        self.assertEqual([(i["name"], i["quantity"]) for i in stock["items"]], [("Wire", 20)])
+        self.assertEqual(stock["recipes"][str(filling["id"])], [{"item_id": wire["id"], "qty": 2}])
+        self.assertEqual([(p["procedure_id"], p["qty"]) for p in stock["pending"]], [(filling["id"], 1)])
+        self.assertEqual(stock["used"], [])
         self.assertNotIn("unit_cost", data)  # stock only: no money in the visit's list
         with clinic_transaction(self.a.id, self.a.shard):  # never the bill
             from billing.models import InvoiceLine

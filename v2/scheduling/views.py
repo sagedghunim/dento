@@ -237,7 +237,8 @@ def _replay_finish(ctx, stored):
 
 @api("POST", perm="appointments.queue", replay=_replay_finish)
 def finish_view(request, ctx, data, appointment_id):
-    """finish {status, payment?, earlier?: {amount, method}, next_visit?: {doctor_id, service_id, day, starts_at?}}.
+    """finish {status, payment?, earlier?: {amount, method}, next_visit?: {doctor_id, service_id, day, starts_at?},
+    uses?: [{item_id, qty}]} (uses: what the visit took from stock; left out, the procedures' own materials).
 
     One request: the visit's payment, the patient's earlier balance (oldest invoices first) and the next
     booking all commit together or not at all. A finish after someone else's is 409 already_finished.
@@ -252,9 +253,19 @@ def finish_view(request, ctx, data, appointment_id):
         from clinical.services import require_record
 
         require_record(ctx, appointment_id)
+    uses = None
+    if data.get("uses") is not None:
+        # The visit's use card (Saged, 2026-11-25): what the visit took from stock, as the doctor left it.
+        from inventory.views import _lines
+
+        ctx.require("inventory.use")
+        uses = {} if data["uses"] == [] else _lines({"lines": data["uses"]})
+    records = None
+    if uses is not None and isinstance(data.get("records"), list) and len(data["records"]) <= 200:
+        records = {validate.ident(r, "records") for r in data["records"]}
     outcome = {}
     version = services.change_status(ctx, appointment_id, "finish", seen, payment=payment, earlier=earlier,
-                                     next_visit=_next_visit(data), outcome=outcome)
+                                     next_visit=_next_visit(data), uses=uses, records=records, outcome=outcome)
     return Result(_finish_answer(ctx, appointment_id, version, outcome.get("next_appointment")),
                   target_type="appointment", target_id=appointment_id)
 cancel_view = _status_view("cancel", "appointments.book")

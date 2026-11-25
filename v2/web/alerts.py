@@ -44,6 +44,7 @@ KINDS = (
     ("patient", ("patient.hide", "patient.delete"), "Deleted a patient", "files"),
     ("late", (), "A file changed after its visit ended", "files"),
     ("stock", ("item.count",), "A stock count changed the quantity", "stock"),
+    ("short", ("item.short",), "A visit used more than the stock showed", "stock"),
 )
 GROUPS = ("drawer", "bills", "files", "stock")
 KEYS = tuple(k[0] for k in KINDS)
@@ -66,7 +67,8 @@ def _labels():
             "register": _("The register was short or over"), "cash_in": _("Money put into the drawer"), "cash": _("Money taken out of the drawer"),
             "auto_close": _("The register closed by itself without a count"),
             "price": _("Changed a price"), "expense": _("Voided an expense"),
-            "stock": _("A stock count changed the quantity"), "patient": _("Deleted a patient"),
+            "stock": _("A stock count changed the quantity"), "short": _("A visit used more than the stock showed"),
+            "patient": _("Deleted a patient"),
             "late": _("A file changed after its visit ended")}
 
 
@@ -170,7 +172,7 @@ def items(ctx, group=None):
     patient_ids = [r["details"].get("before", {}).get("patient_id") for r in rows if r["action"] == "visit_procedure.remove"]
     patients = dict(sql.rows(ctx, 'SELECT id, full_name FROM "patients_patient" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                              [ctx.clinic_id, [i for i in patient_ids if i]])) if patient_ids else {}
-    item_ids = [r["target_id"] for r in rows if r["action"] == "item.count"]
+    item_ids = [r["target_id"] for r in rows if r["action"] in ("item.count", "item.short")]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
     from .file_history import describe
@@ -254,6 +256,11 @@ def items(ctx, group=None):
         elif action == "item.count":
             item["what"] = _("A stock count changed the quantity")
             item["detail"] = f"{stock.get(r['target_id'], '')} · {before.get('quantity')} → {after.get('quantity')}"
+        elif action == "item.short":
+            # The stock showed less than a visit used (Saged, 2026-11-25): its number was wrong; count it.
+            item["what"] = _("A visit used more than the stock showed")
+            item["detail"] = _("%(item)s · the stock showed %(had)s, the visit used %(used)s. Count it.") % {
+                "item": stock.get(r["target_id"], ""), "had": before.get("quantity"), "used": after.get("used")}
         out.append(item)
     return out
 

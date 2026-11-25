@@ -206,22 +206,20 @@
   {% endif %}
 
   {% if perms.stock %}
-  {% comment %}What the doctor takes from stock (Saged, 2026-11-25): a tap drops the packages and the items, each letter
-  filters them; the picks wait in a list with their quantities until "Take from stock". Stock only, never the bill.{% endcomment %}
+  {% comment %}What the visit uses from stock (Saged, 2026-11-25): a recorded procedure brings its materials in; each line
+  has a quantity and an X; the field below drops the items, each letter filters them. It all comes off the stock at
+  "Done with this visit". Stock only, never the bill.{% endcomment %}
   <section class="card" aria-labelledby="use-title" data-use-card>
     <h2 id="use-title">{% translate "Used from stock" %}</h2>
-    <p class="card-sub">{% translate "What you used with this patient beyond the procedures' own materials. It comes off the stock, not the bill." %}</p>
+    <p class="card-sub">{% translate "The procedures bring their materials here. Change a quantity, remove a line or add an item; it all comes off the stock when you finish the visit, not the bill." %}</p>
+    <ol class="rx-write-lines" data-use-lines></ol>
     <div class="combo">
-      <label class="field">{% translate "Pick a package or an item" %}<input name="use_pick" dir="auto" autocomplete="off" maxlength="60"
+      <label class="field">{% translate "Add an item" %}<input name="use_pick" dir="auto" autocomplete="off" maxlength="60"
         role="combobox" aria-expanded="false" aria-controls="use-list" aria-autocomplete="list"
         placeholder="{% translate "Tap, or type the first letters" %}"></label>
-      <ul class="combo-list use-list" id="use-list" role="listbox" hidden></ul>
+      <ul class="combo-list use-list" id="use-list" role="listbox" aria-label="{% translate "Add an item" %}" hidden></ul>
     </div>
-    <ol class="rx-write-lines" data-use-lines></ol>
-    <div class="use-foot" data-use-foot hidden>
-      <p class="form-error" data-use-error role="alert"></p>
-      <button type="button" class="btn" data-use-save>{% translate "Take from stock" %}</button>
-    </div>
+    <p class="form-error" data-use-error role="alert"></p>
     <div data-used-box hidden>
       <h3 class="use-done-title">{% translate "Taken in this visit" %}</h3>
       <ul class="proc-list" data-used></ul>

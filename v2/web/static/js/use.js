@@ -1,10 +1,9 @@
-// What the doctor takes from stock in a visit (Saged, 2026-11-25). A tap on the field drops the packages, then the
-// items with what is left of each; every letter filters them. A package brings all its items at once. The picks wait
-// in a list with their quantities until "Take from stock", which is one request (all or nothing) under one key until
-// a definite answer, so a dropped connection never takes stock twice. Stock only: never the bill.
-import { errorMessage, isOk, newKey, save } from "./api.js";
+// What the visit uses from stock (Saged, 2026-11-25). A recorded procedure brings its materials in as lines; every
+// line has a quantity that goes up or down and an X; the field under them drops the section's items with what is left,
+// and every letter filters them. Nothing is sent from here: "Done with this visit" (room.js) reads the lines through
+// card.useLines() and the finish takes them off the stock in its own transaction. Until then the list is kept in this
+// tab, so a reload loses nothing. Stock only: never the bill.
 import { localDigits, parseWhole } from "./numbers.js";
-import { toast } from "./shell.js";
 import { t } from "./strings.js";
 
 const data = JSON.parse(document.getElementById("visit-data").textContent);
@@ -14,14 +13,13 @@ if (stock && card) {
   const input = card.querySelector('[name="use_pick"]');
   const listEl = card.querySelector("#use-list");
   const linesEl = card.querySelector("[data-use-lines]");
-  const foot = card.querySelector("[data-use-foot]");
   const errorEl = card.querySelector("[data-use-error]");
-  const saveBtn = card.querySelector("[data-use-save]");
   const usedBox = card.querySelector("[data-used-box]");
   const usedEl = card.querySelector("[data-used]");
   const items = new Map(stock.items.map((i) => [i.id, i]));
-  const used = new Map(stock.used.map((u) => [u.item_id, u]));
-  let sending = null;   // {key, body} until the server gives a definite answer
+  const recipes = stock.recipes || {};
+  const draftKey = `hamada.uses.${data.appointment_id}`;
+  let counted = new Set();   // the records whose materials are already in the list
 
   const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
     .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
@@ -40,22 +38,122 @@ if (stock && card) {
   }
   const left = (item) => t("use_left", { n: localDigits(item.quantity), unit: item.unit });
 
+  // --- the lines ---
+  const rowOf = (itemId) => linesEl.querySelector(`[data-item-id="${itemId}"]`);
+  const qtyOf = (row) => parseWhole(row.querySelector("input").value) || 0;
+  function setQty(itemId, qty) {
+    const item = items.get(itemId);
+    if (!item) return;  // another section's item, or one no longer used
+    let row = rowOf(itemId);
+    if (qty <= 0) { if (row) row.remove(); return; }
+    if (!row) {
+      row = el("li", "rx-write-line use-line");
+      row.dataset.itemId = String(itemId);
+      const name = el("span", "use-name");
+      const bdi = el("bdi", null, item.name);
+      bdi.dir = "auto";
+      name.append(bdi, el("small", "muted", ` · ${item.unit} · ${left(item)}`));
+      const field = el("input");
+      field.dir = "ltr";
+      field.inputMode = "numeric";
+      field.autocomplete = "off";
+      field.maxLength = 6;
+      field.setAttribute("aria-label", `${t("use_qty")}: ${item.name}`);
+      const remove = el("button", "icon-btn", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `${t("remove")}: ${item.name}`);
+      remove.addEventListener("click", () => {
+        const next = row.nextElementSibling || row.previousElementSibling;
+        row.remove();
+        keep();
+        (next ? next.querySelector("input") : input).focus();  // the focus stays in the card
+      });
+      row.append(name, field, remove);
+      linesEl.append(row);
+    }
+    row.querySelector("input").value = String(qty);
+  }
+  const addQty = (itemId, qty) => setQty(itemId, (rowOf(itemId) ? qtyOf(rowOf(itemId)) : 0) + qty);
+  function addRecord(record) {
+    if (counted.has(record.id)) return;
+    counted.add(record.id);
+    for (const line of recipes[record.procedure_id] || []) addQty(line.item_id, line.qty * record.qty);
+  }
+  linesEl.addEventListener("input", keep);
+
+  // --- kept in this tab until the finish ---
+  function keep() {
+    errorEl.textContent = "";
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({
+        lines: [...linesEl.children].map((li) => [Number(li.dataset.itemId), li.querySelector("input").value]),
+        counted: [...counted], used: usedMark }));
+    } catch (e) { /* private mode: the list lives as long as the page */ }
+  }
+  // A saved list is from before a finish when stock was taken since, or a procedure it counted is no longer
+  // pending (taken or removed): then it is dropped and the list is built again from what is pending.
+  const usedMark = JSON.stringify(stock.used.map((u) => [u.item_id, u.qty]));
+  let draft = null;
+  try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "null"); } catch (e) { draft = null; }
+  if (draft && (draft.used !== usedMark || !draft.counted.every((id) => stock.pending.some((r) => r.id === id)))) draft = null;
+  if (draft) {
+    for (const [itemId, qty] of draft.lines) {
+      if (items.has(itemId)) { setQty(itemId, 1); rowOf(itemId).querySelector("input").value = qty; }
+    }
+    counted = new Set(draft.counted);
+  }
+  stock.pending.forEach(addRecord);
+  keep();
+
+  window.addEventListener("hamada:use-add", (event) => {
+    const d = event.detail;
+    addRecord({ id: d.record, procedure_id: d.procedure_id, qty: d.qty });
+    keep();
+  });
+  window.addEventListener("hamada:use-drop", (event) => {
+    // A procedure taken off: what it brought in goes down again (to nothing when nobody changed it).
+    const id = event.detail.record;
+    if (!counted.has(id)) return;
+    counted.delete(id);
+    const record = stock.pending.find((r) => r.id === id) || event.detail;
+    const lines = recipes[record.procedure_id];
+    if (lines) for (const line of lines) if (rowOf(line.item_id)) addQty(line.item_id, -line.qty * (record.qty || 1));
+    keep();
+  });
+  window.addEventListener("hamada:use-add", (event) => {  // remembered for a removal later
+    const d = event.detail;
+    if (!stock.pending.some((r) => r.id === d.record)) stock.pending.push({ id: d.record, procedure_id: d.procedure_id, qty: d.qty });
+  });
+
+  // Read by "Done with this visit": {lines} or {error}. A zero or an empty quantity drops the line.
+  card.useLines = () => {
+    const lines = [];
+    for (const li of linesEl.children) {
+      const raw = li.querySelector("input").value.trim();
+      const qty = raw === "" ? 0 : parseWhole(raw);
+      if (qty === null || qty > 1000000) {
+        errorEl.textContent = t("bad_qty");
+        li.querySelector("input").focus();
+        return { error: t("bad_qty") };
+      }
+      if (qty) lines.push({ item_id: Number(li.dataset.itemId), qty });
+    }
+    if (lines.length > 30) { errorEl.textContent = t("use_too_many"); return { error: t("use_too_many") }; }
+    return { lines, records: [...counted] };  // a procedure recorded since (another tab): its recipe as it is
+  };
+  card.clearUses = () => { try { sessionStorage.removeItem(draftKey); } catch (e) { /* none */ } };
+
   // --- the list under the field ---
   let shown = [];
   let active = -1;
   function options(typed) {
     const q = plain(typed.trim());
     const found = [];
-    for (const kit of stock.kits) {
-      const r = rank(plain(kit.name), q);
-      if (r >= 0 && kit.lines.some((l) => items.has(l.item_id))) found.push([r, 0, {
-        label: kit.name, side: t("use_kit", { n: localDigits(kit.lines.length) }), kit: true, pick: () => addKit(kit) }]);
-    }
     for (const item of items.values()) {
       const r = rank(plain(item.name), q);
-      if (r >= 0) found.push([r, 1, { label: item.name, side: left(item), low: item.quantity <= 0, pick: () => addItem(item.id, 1) }]);
+      if (r >= 0) found.push([r, { item, low: item.quantity <= 0 }]);
     }
-    return found.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , o]) => o);
+    return found.sort((a, b) => a[0] - b[0]).slice(0, 60).map(([, o]) => o);  // a few hundred items: keep typing
   }
   const close = () => {
     listEl.hidden = true;
@@ -76,13 +174,13 @@ if (stock && card) {
     shown = options(input.value);
     active = -1;
     listEl.replaceChildren(...shown.map((o, i) => {
-      const li = el("li", o.kit ? "use-kit" : null);
+      const li = el("li");
       li.id = `use-list-${i}`;
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", "false");
-      const name = el("bdi", null, o.label);
+      const name = el("bdi", null, o.item.name);
       name.dir = "auto";
-      li.append(name, el("small", o.low ? "use-side use-out" : "use-side", o.side));
+      li.append(name, el("small", o.low ? "use-side use-out" : "use-side", left(o.item)));
       li.addEventListener("mousedown", (event) => event.preventDefault());  // the field keeps the focus
       li.addEventListener("click", () => choose(o));
       return li;
@@ -97,8 +195,8 @@ if (stock && card) {
     input.setAttribute("aria-expanded", String(!listEl.hidden));
   }
   function choose(o) {
-    if (sending) return;
-    o.pick();
+    addQty(o.item.id, 1);
+    keep();
     input.value = "";
     close();
   }
@@ -124,120 +222,13 @@ if (stock && card) {
     }
   });
 
-  // --- the picks, waiting with their quantities ---
-  const rowOf = (itemId) => linesEl.querySelector(`[data-item-id="${itemId}"]`);
-  function addItem(itemId, qty) {
-    const item = items.get(itemId);
-    if (!item) return;
-    const row = rowOf(itemId);
-    if (row) {
-      const field = row.querySelector("input");
-      field.value = String((parseWhole(field.value) || 0) + qty);
-      return;
-    }
-    const li = el("li", "rx-write-line use-line");
-    li.dataset.itemId = String(itemId);
-    const name = el("span", "use-name");
-    const bdi = el("bdi", null, item.name);
-    bdi.dir = "auto";
-    name.append(bdi, el("small", "muted", ` · ${item.unit}`));
-    const field = el("input");
-    field.value = String(qty);
-    field.dir = "ltr";
-    field.inputMode = "numeric";
-    field.autocomplete = "off";
-    field.maxLength = 6;
-    field.setAttribute("aria-label", `${t("use_qty")}: ${item.name}`);
-    const remove = el("button", "icon-btn", "×");
-    remove.type = "button";
-    remove.setAttribute("aria-label", `${t("remove")}: ${item.name}`);
-    remove.addEventListener("click", () => { if (!sending) { li.remove(); refresh(); } });
-    li.append(name, field, remove);
-    linesEl.append(li);
-    refresh();
-  }
-  function addKit(kit) {
-    const here = kit.lines.filter((line) => items.has(line.item_id));  // items of another section are not here
-    for (const line of here) addItem(line.item_id, line.qty);
-    toast(here.length < kit.lines.length
-      ? t("use_kit_part", { name: kit.name, n: localDigits(here.length), all: localDigits(kit.lines.length) })
-      : t("use_kit_added", { name: kit.name }));
-  }
-  function refresh() {
-    foot.hidden = !linesEl.children.length;
-    errorEl.textContent = "";
-  }
-
-  // --- what was taken in this visit ---
-  function showUsed() {
-    usedEl.replaceChildren(...[...used.values()].map((u) => {
-      const li = el("li");
-      const name = el("bdi", null, u.name);
-      name.dir = "auto";
-      li.append(name, el("span", "num", `${localDigits(u.qty)} ${u.unit}`));
-      return li;
-    }));
-    usedBox.hidden = !used.size;
-  }
-  showUsed();
-
-  // --- take from stock ---
-  function lock(on) {
-    saveBtn.disabled = on;
-    input.disabled = on;
-    linesEl.querySelectorAll("input, button").forEach((n) => { n.disabled = on; });
-  }
-  saveBtn.addEventListener("click", async () => {
-    if (saveBtn.disabled) return;
-    if (!sending) {
-      const lines = [];
-      for (const li of linesEl.children) {
-        const qty = parseWhole(li.querySelector("input").value);
-        if (!qty || qty > 100000) { errorEl.textContent = t("bad_qty"); li.querySelector("input").focus(); return; }
-        lines.push({ item_id: Number(li.dataset.itemId), qty });
-      }
-      if (!lines.length) return;
-      if (lines.length > 30) { errorEl.textContent = t("use_too_many"); return; }  // the server takes 30 at a time
-      sending = { key: newKey(), body: { lines, appointment_id: data.appointment_id } };
-    }
-    errorEl.textContent = "";
-    lock(true);
-    const result = await save("POST", "/api/v1/inventory/uses", sending.body, { key: sending.key, label: t("use_label") });
-    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
-    if (!result.settled) {  // the answer was lost: the same request again under the same key
-      lock(false);
-      input.disabled = true;
-      linesEl.querySelectorAll("input, button").forEach((n) => { n.disabled = true; });
-      errorEl.textContent = t("unknown");
-      saveBtn.focus();
-      return;
-    }
-    const body = sending.body;
-    sending = null;
-    lock(false);
-    if (!isOk(result)) {
-      const error = result.data && result.data.error;
-      if (error && error.code === "out_of_stock" && error.items) {
-        errorEl.textContent = t("use_short", { list: error.items.map((i) => `${i.name} (${t("use_left_n", { n: localDigits(i.quantity) })})`).join("، ") });
-        for (const i of error.items) { const item = items.get(i.id); if (item) item.quantity = i.quantity; }
-      } else errorEl.textContent = errorMessage(result, t("failed"));
-      saveBtn.focus();
-      return;
-    }
-    const after = new Map(((result.data && result.data.items) || []).map((i) => [i.id, i.quantity]));
-    for (const line of body.lines) {
-      const item = items.get(line.item_id);
-      if (!item) continue;
-      item.quantity = after.has(line.item_id) ? after.get(line.item_id) : item.quantity - line.qty;
-      const had = used.get(line.item_id);
-      if (had) had.qty += line.qty;
-      else used.set(line.item_id, { item_id: line.item_id, name: item.name, unit: item.unit, qty: line.qty });
-    }
-    linesEl.replaceChildren();
-    refresh();
-    showUsed();
-    input.focus({ preventScroll: true });
-    close();
-    toast(result.data && result.data.replayed ? t("saved") : t("use_done"));
-  });
+  // --- what this visit already took (a visit the doctor went back into) ---
+  usedEl.replaceChildren(...stock.used.map((u) => {
+    const li = el("li");
+    const name = el("bdi", null, u.name);
+    name.dir = "auto";
+    li.append(name, el("span", "num", `${localDigits(u.qty)} ${u.unit}`));
+    return li;
+  }));
+  usedBox.hidden = !stock.used.length;
 }

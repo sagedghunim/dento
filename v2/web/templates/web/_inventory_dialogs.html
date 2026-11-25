@@ -181,12 +181,11 @@
 <dialog class="sheet" id="materials-dialog" aria-labelledby="materials-dialog-title">
 <form novalidate>
   <header class="dialog-head">
-    <h2 id="materials-dialog-title"><span data-kit-hide>{% translate "What this procedure uses" %}</span><span data-kit-show hidden><span data-kit-new>{% translate "New package" %}</span><span data-kit-edit>{% translate "Edit the package" %}</span></span></h2>
+    <h2 id="materials-dialog-title">{% translate "What this procedure uses" %}</h2>
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
-    <p data-kit-hide><strong class="who" data-name></strong></p>
-    <label class="field" data-kit-show hidden>{% translate "Package name" %}<input name="kit_name" maxlength="80" dir="auto" autocomplete="off" placeholder="{% translate "e.g. Braces" %}"></label>
+    <p><strong class="who" data-name></strong></p>
     <ul class="edit-lines" data-lines></ul>
     <p><button type="button" class="btn ghost" data-add-line><svg class="icon"><use href="#i-plus"/></svg>{% translate "Add an item" %}</button></p>
     <template data-line-template>
@@ -202,7 +201,6 @@
   </div>
   <footer class="dialog-foot">
     <p class="form-error" data-error role="alert"></p>
-    <button type="button" class="btn ghost danger" data-delete-kit hidden>{% translate "Delete the package" %}</button>
     <button type="button" class="btn ghost" data-discard hidden>{% translate "Discard" %}</button>
     <button type="button" class="btn ghost" data-close>{% translate "Close" %}</button>
     <button type="submit" class="btn" data-submit>{% translate "Save" %}</button>

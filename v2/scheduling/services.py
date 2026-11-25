@@ -374,7 +374,7 @@ def _not_today():
 
 
 def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None, earlier=None, next_visit=None,
-                  outcome=None):
+                  uses=None, records=None, outcome=None):
     """arrive, call, finish (optionally with a payment) and cancel (design 5.2).
 
     The client sends the status it saw. One conditional UPDATE decides; a repeat of a change
@@ -411,7 +411,7 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
                            "finished_at, visit_price, qty", params)
     if changed is None:
         return _unchanged(ctx, appointment_id, action, target, today,
-                          with_payment=payment is not None or earlier is not None or next_visit is not None)
+                          with_payment=payment is not None or earlier is not None or next_visit is not None or bool(uses))
     appointment = dict(zip(("id", "status", "day", "doctor_id", "patient_id", "service_id", "fee", "is_follow_up",
                             "service_name", "section_id", "arrived_at", "called_at", "finished_at", "visit_price", "qty"),
                            changed))
@@ -434,6 +434,11 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
             billing.ensure_invoice(ctx, appointment)  # design 5.3: finish ensures the invoice, paid or owed
         if earlier is not None:
             billing.collect_earlier(ctx, invoices, appointment_id, earlier["amount"], earlier["method"], deltas, today)
+        # What the visit used comes off the stock (Saged, 2026-11-25): the card's list, or the procedures' own
+        # materials when it was finished without the card. Items are lock order 9, before the patient's stats (11a).
+        from inventory.services import finish_visit
+
+        finish_visit(ctx, appointment, uses, deltas, records)
         record_visits(ctx, [(appointment["patient_id"], day)])  # the patient's stats row (F6, lock order 11a)
         if next_visit is not None:
             # "Book the next visit" (design E3), in this transaction; its turn goes into the one doctor-day write.

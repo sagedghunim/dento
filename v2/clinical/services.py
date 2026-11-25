@@ -1054,25 +1054,23 @@ def record_procedure(ctx, appointment_id, request):
     record_id = sql.row(ctx, """
         INSERT INTO "clinical_visit_procedure" (clinic_id, appointment_id, patient_id, procedure_id, plan_item_id, tooth,
                                                 surfaces, area, qty, unit_price, amount, invoice_line_id, note, created_at,
-                                                created_by_id, patient_package_id, plan_item_was)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+                                                created_by_id, patient_package_id, plan_item_was, stock_taken)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false) RETURNING id""", [
         ctx.clinic_id, appointment_id, appointment["patient_id"], procedure["id"], plan_item["id"] if plan_item else None,
         tooth, surfaces, request["area"], qty, unit_price, qty * unit_price, line_id, request["note"], now,
         ctx.membership_id, package["id"] if package else None, plan_item["status"] if plan_item else ""])[0]
     # Something was done, so it is no longer a consultation only (Saged, 2026-11-25).
     sql.run(ctx, 'UPDATE "scheduling_appointment" SET consult_only = false WHERE clinic_id = %s AND id = %s '
                  "AND consult_only", [ctx.clinic_id, appointment_id])
-    # Its materials come out of stock, and their average cost becomes the line's internal cost (F2).
-    from inventory.services import deduct_materials
-
+    # Its materials come off the stock at "Done with this visit", from the visit's use card (Saged, 2026-11-25):
+    # inventory.services.finish_visit. On a visit already finished there is no finish to come, so they come off now,
+    # as they are (items: lock order 9, after the appointment and invoice locks, as before).
     deltas = Deltas()
-    internal_cost = deduct_materials(ctx, procedure["id"], qty, patient_id=appointment["patient_id"],
-                                     appointment_id=appointment_id, visit_procedure_id=record_id, deltas=deltas)
-    if internal_cost:  # both rows in one statement (rows this flow just wrote: no new lock)
-        sql.run(ctx, """
-            WITH line AS (UPDATE "billing_invoice_line" SET internal_cost = %s WHERE clinic_id = %s AND id = %s)
-            UPDATE "clinical_visit_procedure" SET internal_cost = %s WHERE clinic_id = %s AND id = %s""",
-                [internal_cost, ctx.clinic_id, line_id, internal_cost, ctx.clinic_id, record_id])
+    internal_cost = 0
+    if status == "done":
+        from inventory.services import finish_visit
+
+        finish_visit(ctx, appointment, None, deltas)
     if plan_item is not None:
         sql.run(ctx, "UPDATE \"clinical_plan_item\" SET status = 'done', done_appointment_id = %s, updated_at = %s "
                      "WHERE clinic_id = %s AND id = %s", [appointment_id, now, ctx.clinic_id, plan_item["id"]])
