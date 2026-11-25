@@ -117,9 +117,9 @@ class CashRequestTests(ShardTestCase):
         # "بإذن" on every action (Saged, 2026-11-25), never on money put into the drawer.
         self.approval(True, ("expense",))
         page = self.owner.get("/alerts").content.decode()
-        for kind in ("cash", "line", "price", "discount", "refund", "void", "expense", "patient", "stock"):
+        for kind in ("cash", "line", "price", "discount", "refund", "expense", "stock"):
             self.assertIn(f'data-gate="{kind}"', page, kind)
-        for kind in ("cash_in", "register", "auto_close", "late"):
+        for kind in ("cash_in", "register", "auto_close", "late", "void", "patient"):
             self.assertNotIn(f'data-gate="{kind}"', page, kind)
         self.assertIn("بإذن", page)
         # A voided expense by someone the owner allowed to void waits, then goes on approval.

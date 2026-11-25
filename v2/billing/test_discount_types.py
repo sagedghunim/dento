@@ -48,6 +48,15 @@ class DiscountTestCase(M2TestCase):
         self.assertEqual(r.status_code, 201, r.content)
         return r.json()["invoice"]
 
+    def test_a_discount_icon_the_desk_taps_on_a_booking_reaches_the_owners_alerts(self):
+        # Saged, 2026-11-26: the desk books, taps a discount icon, and the owner hears nothing.
+        friends = self.kind(value=15)
+        invoice = self.invoice()
+        r = self.apply(invoice, friends)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIn('class="nav-count', self.owner.get("/patients").content.decode())
+        self.assertIn("alert-row level-info", self.owner.get("/alerts").content.decode())
+
     def remove_line(self, invoice, line, client=None):
         return call(client or self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{line['id']}")
 

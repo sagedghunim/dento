@@ -129,6 +129,17 @@ class LineAndDiscountTests(BillingTestCase):
         self.assertEqual(call(self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}")
                          .status_code, 404)
 
+    def test_a_discount_reaches_the_owners_alerts(self):
+        # Saged, 2026-11-26: "a discount gives no alert at all".
+        appt = self.visit()
+        invoice = self.invoice_of(appt["id"])
+        self.grant("billing.discount")
+        r = call(self.desk, "PUT", f"/api/v1/invoices/{invoice['id']}/discount", {"discount": 5000, "expected_discount": 0})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIn('class="nav-count', self.owner.get("/patients").content.decode())
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn("alert-row level-info", page)
+
     def test_discounts_are_absolute_with_the_value_they_replace(self):
         appt = self.visit()
         invoice = self.invoice_of(appt["id"])

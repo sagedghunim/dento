@@ -1,4 +1,4 @@
-// The Pay dialog (design 7.3, 5.3): what is owed, the bill's items, payments, discount, refund and void,
+// The Pay dialog (design 7.3, 5.3): what is owed, the bill's items, payments, discount and refund,
 // each offered by permission. Every change is one request with its own key (dialogs.Submitter).
 // Discount types (Saged, 2026-11-13): the clinic's types are chips, read for this visit each time the dialog opens
 // with the one the doctor suggested. One tap applies a type, a tap on the applied one removes it; the request
@@ -118,8 +118,6 @@ export function initPay({ onChanged } = {}) {
       }));
       if (refundable.length && !field("refund_amount").dataset.touched) field("refund_amount").value = amountInput(refundable[0].amount - refundable[0].refunded);
     }
-    const voidBox = dialog.querySelector("[data-void]");
-    if (voidBox) voidBox.hidden = !(invoice && open && invoice.paid === 0);
     dialog.querySelectorAll("[data-print]").forEach((b) => { b.hidden = !invoice || invoice.status !== "open"; });
     status.textContent = invoice && invoice.status === "void" ? t("bill_void") : invoice ? t("bill_no", { n: localDigits(invoice.number) }) : "";
   }
@@ -259,10 +257,6 @@ export function initPay({ onChanged } = {}) {
     } else if (name === "give-back") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/give-back`, {}, [t("give_back"), visit.name].join(" · "));
       if (result && isOk(result)) { toast(t("given_back")); await load(); }
-    } else if (name === "void") {
-      result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/void`, {}, t("bill"));
-      if (result && result.status === 202) { toast(t("sent_for_permission")); await load(); return; }
-      if (result && isOk(result)) { invoice = result.data.invoice; render(); toast(t("bill_voided")); }
     }
     afterUnknown();
     if (result && isOk(result) && onChanged) onChanged();

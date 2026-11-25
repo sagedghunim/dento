@@ -79,13 +79,6 @@ class RefundTests(M2TestCase):
         self.assertEqual(self.owed(), 1000)
 
 
-class PatientDeleteTests(M2TestCase):
-    def test_not_while_being_seen(self):
-        visit = self.in_room()
-        r = call(self.owner, "POST", f"/api/v1/patients/{visit['patient']['id']}/delete", {})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "patient_busy"))
-
-
 class TeethTests(M2TestCase):
     def setUp(self):
         super().setUp()

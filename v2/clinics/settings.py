@@ -44,7 +44,7 @@ MAX_DEPOSIT = 100_000_00  # EGP 100,000
 ORDER_MESSAGE_MAX = 1000
 # Every action someone does that can wait (Saged, 2026-11-25: "بإذن" on everything). Not here: money put into the
 # drawer, the register closing short or by itself, and a file changed after its visit (events, not requests).
-APPROVAL_KINDS = ("cash", "line", "price", "discount", "refund", "void", "expense", "patient", "stock")
+APPROVAL_KINDS = ("cash", "line", "price", "discount", "refund", "void", "expense", "patient", "stock")  # "void" and "patient": no longer offered, kept so stored settings stay valid
 
 _RULES = {
     "follow_up_days": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,

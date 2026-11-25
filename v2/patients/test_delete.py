@@ -1,5 +1,5 @@
-"""Deleting a patient's file (Saged, 2026-11-19): the owner only. No history: gone for good. With visits or money:
-hidden everywhere (search, the file, booking) while its money stays counted, and the owner can bring it back."""
+"""A patient is never deleted (Saged, 2026-11-26): one nobody wants goes on the blacklist. A file hidden before that
+stays out of search and booking, its money stays counted, and the owner can bring it back."""
 
 from core.routing import clinic_transaction
 from core.testing import call, new_patient
@@ -18,37 +18,26 @@ class DeletePatientTests(M2TestCase):
         with clinic_transaction(self.a.id, self.a.shard):
             return list(Patient.objects.filter(clinic_id=self.a.id, **where).values("id", "archived_at"))
 
-    def test_the_owner_only(self):
+    def test_no_way_to_delete_a_patient(self):
         patient = self.fresh()
-        self.assertEqual(call(self.desk, "POST", f"/api/v1/patients/{patient}/delete").status_code, 403)
-        self.assertEqual(call(self.doc, "POST", f"/api/v1/patients/{patient}/delete").status_code, 403)
-        self.assertNotIn("data-delete-patient", self.desk.get(f"/patients/{patient}").content.decode())
+        for client in (self.owner, self.desk):
+            self.assertEqual(call(client, "POST", f"/api/v1/patients/{patient}/delete").status_code, 404)
+        self.assertNotIn("data-delete-patient", self.owner.get(f"/patients/{patient}").content.decode())
+        self.assertEqual(len(self.rows(id=patient, archived_at__isnull=True)), 1)
+        page = self.owner.get("/alerts").content.decode()
+        self.assertNotIn('name="kind" value="patient"', page)
+        self.assertNotIn('data-gate="patient"', page)
 
-    def test_a_file_without_history_goes_for_good(self):
-        patient = self.fresh()
-        r = call(self.owner, "POST", f"/api/v1/patients/{patient}/delete")
-        self.assertEqual((r.status_code, r.json()["result"]), (200, "deleted"))
-        self.assertEqual(self.rows(id=patient), [])
-        self.assertIn("Mistake Typed Twice", self.owner.get("/alerts").content.decode())
+    def test_a_file_hidden_before_comes_back_for_the_owner_only(self):
+        from django.utils import timezone
 
-    def test_a_file_with_visits_is_hidden_and_comes_back(self):
-        visit = self.in_room()
-        patient = visit["patient"]["id"]
-        # Not while being seen or owing (Saged, 2026-11-23): finished and paid first.
-        r = call(self.owner, "POST", f"/api/v1/patients/{patient}/delete")
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "patient_busy"))
-        self.assertEqual(self.act(visit["id"], "finish", "in_room").status_code, 200)
-        due = call(self.owner, "GET", f"/api/v1/appointments/{visit['id']}").json()["appointment"]["due"]
-        if due:
-            self.assertEqual(call(self.owner, "POST", f"/api/v1/appointments/{visit['id']}/payments",
-                                  {"amount": due, "method": "card"}).status_code, 201)
-        r = call(self.owner, "POST", f"/api/v1/patients/{patient}/delete")
-        self.assertEqual((r.status_code, r.json()["result"]), (200, "hidden"))
-        self.assertIsNotNone(self.rows(id=patient)[0]["archived_at"])
+        patient = self.fresh("Hidden Long Ago")
+        with clinic_transaction(self.a.id, self.a.shard):
+            Patient.objects.filter(clinic_id=self.a.id, id=patient).update(archived_at=timezone.now())
         self.assertEqual(self.desk.get(f"/patients/{patient}").status_code, 404)
-        name = visit["patient"]["name"]
-        self.assertNotIn(name, self.desk.get(f"/patients?q={name[:6]}").content.decode())
-        self.assertIn(name, self.owner.get("/patients").content.decode())  # in "Deleted patients"
+        self.assertNotIn("Hidden Long Ago", self.desk.get("/patients?q=Hidden").content.decode())
+        self.assertIn("Hidden Long Ago", self.owner.get("/patients").content.decode())
+        self.assertEqual(call(self.desk, "POST", f"/api/v1/patients/{patient}/restore").status_code, 403)
         r = call(self.owner, "POST", f"/api/v1/patients/{patient}/restore")
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(self.desk.get(f"/patients/{patient}").status_code, 200)

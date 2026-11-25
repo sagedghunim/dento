@@ -630,10 +630,8 @@ def decide_cash(ctx, request_id, approve):
                 billing.void(ctx, d["invoice_id"])
         elif request["kind"] == "exvoid":
             void_expense(ctx, request["data"]["expense_id"])
-        elif request["kind"] == "patient":
-            from patients import services as patients
-
-            patients.delete(ctx, request["data"]["patient_id"])
+        elif request["kind"] == "patient":  # deleting a patient was taken out (Saged, 2026-11-26)
+            raise ApiError("gone", _("Deleting a patient isn't possible any more. Refuse this request."), 409)
         elif request["kind"] == "stock":
             from inventory import services as inventory
 

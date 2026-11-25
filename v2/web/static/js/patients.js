@@ -212,23 +212,16 @@ document.addEventListener("click", async (event) => {
 // --- installments (Saged, 2026-11-19): split what is owed; the server makes the parts and checks them ---
 import("./installments.js");
 
-// --- the owner deletes a file, or brings a hidden one back (Saged, 2026-11-19) ---
+// --- the owner brings back a file hidden before deleting was taken out (Saged, 2026-11-26: no deleting a
+// patient at all; one nobody wants goes on the blacklist instead) ---
 document.addEventListener("click", async (event) => {
-  const del = event.target.closest("[data-delete-patient]");
-  const back = event.target.closest("[data-restore-patient]");
-  const button = del || back;
+  const button = event.target.closest("[data-restore-patient]");
   if (!button || button.disabled) return;
-  if (del && !window.confirm(t("patient_delete_confirm", { name: del.dataset.name }))) return;
   button.disabled = true;
   const { isOk: ok, newKey: key, save: send, errorMessage: message } = await import("./api.js");
-  const url = `/api/v1/patients/${button.dataset.id}/${del ? "delete" : "restore"}`;
+  const url = `/api/v1/patients/${button.dataset.id}/restore`;
   const result = await send("POST", url, {}, { key: key(), label: button.dataset.name });
-  if (result.settled && result.status === 202) {  // waits for the owner's permission (Saged, 2026-11-25)
-    toast(t("sent_for_permission"));
-    return;
-  }
   if (result.settled && ok(result)) {
-    if (del) { window.location.href = "/patients"; return; }
     toast(t("patient_restored", { name: button.dataset.name }));
     button.closest("li").remove();
     return;

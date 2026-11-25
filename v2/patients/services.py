@@ -8,7 +8,6 @@ on (clinic, number), so two desks registering at once can't both pass: the secon
 
 import datetime as dt
 
-from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -201,54 +200,8 @@ def _comparable(value):
     return value.isoformat() if isinstance(value, dt.date) else value
 
 
-# --- Deleting a file (Saged, 2026-11-19): the owner only ---------------------------------------------------------
-
-HISTORY_TABLES = ("scheduling_appointment", "billing_invoice", "billing_payment", "clinical_plan", "clinical_attachment",
-                  "clinical_prescription", "clinical_tooth", "billing_installment_plan", "billing_patient_package")
-
-
-def delete(ctx, patient_id):
-    """A file with no history at all (a mistake, a double) goes for good; one with visits, bills or records is
-    hidden everywhere instead, so the money and the records stay right, and the owner can bring it back.
-    Returns "deleted" or "hidden". Audited."""
-    if not ctx.membership.is_owner:
-        raise ApiError("forbidden", _("Only the account's owner can delete a patient."), 403)
-    row = sql.row(ctx, 'SELECT id, full_name, file_no FROM "patients_patient" WHERE clinic_id = %s AND id = %s '
-                       "AND archived_at IS NULL FOR UPDATE", [ctx.clinic_id, patient_id])
-    if row is None:
-        raise ApiError("not_found", _("This patient wasn't found."), 404)
-    # Never while the patient is being seen, is booked ahead, owes money or holds money paid over a bill, or has
-    # installments running (Saged, 2026-11-23): those would go on with nobody to see them.
-    going_on = ["booked", "waiting", "with_assistant", "ready", "in_room"]
-
-    busy = sql.row(ctx, """
-        SELECT EXISTS (SELECT 1 FROM "scheduling_appointment" WHERE clinic_id = %s AND patient_id = %s
-                        AND status = ANY(%s)),
-               EXISTS (SELECT 1 FROM "billing_invoice" WHERE clinic_id = %s AND patient_id = %s AND status = 'open'
-                        AND paid <> total),
-               EXISTS (SELECT 1 FROM "billing_installment_plan" WHERE clinic_id = %s AND patient_id = %s
-                        AND status = 'active')""",
-                   [ctx.clinic_id, patient_id, going_on, ctx.clinic_id, patient_id, ctx.clinic_id, patient_id])
-    if any(busy):
-        raise ApiError("patient_busy", _("This patient has a visit not finished, money owed or given, or installments running. Finish those first."), 409)  # noqa: E501
-    has_history = any(sql.row(ctx, f'SELECT 1 FROM "{table}" WHERE clinic_id = %s AND patient_id = %s LIMIT 1',
-                              [ctx.clinic_id, patient_id]) for table in HISTORY_TABLES)
-    before = {"full_name": row[1], "file_no": row[2]}
-    if not has_history:
-        try:  # anything else still pointing at the file (an access log row, a follow-up): hidden instead
-            with transaction.atomic(using=ctx.alias):
-                sql.run(ctx, 'DELETE FROM "patients_patient_tag" WHERE clinic_id = %s AND patient_id = %s',
-                        [ctx.clinic_id, patient_id])
-                sql.run(ctx, 'DELETE FROM "patients_patient" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, patient_id])
-            record_change(ctx, "patient.delete", "patient", patient_id, before=before)
-            return "deleted"
-        except IntegrityError:
-            has_history = True
-    if has_history:
-        sql.run(ctx, 'UPDATE "patients_patient" SET archived_at = %s, archived_by_id = %s WHERE clinic_id = %s AND id = %s',
-                [timezone.now(), ctx.membership_id, ctx.clinic_id, patient_id])
-        record_change(ctx, "patient.hide", "patient", patient_id, before=before)
-    return "hidden"
+# --- Hidden files (Saged, 2026-11-26): a patient is never deleted any more (one nobody wants goes on the
+# blacklist); files hidden before that can still come back --------------------------------------------------------
 
 
 def restore(ctx, patient_id):

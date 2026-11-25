@@ -1,6 +1,6 @@
 """The owner's alerts (Saged, 2026-11-19): the sensitive things the team did, read from the change log.
 
-A procedure taken off after its visit was finished, a removed bill line, a discount, a refund, a voided bill, a register closed short or over,
+A procedure taken off after its visit was finished, a removed bill line, a discount, a refund, a register closed short or over,
 a price change, a voided expense and a stock count that changed. The change log (audit_change) already holds each
 one with who and when, so nothing new is written when they happen: this reads it on its index (clinic, at DESC).
 
@@ -39,9 +39,7 @@ KINDS = (
     ("line", ("invoice.line_remove",), "Removed a line from a bill", "bills"),
     ("procedure", ("visit_procedure.remove",), "Removed a procedure after the visit ended", "bills"),
     ("discount", ("invoice.discount",), "Gave a discount", "bills"),
-    ("void", ("invoice.void",), "Voided a bill", "bills"),
     ("price", ("procedure.price",), "Changed a price", "bills"),
-    ("patient", ("patient.hide", "patient.delete"), "Deleted a patient", "files"),
     ("late", (), "A file changed after its visit ended", "files"),
     ("stock", ("item.count",), "A stock count changed the quantity", "stock"),
     ("short", ("item.short",), "A visit used more than the stock showed", "stock"),
@@ -63,12 +61,11 @@ _WHERE = ("clinic_id = %s AND (action = ANY(%s){late}) AND at >= %s "
 def _labels():
     # Written out so the string catalogue finds them (core.i18n reads the gettext calls).
     return {"procedure": _("Removed a procedure after the visit ended"), "line": _("Removed a line from a bill"),
-            "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"), "void": _("Voided a bill"),
+            "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"),
             "register": _("The register was short or over"), "cash_in": _("Money put into the drawer"), "cash": _("Money taken out of the drawer"),
             "auto_close": _("The register closed by itself without a count"),
             "price": _("Changed a price"), "expense": _("Voided an expense"),
             "stock": _("A stock count changed the quantity"), "short": _("A visit used more than the stock showed"),
-            "patient": _("Deleted a patient"),
             "late": _("A file changed after its visit ended")}
 
 
@@ -210,16 +207,11 @@ def items(ctx, group=None):
                 item["what"] = _("Removed a line from a bill")
                 item["detail"] = " · ".join(x for x in (bill, before.get("description", "")) if x)
                 item["amount"] = before.get("amount")
-            elif action == "invoice.discount":
+            else:  # invoice.discount (a voided bill is no alert: Saged, 2026-11-26)
                 item["what"] = _("Gave a discount")
                 item["detail"] = bill
                 item["amount"] = after.get("discount")
                 item["level"] = "info"
-            else:
-                item["what"] = _("Voided a bill")
-                item["detail"] = bill
-                item["amount"] = before.get("total")
-                item["level"] = "bad"
         elif action == "payment.refund":
             item["what"] = _("Refunded money to a patient")
             item["amount"] = d.get("amount")
@@ -249,10 +241,6 @@ def items(ctx, group=None):
         elif action == "expense.void":
             item["what"] = _("Voided an expense")
             item["amount"] = before.get("amount")
-        elif action in ("patient.hide", "patient.delete"):
-            item["what"] = _("Deleted a patient")
-            item["detail"] = f"{before.get('full_name', '')} · {_('File')} {before.get('file_no', '')}"
-            item["level"] = "bad"
         elif action == "item.count":
             item["what"] = _("A stock count changed the quantity")
             item["detail"] = f"{stock.get(r['target_id'], '')} · {before.get('quantity')} → {after.get('quantity')}"
