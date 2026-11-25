@@ -103,7 +103,7 @@ def _team(ctx, first, today, money):
         expected, extra = used.get(r["membership_id"], (0, 0))
         r["materials"] = (expected + extra) // r["visits"] if r["visits"] else None
         # Against the expected (the recipes): more is red, less green, as expected grey (Saged, 2026-11-25).
-        r["materials_diff"] = abs(extra)
+        r["materials_diff"] = abs(extra) // r["visits"] if r["visits"] else abs(extra)  # per visit, like the column
         r["materials_level"] = None if not (expected or extra) else "more" if extra > 0 else "less" if extra < 0 else "exact"
     visits = sum(r["visits"] for r in rows)
     average = sum(r["revenue"] for r in rows) // visits if visits else None
