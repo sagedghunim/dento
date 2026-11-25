@@ -17,6 +17,7 @@ from core import paging
 from core.api import page
 from core.days import zone
 from core.i18n import pick
+from inventory import catalog
 
 from . import format as fmt
 from . import places
@@ -89,8 +90,13 @@ def inventory_page(request, ctx):
         return render(request, "web/forbidden.html", {"ctx": ctx}, status=403)
     perms = _perms(ctx)
     sections = places.sections(ctx)
+    context = _items_context(ctx)
+    # Ready items to pick from when adding one (Saged, 2026-11-25), without the ones the clinic already has.
+    have = [name for i in context["items"] for name in (i["name"], i.get("name_ar") or "")]
     return render(request, "web/inventory.html", {
-        "ctx": ctx, "nav_active": "inventory", **_items_context(ctx),
+        "ctx": ctx, "nav_active": "inventory", **context,
+        "ready_items": [{**r, "price_text": fmt.money_plain(r["cost"]) if r["price"] else ""}
+                        for r in catalog.ready_items(have)] if perms["manage"] else [],
         "sections": sections if len(sections) > 1 else [],
         "procedures": _materials(ctx) if perms["manage"] else [],
     })

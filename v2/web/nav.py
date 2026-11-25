@@ -65,8 +65,8 @@ SECTIONS = (
 
 
 # The owner's side bar (Saged, 2026-11-13), in this order. A solo owner sees every section, as SECTIONS orders them.
-MANAGER_SECTIONS = ("overview", "alerts", "finances", "prices", "team", "patients")
-TREATING_OWNER_SECTIONS = ("today", "prescription", "prices", "overview", "alerts", "finances", "team", "patients")
+MANAGER_SECTIONS = ("overview", "alerts", "finances", "inventory", "prices", "team", "patients")
+TREATING_OWNER_SECTIONS = ("today", "prescription", "prices", "overview", "alerts", "finances", "inventory", "team", "patients")
 
 
 def owner_mode(ctx):

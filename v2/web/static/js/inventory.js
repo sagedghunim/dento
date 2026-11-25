@@ -217,6 +217,8 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     dialog.querySelector("[data-title-edit]").hidden = !item;
     dialog.querySelectorAll("[data-new-only]").forEach((n) => { n.hidden = Boolean(item); });
     dialog.querySelector("details").open = false;
+    if (field("unit_cost")) field("unit_cost").placeholder = "";  // a ready item's price hint is for one pick only
+    form.readyFilled = {};
     if (!item) return;
     for (const name of TEXT) field(name).value = name === "name" ? item.name_ar : (item[name] || "");
     field("threshold").value = String(item.threshold);
@@ -250,6 +252,31 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
   },
   done(data) { toast(t("inv_item_saved", { name: data.item.name })); reload(); },
 }));
+
+// A ready item picked from the list (Saged, 2026-11-25), for a new item only, fills its English name, category and
+// unit. A field the user typed in is kept; what the list filled follows the name (and empties when it no longer
+// matches). The price is only a hint in the cost field: store prices change, so nothing is saved that was not typed.
+const readyItems = document.getElementById("ready-items");
+if (itemDialog && readyItems) {
+  const dialog = document.getElementById("item-dialog");
+  const form = dialog.querySelector("form");
+  const input = (name) => form.querySelector(`[name="${name}"]`);
+  input("name").addEventListener("input", () => {
+    if (!dialog.querySelector("[data-title-edit]").hidden) return;  // editing: the item's own values stay
+    const value = input("name").value.trim();
+    const picked = [...readyItems.options].find((o) => o.value === value);
+    const cost = input("unit_cost");
+    if (cost) cost.placeholder = picked && picked.dataset.price ? `≈ ${picked.dataset.price}` : "";
+    const filled = form.readyFilled || (form.readyFilled = {});
+    for (const [name, key] of [["name_en", "en"], ["category", "category"], ["unit", "unit"]]) {
+      const now = input(name).value.trim();
+      if (now && now !== filled[name]) continue;  // typed by the user
+      const next = picked ? picked.dataset[key] : "";
+      input(name).value = next;
+      filled[name] = next;
+    }
+  });
+}
 
 // Remove (deactivate), with Undo; restore from Removed items.
 async function setActive(item, active) {

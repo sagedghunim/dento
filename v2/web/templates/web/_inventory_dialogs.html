@@ -52,7 +52,10 @@
   </header>
   <div class="dialog-body tight">
     <div class="grid-form">
-      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
+      <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus{% if ready_items %} list="ready-items" placeholder="{% translate "Type to pick from the ready list" %}"{% endif %}></label>
+      {% if ready_items %}{# Ready items from the stores' research (Saged, 2026-11-25): typing shows the matching ones. #}
+      <datalist id="ready-items">{% for r in ready_items %}<option value="{{ r.name }}" label="{{ r.category }}{% if r.price_text and perms.money %} · ≈{{ r.price_text }}{% endif %}" data-en="{{ r.name_en }}" data-category="{{ r.category }}" data-unit="{{ r.unit }}"{% if perms.money %} data-price="{{ r.price|default:'' }}"{% endif %}></option>{% endfor %}</datalist>
+      {% endif %}
       <label class="field">{% translate "Unit" %}<input name="unit" maxlength="20" dir="auto" autocomplete="off" placeholder="{% translate "box, piece, syringe…" %}"></label>
       <label class="field" data-new-only>{% translate "Quantity in stock now" %}<input name="quantity" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
       <label class="field">{% translate "Alert when this many or fewer are left" %}<input name="threshold" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>

@@ -5074,3 +5074,6 @@ msgstr "أخضر: يستنى موافقتك"
 
 msgid "Red: happens, and you get an alert"
 msgstr "أحمر: يتنفذ ويجيلك تنبيه"
+
+msgid "Type to pick from the ready list"
+msgstr "اكتب واختار من القايمة الجاهزة"

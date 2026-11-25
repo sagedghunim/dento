@@ -42,8 +42,18 @@ class InventoryPageTests(BackOfficeCase):
                        'id="materials-dialog"'):
             self.assertIn(marker, html, marker)
         self.assertIn(f'&quot;id&quot;: {item["id"]}', html)  # the card's values, escaped in the attribute
-        # An owner with no sessions manages: Inventory leaves their side bar (Saged, 2026-11-12); a doctor keeps it.
+        # Every owner has Inventory in the side bar (Saged, 2026-11-25; it had left the managing owner's on 2026-11-12).
         self.assertIn('href="/inventory" aria-current="page"', self.doctor.get("/inventory").content.decode())
+
+    def test_a_manager_picks_a_new_item_from_the_ready_list(self):
+        # Typing the name shows the ready items (Saged, 2026-11-25); the ones the clinic has are left out.
+        self.item(name="جوانتي لاتكس")
+        html = self.owner.get("/inventory").content.decode()
+        self.assertIn('list="ready-items"', html)
+        self.assertIn('<option value="جوانتي نيتريل" label="تعقيم ومستهلكات · ≈170 ج.م"', html)
+        self.assertIn('data-unit="علبة"', html)
+        self.assertNotIn('<option value="جوانتي لاتكس"', html)
+        self.assertNotIn("ready-items", self.desk.get("/inventory").content.decode())  # adding items is the manager's
 
     def test_someone_with_use_only_sees_the_list_and_records_use(self):
         self.item()
