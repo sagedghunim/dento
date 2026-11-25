@@ -358,3 +358,27 @@ class LanguageTests(BillingTestCase):
         appt = self.visit()
         r = self.pay(appt["id"], self.fee + 1)
         self.assertEqual(r.json()["error"]["message"], "المبلغ أكبر من المستحق.")
+
+
+class LineApprovalTests(BillingTestCase):
+    """The owner can make a removed bill line wait for their permission (Saged, 2026-11-25)."""
+
+    def test_the_desks_removed_line_waits_until_the_owner_approves(self):
+        r = call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"approvals": ["line"]}, "expected": {"approvals": []}})
+        self.assertEqual(r.status_code, 200, r.content)
+        appt = self.visit()
+        invoice = self.invoice_of(appt["id"])
+        lines = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
+                     {"kind": "procedure", "service_id": self.services_a["procedure"].id}).json()["invoice"]["lines"]
+        r = call(self.desk, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}")
+        self.assertEqual(r.status_code, 202, r.content)
+        self.assertEqual(len(r.json()["invoice"]["lines"]), len(lines))  # still on the bill
+        url = f"/api/v1/cash-requests/{r.json()['request']['id']}/decide"
+        self.assertEqual(call(self.owner, "POST", url, {"approve": True}).status_code, 200)
+        after = call(self.desk, "GET", f"/api/v1/invoices/{invoice['id']}").json()["invoice"]
+        self.assertEqual(len(after["lines"]), len(lines) - 1)
+        self.assertEqual(after["total"], self.fee)
+        # The owner's own removal never waits.
+        lines = call(self.owner, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
+                     {"kind": "procedure", "service_id": self.services_a["procedure"].id}).json()["invoice"]["lines"]
+        self.assertEqual(call(self.owner, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}").status_code, 200)

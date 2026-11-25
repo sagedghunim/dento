@@ -215,6 +215,7 @@ export function initPay({ onChanged } = {}) {
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("amount").dataset.touched; render(); }
     } else if (name === "remove-line") {
       result = await submitter.run("DELETE", `/api/v1/invoices/${invoice.id}/lines/${button.dataset.line}`, {}, `${t("bill")} · ${visit.name}`);
+      if (result && result.status === 202) toast(t("sent_for_permission"));  // stays until the owner approves
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("amount").dataset.touched; render(); }
       if (result && result.status === 403) {  // the rule changed or the line isn't ours: show the bill as it is
         const message = errorMessage(result, t("not_removable"));

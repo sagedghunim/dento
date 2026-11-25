@@ -4930,15 +4930,6 @@ msgstr "وافق"
 msgid "Refuse"
 msgstr "ارفض"
 
-msgid "When the desk takes money out of the drawer"
-msgstr "لما الاستقبال يطلّع فلوس من الدرج"
-
-msgid "It goes out, and I get an alert"
-msgstr "تطلع على طول، ويجيلي تنبيه"
-
-msgid "It waits for my OK"
-msgstr "تستنى موافقتي"
-
 msgid "Pay an expense from the drawer"
 msgstr "دفع مصروف من الدرج"
 
@@ -4962,3 +4953,15 @@ msgstr "اترفض، ومفيش حاجة طلعت من الدرج."
 
 msgid "Will pay"
 msgstr "هيدفع"
+
+msgid "Sent to the owner for permission. It happens once they approve it."
+msgstr "اتبعت لصاحب الحساب ياخد إذنه. هيتنفذ لما يوافق."
+
+msgid "Remove a line from a bill"
+msgstr "شيل بند من فاتورة"
+
+msgid "Change a price"
+msgstr "تغيير سعر"
+
+msgid "Green: it waits for your permission. Red: it happens, and you get an alert."
+msgstr "أخضر: يستنى إذنك. أحمر: يتنفذ على طول ويجيلك تنبيه."

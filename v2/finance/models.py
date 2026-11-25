@@ -106,17 +106,19 @@ class Category(models.Model):
         ]
 
 
-REQUEST_KINDS = ["expense", "out"]
+REQUEST_KINDS = ["expense", "out", "line", "price"]
 REQUEST_STATUSES = ["pending", "approved", "rejected"]
 
 
 class CashRequest(models.Model):
-    """Money the desk asks to take out of the drawer, waiting for the owner's OK (Saged, 2026-11-25), when the owner
-    turned on drawer_approval. Approved: the expense or the cash-out is made then (result_id); rejected: nothing."""
+    """Something that waits for the owner's permission (Saged, 2026-11-25), as the owner chose in the `approvals`
+    setting: money out of the drawer (expense, out), a bill line removed (line), a price changed (price). Approved:
+    it is done then (result_id for money); rejected: nothing happens. `data` holds what the action needs."""
 
     clinic = _clinic()
     kind = models.CharField(max_length=8)  # expense: from the drawer, by category; out: cash out with a reason
-    amount = models.BigIntegerField()
+    amount = models.BigIntegerField()  # the money involved: the line's amount, the new price
+    data = models.JSONField(default=dict, db_default={})
     category = _ref(Category, null=True)
     note = models.CharField(max_length=200, blank=True, default="")  # the expense's note, or the cash-out's reason
     status = models.CharField(max_length=8, default="pending")
@@ -131,8 +133,8 @@ class CashRequest(models.Model):
         constraints = [
             models.CheckConstraint(condition=Q(kind__in=REQUEST_KINDS), name="cash_request_kind_valid"),
             models.CheckConstraint(condition=Q(status__in=REQUEST_STATUSES), name="cash_request_status_valid"),
-            models.CheckConstraint(condition=Q(amount__gt=0), name="cash_request_amount_positive"),
-            models.CheckConstraint(condition=Q(kind="out") | Q(category__isnull=False), name="cash_request_expense_category"),
+            models.CheckConstraint(condition=Q(amount__gte=0), name="cash_request_amount_valid"),
+            models.CheckConstraint(condition=~Q(kind="expense") | Q(category__isnull=False), name="cash_request_expense_category"),
             models.CheckConstraint(condition=Q(status="pending", decided_at__isnull=True)
                                    | (~Q(status="pending") & Q(decided_at__isnull=False)), name="cash_request_decided"),
             _fk("category", "finance.Category", "cash_request_category_fk"),

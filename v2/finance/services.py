@@ -550,28 +550,40 @@ def payout(ctx, membership_id, month, amount, method, note):
 # --- Money out of the drawer that waits for the owner's OK (Saged, 2026-11-25) ----------------------------------
 
 REQUEST_COLUMNS = ("id, kind, amount, category_id, note, status, requested_by_id, requested_at, decided_by_id, "
-                   "decided_at, result_id")
+                   "decided_at, result_id, data")
 
 
-def needs_approval(ctx):
-    """The owner turned on drawer_approval and this isn't the owner: money out of the drawer is a request."""
+def needs_approval(ctx, what):
+    """`what` ("cash", "line", "price") waits for the owner's permission: the owner listed it in `approvals` and
+    this isn't the owner (Saged, 2026-11-25)."""
     from clinics import settings as clinic_settings
 
-    return bool(clinic_settings.effective(ctx.clinic.settings)["drawer_approval"]) and not ctx.membership.is_owner
+    return what in clinic_settings.effective(ctx.clinic.settings)["approvals"] and not ctx.membership.is_owner
 
 
-def ask_cash(ctx, kind, amount, category_id=None, note=""):
-    """A request to take money out of the drawer: checked as the real thing would be (the category, its note),
-    then kept until the owner decides. Audited as cash.request, which the owner's alerts read."""
+def _request_row(values):
+    import json
+
+    row = dict(zip(_cols(REQUEST_COLUMNS), values))
+    if isinstance(row["data"], str):
+        row["data"] = json.loads(row["data"])
+    return row
+
+
+def ask_cash(ctx, kind, amount, category_id=None, note="", data=None):
+    """A request that waits for the owner: checked as the real thing would be where it can be (an expense's
+    category and note), then kept until the owner decides. Audited as cash.request."""
+    import json
+
     if kind == "expense" and _active_category(ctx, category_id) == "other" and not note.strip():
         raise ApiError("invalid", _("Write what this money was for."), fields={"note": "required"})
     found = sql.row(ctx, f"""
         INSERT INTO "finance_cash_request" (clinic_id, kind, amount, category_id, note, status, requested_by_id,
-                                            requested_at)
-        VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s) RETURNING {REQUEST_COLUMNS}""", [
+                                            requested_at, data)
+        VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s::jsonb) RETURNING {REQUEST_COLUMNS}""", [
         ctx.clinic_id, kind, amount, category_id if kind == "expense" else None, note, ctx.membership_id,
-        timezone.now()])
-    request = dict(zip(_cols(REQUEST_COLUMNS), found))
+        timezone.now(), json.dumps(data or {})])
+    request = _request_row(found)
     record_change(ctx, "cash.request", "cash_request", request["id"], kind=kind, amount=amount, note=note,
                   category_id=request["category_id"])
     return request
@@ -584,7 +596,7 @@ def decide_cash(ctx, request_id, approve):
                          "FOR NO KEY UPDATE", [ctx.clinic_id, request_id])
     if found is None:
         raise not_found("request")
-    request = dict(zip(_cols(REQUEST_COLUMNS), found))
+    request = _request_row(found)
     if request["status"] != "pending":
         raise ApiError("decided", _("This request was already decided."), 409, extra={"status": request["status"]})
     result_id = None
@@ -592,6 +604,14 @@ def decide_cash(ctx, request_id, approve):
         if request["kind"] == "expense":
             result_id = add_expense(ctx, request["category_id"], request["amount"], business_day(ctx.clinic),
                                     request["note"], True, by_id=request["requested_by_id"])["id"]
+        elif request["kind"] == "line":
+            from billing import services as billing
+
+            billing.remove_line(ctx, request["data"]["invoice_id"], request["data"]["line_id"])
+        elif request["kind"] == "price":
+            from clinical import services as clinical
+
+            clinical.update_procedure(ctx, request["data"]["procedure_id"], request["data"]["changes"])
         else:
             result_id = cash_movement(ctx, "out", request["amount"], request["note"],
                                       by_id=request["requested_by_id"])[1]
@@ -614,4 +634,4 @@ def cash_requests(ctx, pending_only=False, mine=False, limit=30):
         params += [ctx.membership_id, timezone.now() - dt.timedelta(hours=24)]
     rows = sql.rows(ctx, f'SELECT {REQUEST_COLUMNS} FROM "finance_cash_request" WHERE {where} '
                          "ORDER BY requested_at DESC, id DESC LIMIT %s", [*params, limit])
-    return [dict(zip(_cols(REQUEST_COLUMNS), r)) for r in rows]
+    return [_request_row(r) for r in rows]

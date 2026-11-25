@@ -26,14 +26,16 @@ DEFAULTS = {
     "installment_down_percent": 30,
     "installment_every": "month",
     "installment_count": 3,
-    # Money the desk takes out of the drawer (an expense or cash out) waits for the owner's OK (Saged, 2026-11-25);
-    # off: it goes out at once and the owner gets an alert.
-    "drawer_approval": False,
+    # What waits for the owner's permission when someone else does it (Saged, 2026-11-25): "cash" money out of the
+    # drawer, "line" a line removed from a bill, "price" a price changed. Not listed: it happens and the owner gets
+    # an alert.
+    "approvals": [],
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
 OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure",
-              "installment_down_percent", "installment_every", "installment_count", "drawer_approval"}
+              "installment_down_percent", "installment_every", "installment_count", "approvals"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
+APPROVAL_KINDS = ("cash", "line", "price")
 
 _RULES = {
     "follow_up_days": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
@@ -52,7 +54,7 @@ _RULES = {
     "installment_down_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 90,
     "installment_every": lambda v: v in ("week", "2weeks", "month"),
     "installment_count": lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 24,
-    "drawer_approval": lambda v: isinstance(v, bool),
+    "approvals": lambda v: isinstance(v, list) and len(set(v)) == len(v) and all(k in APPROVAL_KINDS for k in v),
 }
 
 

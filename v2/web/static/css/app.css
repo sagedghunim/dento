@@ -1261,5 +1261,10 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 /* Money waiting for the owner (Saged, 2026-11-25). */
 .waiting-card { border-color: var(--amber, #b7791f); }
 .request-actions { display: flex; gap: 8px; margin-block-start: 8px; }
-.drawer-approval { border: 0; padding: 0; margin: 0 0 10px; }
-.drawer-approval legend { font-weight: 700; margin-block-end: 6px; }
+/* An alert's permission square (Saged, 2026-11-25): green waits for the owner, red just tells. */
+.kind-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.perm-box { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: .85rem; font-weight: 700; cursor: pointer; }
+.perm-dot { width: 16px; height: 16px; border-radius: 4px; background: var(--red, #A93327); }
+.perm-box[aria-pressed="true"] .perm-dot { background: var(--teal, #1b8a6b); }
+.perm-box[aria-pressed="true"] { border-color: var(--teal, #1b8a6b); }

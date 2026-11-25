@@ -21,7 +21,7 @@
         </div>
         <p class="form-error" data-request-error role="alert"></p>
       </div>
-      <p class="alert-amount num">{{ w.amount|money }}</p>
+      <p class="alert-amount num">{% if w.before_amount is not None %}{{ w.before_amount|money }} → {% endif %}{{ w.amount|money }}</p>
     </li>
     {% endfor %}
   </ul>
@@ -33,16 +33,9 @@
   <p class="muted">{% translate "Turn off what you don't want to hear about. It is still kept in the patient's file and the records." %}</p>
   {% for g in groups %}
   <h3 class="sub-title" data-group-head="{{ g.key }}">{{ g.label }}</h3>
-  {% if g.key == "drawer" %}
-  {# The desk's money out of the drawer: at once with an alert, or waiting for the owner's OK (Saged, 2026-11-25). #}
-  <fieldset class="chips drawer-approval" data-drawer-approval data-on="{{ drawer_approval|yesno:'1,0' }}">
-    <legend>{% translate "When the desk takes money out of the drawer" %}</legend>
-    <label class="chip"><input type="radio" name="drawer_approval" value="0"{% if not drawer_approval %} checked{% endif %}><span>{% translate "It goes out, and I get an alert" %}</span></label>
-    <label class="chip"><input type="radio" name="drawer_approval" value="1"{% if drawer_approval %} checked{% endif %}><span>{% translate "It waits for my OK" %}</span></label>
-  </fieldset>
-  {% endif %}
+
   <div class="switch-list">
-    {% for k in g.kinds %}<label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% endfor %}
+    {% for k in g.kinds %}<div class="kind-row"><label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% if k.gate %}<button type="button" class="perm-box" data-gate="{{ k.key }}" aria-pressed="{{ k.gated|yesno:'true,false' }}" title="{% translate "Green: it waits for your permission. Red: it happens, and you get an alert." %}"><span class="perm-dot" aria-hidden="true"></span>{% translate "Permission" %}</button>{% endif %}</div>{% endfor %}
   </div>
   {% endfor %}
   <p class="muted" role="status" data-settings-status></p>

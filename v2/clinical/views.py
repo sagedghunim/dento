@@ -572,6 +572,10 @@ def procedures_view(request, ctx, data):
 
 
 def _replay_procedure(ctx, stored):
+    if stored["target_type"] == "cash_request":  # it waited for the owner (Saged, 2026-11-25)
+        from finance.views import _replay_request
+
+        return _replay_request(ctx, stored)
     return {"procedure": services._procedure(ctx, stored["target_id"], active=False)}
 
 
@@ -634,6 +638,19 @@ def procedure_update_view(request, ctx, data, procedure_id):
     _may_change(ctx, list(changes))
     if not ctx.can("settings.manage"):  # a doctor's follow-ups too: their own sections only (Saged, 2026-11-22)
         _own_section(ctx, services._procedure(ctx, procedure_id, active=False)["section_id"])
+    from finance import services as finance
+
+    if "price" in changes and finance.needs_approval(ctx, "price"):
+        # The owner wants to approve a price change (Saged, 2026-11-25): the old price stays until they do (202).
+        current = services._procedure(ctx, procedure_id, active=False)
+        if changes["price"] != current["price"]:
+            from finance.views import request_payload
+
+            asked = finance.ask_cash(ctx, "price", changes["price"] or 0, note=current["name_ar"],
+                                     data={"procedure_id": procedure_id, "changes": changes,
+                                           "before": current["price"]})
+            return Result({"request": request_payload(ctx, asked), "procedure": current}, status=202,
+                          target_type="cash_request", target_id=asked["id"])
     procedure = services.update_procedure(ctx, procedure_id, changes)
     return Result({"procedure": procedure}, target_type="procedure", target_id=procedure_id)
 

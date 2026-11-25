@@ -92,11 +92,11 @@ def close_shift_view(request, ctx, data, shift_id):
 @api("POST", perm="cash.shift", replay=_replay_shift)
 def cash_movement_view(request, ctx, data):
     """POST {kind: in|out, amount, reason}: cash into or out of the open shift's drawer. Cash out by someone other
-    than the owner is a request (202) when the owner wants to approve it (drawer_approval)."""
+    than the owner is a request (202) when the owner wants to approve it (the owner listed "cash" in approvals)."""
     kind = validate.choice(data, "kind", ["in", "out"])
     amount = parse_money(data.get("amount"), "amount", low=1)
     reason = validate.text(data, "reason", 200)
-    if kind == "out" and services.needs_approval(ctx):
+    if kind == "out" and services.needs_approval(ctx, "cash"):
         return _asked(ctx, services.ask_cash(ctx, "out", amount, note=reason))
     shift_id, _movement = services.cash_movement(ctx, kind, amount, reason)
     return Result(_report(ctx, services.get_shift(ctx, shift_id)), status=201, target_type="shift", target_id=shift_id)
@@ -203,11 +203,11 @@ def add_expense_view(request, ctx, data):
 def drawer_expense_view(request, ctx, data):
     """POST {category_id, amount, note?}: the desk pays rent, a salary… out of today's drawer (Saged, 2026-11-22).
     Other days, expenses not from the drawer and voiding stay with expenses.manage. A request (202) when the owner
-    wants to approve the desk's spending (drawer_approval, Saged 2026-11-25)."""
+    wants to approve the desk's spending (approvals: "cash", Saged 2026-11-25)."""
     category_id = validate.ident(data.get("category_id"), "category_id")
     amount = parse_money(data.get("amount"), "amount", low=1)
     note = validate.text(data, "note", 200, required=False)
-    if services.needs_approval(ctx):
+    if services.needs_approval(ctx, "cash"):
         return _asked(ctx, services.ask_cash(ctx, "expense", amount, category_id, note))
     expense = services.add_expense(ctx, category_id, amount, business_day(ctx.clinic), note, True)
     return Result({"expense": _expense_payload(ctx, expense)}, status=201, target_type="expense",

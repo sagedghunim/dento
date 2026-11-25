@@ -19,21 +19,27 @@ if (box) {
   });
 }
 
-// The desk's money out of the drawer: at once with an alert, or waiting for the owner's OK (Saged, 2026-11-25).
-const approval = document.querySelector("[data-drawer-approval]");
-if (approval) {
+// Next to an alert, its permission (Saged, 2026-11-25): green, the action waits for the owner's OK; red, it happens
+// and the owner gets the alert. The whole list is saved with the one it replaces.
+const gates = [...document.querySelectorAll("[data-gate]")];
+if (gates.length) {
   const status = document.querySelector("[data-settings-status]");
-  approval.addEventListener("change", async (event) => {
-    const input = event.target.closest('[name="drawer_approval"]');
-    if (!input) return;
-    const on = input.value === "1";
+  const listOf = () => gates.filter((g) => g.getAttribute("aria-pressed") === "true").map((g) => g.dataset.gate);
+  gates.forEach((gate) => gate.addEventListener("click", async () => {
+    if (gate.disabled) return;
+    const before = listOf();
+    const on = gate.getAttribute("aria-pressed") !== "true";
+    gate.setAttribute("aria-pressed", on ? "true" : "false");
+    const after = listOf();
+    gate.disabled = true;
     status.textContent = t("saving");
-    const result = await save("PUT", "/api/v1/settings/clinic",
-      { changes: { drawer_approval: on }, expected: { drawer_approval: !on } }, { label: t("alert_settings") });
-    if (isOk(result)) { status.textContent = t("saved"); approval.dataset.on = on ? "1" : "0"; return; }
-    approval.querySelector(`[value="${on ? "0" : "1"}"]`).checked = true;
+    const result = await save("PUT", "/api/v1/settings/clinic", { changes: { approvals: after }, expected: { approvals: before } },
+      { label: t("alert_settings") });
+    gate.disabled = false;
+    if (isOk(result)) { status.textContent = t("saved"); return; }
+    gate.setAttribute("aria-pressed", on ? "false" : "true");
     status.textContent = errorMessage(result, t("failed"));
-  });
+  }));
 }
 
 // Approve or refuse a request; the row goes once it is decided.

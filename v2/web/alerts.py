@@ -124,10 +124,18 @@ def waiting_requests(ctx):
     categories = {i: pick(n, e) for i, n, e in sql.rows(
         ctx, 'SELECT id, name, name_en FROM "finance_category" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
         [ctx.clinic_id, [r["category_id"] for r in rows if r["category_id"]]])}
+    def what(r):
+        if r["kind"] == "expense":
+            return _("Pay an expense from the drawer") + " · " + categories.get(r["category_id"], "")
+        if r["kind"] == "line":
+            return _("Remove a line from a bill")
+        if r["kind"] == "price":
+            return _("Change a price")
+        return _("Take money out of the drawer")
+
     return [{"id": r["id"], "amount": r["amount"], "who": names.get(r["requested_by_id"], ""),
-             "at": local_iso(ctx.clinic, r["requested_at"]), "note": r["note"],
-             "what": (_("Pay an expense from the drawer") + " · " + categories.get(r["category_id"], ""))
-             if r["kind"] == "expense" else _("Take money out of the drawer")} for r in rows]
+             "at": local_iso(ctx.clinic, r["requested_at"]), "note": r["note"], "what": what(r),
+             "before_amount": (r["data"] or {}).get("before") if r["kind"] == "price" else None} for r in rows]
 
 
 def items(ctx, group=None):
@@ -284,15 +292,18 @@ def alerts_page(request, ctx):
         pass
     off = off_kinds(ctx)
     labels, names = _labels(), _group_labels()
-    groups = [{"key": g, "label": names[g],
-               "kinds": [{"key": k[0], "label": labels[k[0]], "on": k[0] not in off} for k in KINDS if k[3] == g]}
-              for g in GROUPS]
     from clinics import settings as clinic_settings
 
+    approvals = clinic_settings.effective(ctx.clinic.settings)["approvals"]
+    # Next to an alert, its permission where the action can wait for the owner (Saged, 2026-11-25).
+    groups = [{"key": g, "label": names[g],
+               "kinds": [{"key": k[0], "label": labels[k[0]], "on": k[0] not in off,
+                          "gate": k[0] in clinic_settings.APPROVAL_KINDS, "gated": k[0] in approvals}
+                         for k in KINDS if k[3] == g]}
+              for g in GROUPS]
     return render(request, "web/alerts.html", {"ctx": ctx, "nav_active": "alerts", "items": found, "days": DAYS,
                                                "groups": groups, "group": group, "some_off": bool(off),
-                                               "waiting": waiting_requests(ctx),
-                                               "drawer_approval": clinic_settings.effective(ctx.clinic.settings)["drawer_approval"]})
+                                               "waiting": waiting_requests(ctx), "approvals": approvals})
 
 
 @api("PUT", key=False)

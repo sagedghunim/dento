@@ -14,10 +14,12 @@ class CashRequestTests(ShardTestCase):
         call(self.desk, "POST", "/api/v1/register/movements", {"kind": "in", "amount": 1000, "reason": "فكة"})
         self.categories = {c["code"]: c["id"] for c in call(self.owner, "GET", "/api/v1/expense-categories").json()["items"]}
 
-    def approval(self, on):
+    def approval(self, on, kinds=("cash",)):
+        after = list(kinds) if on else []
         r = call(self.owner, "PUT", "/api/v1/settings/clinic",
-                 {"changes": {"drawer_approval": on}, "expected": {"drawer_approval": not on}})
+                 {"changes": {"approvals": after}, "expected": {"approvals": getattr(self, "approvals", [])}})
         self.assertEqual(r.status_code, 200, r.content)
+        self.approvals = after
 
     def count(self, model, **where):
         with clinic_transaction(self.a.id, self.a.shard):
@@ -78,7 +80,7 @@ class CashRequestTests(ShardTestCase):
 
     def test_only_the_owner_turns_it_on(self):
         r = call(self.desk, "PUT", "/api/v1/settings/clinic",
-                 {"changes": {"drawer_approval": True}, "expected": {"drawer_approval": False}})
+                 {"changes": {"approvals": ["cash"]}, "expected": {"approvals": []}})
         self.assertEqual(r.status_code, 403)
 
     def test_the_owner_hears_of_a_request(self):
@@ -88,3 +90,25 @@ class CashRequestTests(ShardTestCase):
         self.assertIn("data-cash-requests", page)
         self.assertIn("مستني موافقتك", page)
         self.assertIn('class="nav-count', self.owner.get("/patients").content.decode())
+
+    def test_a_removed_bill_line_and_a_price_change_wait_too(self):
+        from clinical.models import Procedure
+
+        self.approval(True, ("line", "price"))
+        # A price change by the desk waits; the old price stays until the owner approves.
+        with clinic_transaction(self.a.id, self.a.shard):
+            procedure = Procedure.objects.filter(clinic_id=self.a.id, is_active=True).order_by("id").first()
+        r = call(self.desk, "PATCH", f"/api/v1/procedures/{procedure.id}", {"changes": {"price": procedure.price + 500}})
+        self.assertEqual(r.status_code, 202, r.content)
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(Procedure.objects.get(clinic_id=self.a.id, id=procedure.id).price, procedure.price)
+        url = f"/api/v1/cash-requests/{r.json()['request']['id']}/decide"
+        self.assertEqual(call(self.owner, "POST", url, {"approve": True}).status_code, 200)
+        with clinic_transaction(self.a.id, self.a.shard):
+            self.assertEqual(Procedure.objects.get(clinic_id=self.a.id, id=procedure.id).price, procedure.price + 500)
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn('data-gate="line"', page)
+        self.assertIn('data-gate="price" aria-pressed="true"', page)
+        self.assertIn('data-gate="cash" aria-pressed="false"', page)
+        # Cash isn't listed now: the desk's expense goes out at once.
+        self.assertEqual(self.spend(self.desk).status_code, 201)

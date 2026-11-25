@@ -42,6 +42,10 @@ def _replay_payment(ctx, stored):
 
 
 def _replay_invoice(ctx, stored):
+    if stored["target_type"] == "cash_request":  # it waited for the owner (Saged, 2026-11-25)
+        from finance.views import _replay_request
+
+        return _replay_request(ctx, stored)
     return _invoice_answer(ctx, stored["target_id"])
 
 
@@ -96,6 +100,19 @@ def add_line_view(request, ctx, data, invoice_id):
 def remove_line_view(request, ctx, data, invoice_id, line_id):
     invoice_id = _invoice_id(invoice_id)
     line_id = validate.path_id(line_id, services.not_found("line"))
+    from finance import services as finance
+
+    if finance.needs_approval(ctx, "line"):
+        # The owner wants to approve a removed line (Saged, 2026-11-25): it stays on the bill until they do (202).
+        line = services.invoice_line(ctx, invoice_id, line_id)
+        if line is None:
+            raise services.not_found("line")
+        from finance.views import request_payload
+
+        asked = finance.ask_cash(ctx, "line", line["amount"], note=line["description"],
+                                 data={"invoice_id": invoice_id, "line_id": line_id})
+        return Result({"request": request_payload(ctx, asked), **_invoice_answer(ctx, invoice_id)}, status=202,
+                      target_type="cash_request", target_id=asked["id"])
     version = services.remove_line(ctx, invoice_id, line_id)
     return Result(_invoice_answer(ctx, invoice_id, next(iter(version.values()))), target_type="invoice",
                   target_id=invoice_id)

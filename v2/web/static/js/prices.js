@@ -39,6 +39,11 @@ async function savePrice(input) {
   input.disabled = true;
   const result = await save("PATCH", `/api/v1/procedures/${p.id}`, { changes: { price } }, { label: p.name_ar });
   input.disabled = false;
+  if (result.settled && result.status === 202) {  // waits for the owner's permission (Saged, 2026-11-25)
+    input.value = input.defaultValue;
+    toast(t("sent_for_permission"));
+    return;
+  }
   if (result.settled && isOk(result)) {
     p.price = price;
     input.closest("[data-procedure]").dataset.procedure = JSON.stringify(p);
@@ -138,6 +143,7 @@ if (dialog) {
       }
       result = await submitter.run("POST", "/api/v1/procedures", body, body.name_ar);
     }
+    if (result && result.status === 202) { submitter.dialog.close(); toast(t("sent_for_permission")); return; }
     if (result && isOk(result)) window.location.reload();
   });
 }
