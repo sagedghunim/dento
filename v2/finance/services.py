@@ -48,6 +48,7 @@ def not_found(what):
         "expense": _("This expense wasn't found."),
         "member": _("This member wasn't found."),
         "request": _("This request wasn't found."),
+        "deduction": _("This deduction wasn't found."),
     }
     return ApiError("not_found", messages[what], 404)
 
@@ -506,16 +507,21 @@ def statement(ctx, membership_id, month):
     payouts = sql.dicts(ctx, 'SELECT id, amount, method, shift_id, day, note, created_at FROM "finance_payout" '
                              "WHERE clinic_id = %s AND membership_id = %s AND month = %s ORDER BY id",
                         [ctx.clinic_id, membership_id, first])
+    # Shortages the owner took from this member's pay this month (Saged, 2026-11-25).
+    deductions = sql.dicts(ctx, 'SELECT id, amount, reason, shift_id, created_at, seen_at FROM "finance_deduction" '
+                                "WHERE clinic_id = %s AND membership_id = %s AND month = %s AND voided_at IS NULL "
+                                "ORDER BY id", [ctx.clinic_id, membership_id, first])
     done = sum(d["done"] for d in days)
     procedures = sum(d["procedures"] for d in days)
     collected = sum(d["collected"] for d in days)
     refunded = sum(d["refunded"] for d in days)
     total, parts = earned(rule[0] if rule else None, done, procedures, collected - refunded)
     paid = sum(p["amount"] for p in payouts)
+    deducted = sum(d["amount"] for d in deductions)
     return {"member": member, "month": first, "rule": rule_payload(rule[0] if rule else None), "days": days,
             "visits": done, "procedures": procedures, "collected": collected, "refunded": refunded,
             "revenue": collected - refunded, "earned": total, "parts": parts, "payouts": payouts, "paid": paid,
-            "balance": total - paid}
+            "deductions": deductions, "deducted": deducted, "balance": total - deducted - paid}
 
 
 def payout(ctx, membership_id, month, amount, method, note):
@@ -612,6 +618,27 @@ def decide_cash(ctx, request_id, approve):
             from clinical import services as clinical
 
             clinical.update_procedure(ctx, request["data"]["procedure_id"], request["data"]["changes"])
+        elif request["kind"] in ("discount", "refund", "void"):
+            from billing import services as billing
+
+            d = request["data"]
+            if request["kind"] == "discount":
+                billing.set_discount(ctx, d["invoice_id"], d["discount"], d["expected"])
+            elif request["kind"] == "refund":
+                billing.refund(ctx, d["payment_id"], d["amount"], d.get("method"), d.get("note", ""), d.get("lower_bill", True))
+            else:
+                billing.void(ctx, d["invoice_id"])
+        elif request["kind"] == "exvoid":
+            void_expense(ctx, request["data"]["expense_id"])
+        elif request["kind"] == "patient":
+            from patients import services as patients
+
+            patients.delete(ctx, request["data"]["patient_id"])
+        elif request["kind"] == "stock":
+            from inventory import services as inventory
+
+            d = request["data"]
+            inventory.adjust(ctx, d["item_id"], d["counted"], d["expected"], d.get("reason", ""))
         else:
             result_id = cash_movement(ctx, "out", request["amount"], request["note"],
                                       by_id=request["requested_by_id"])[1]
@@ -635,3 +662,71 @@ def cash_requests(ctx, pending_only=False, mine=False, limit=30):
     rows = sql.rows(ctx, f'SELECT {REQUEST_COLUMNS} FROM "finance_cash_request" WHERE {where} '
                          "ORDER BY requested_at DESC, id DESC LIMIT %s", [*params, limit])
     return [_request_row(r) for r in rows]
+
+
+# --- A shortage taken from pay (Saged, 2026-11-25) -----------------------------------------------------------------
+
+
+def shift_deduction(ctx, shift_id):
+    """The active deduction made from this shift, or None."""
+    return (sql.dicts(ctx, 'SELECT id, membership_id, amount, month, seen_at FROM "finance_deduction" WHERE clinic_id = %s '
+                           "AND shift_id = %s AND voided_at IS NULL", [ctx.clinic_id, shift_id]) or [None])[0]
+
+
+def deduct_shortage(ctx, shift_id, amount):
+    """The owner takes a closed shift's shortage (all or part) from the pay of who closed it, or who opened it when it
+    closed by itself. One per shift; never more than the shortage. Audited."""
+    found = sql.row(ctx, 'SELECT status, difference, opened_by_id, closed_by_id, closed_at FROM "finance_shift" '
+                         "WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE", [ctx.clinic_id, shift_id])
+    if found is None:
+        raise not_found("shift")
+    status, difference, opened_by, closed_by, closed_at = found
+    if status != "closed" or not difference or difference >= 0:
+        raise ApiError("not_short", _("Only a shift that closed short can be taken from pay."), 409)
+    if amount > -difference:
+        from web.format import money_plain
+
+        raise ApiError("over_shortage", _("That is more than the shortage: %(amount)s.") % {"amount": money_plain(-difference)},
+                       409, fields={"amount": "over_shortage"})
+    if shift_deduction(ctx, shift_id) is not None:
+        raise ApiError("deducted", _("This shortage was already taken from pay."), 409)
+    who = closed_by or opened_by
+    if who is None:
+        raise ApiError("no_member", _("Nobody is on this shift to take it from."), 409)
+    month = business_day(ctx.clinic, closed_at).replace(day=1)  # the clinic day the shift closed on
+    deduction_id = sql.row(ctx, """
+        INSERT INTO "finance_deduction" (clinic_id, membership_id, month, amount, reason, shift_id, created_at,
+                                         created_by_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""", [
+        ctx.clinic_id, who, month, amount, _("Register short"), shift_id, timezone.now(), ctx.membership_id])[0]
+    record_change(ctx, "deduction.add", "membership", who, amount=amount, shift_id=shift_id, deduction_id=deduction_id)
+    return {"id": deduction_id, "membership_id": who, "amount": amount, "month": month}
+
+
+def void_deduction(ctx, deduction_id):
+    changed = sql.row(ctx, 'UPDATE "finance_deduction" SET voided_at = %s, voided_by_id = %s WHERE clinic_id = %s '
+                           "AND id = %s AND voided_at IS NULL RETURNING membership_id, amount",
+                      [timezone.now(), ctx.membership_id, ctx.clinic_id, deduction_id])
+    if changed is None:
+        if sql.row(ctx, 'SELECT 1 FROM "finance_deduction" WHERE clinic_id = %s AND id = %s', [ctx.clinic_id, deduction_id]):
+            return False  # a repeat
+        raise not_found("deduction")
+    record_change(ctx, "deduction.void", "membership", changed[0], amount=changed[1], deduction_id=deduction_id)
+    return True
+
+
+def my_deductions(ctx):
+    """This member's deductions not yet seen, and this month's, newest first."""
+    return sql.dicts(ctx, 'SELECT id, amount, reason, month, created_at, seen_at FROM "finance_deduction" '
+                          "WHERE clinic_id = %s AND membership_id = %s AND voided_at IS NULL "
+                          "AND (seen_at IS NULL OR month >= %s) ORDER BY id DESC LIMIT 20",
+                     [ctx.clinic_id, ctx.membership_id, business_day(ctx.clinic).replace(day=1)])
+
+
+def see_deduction(ctx, deduction_id):
+    """The member marks their own deduction seen (instead of signing a paper). Another's is 404."""
+    found = sql.row(ctx, 'UPDATE "finance_deduction" SET seen_at = coalesce(seen_at, %s) WHERE clinic_id = %s AND id = %s '
+                         "AND membership_id = %s AND voided_at IS NULL RETURNING id",
+                    [timezone.now(), ctx.clinic_id, deduction_id, ctx.membership_id])
+    if found is None:
+        raise not_found("deduction")

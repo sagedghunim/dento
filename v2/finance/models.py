@@ -106,7 +106,8 @@ class Category(models.Model):
         ]
 
 
-REQUEST_KINDS = ["expense", "out", "line", "price"]
+# expense/out: money out of the drawer; exvoid: an expense voided; the rest as the alert kinds.
+REQUEST_KINDS = ["expense", "out", "line", "price", "discount", "refund", "void", "exvoid", "patient", "stock"]
 REQUEST_STATUSES = ["pending", "approved", "rejected"]
 
 
@@ -224,3 +225,30 @@ class Payout(models.Model):
             models.Index(fields=["clinic", "membership", "month"], name="payout_member_month"),
             models.Index(fields=["clinic", "shift"], condition=Q(shift__isnull=False), name="payout_shift"),
         ]
+
+
+class Deduction(models.Model):
+    """A shortage taken from a member's pay (Saged, 2026-11-25, an accountant's advice): only when the owner decides,
+    from a shift that closed short, never more than the shortage. The member sees it and marks it seen."""
+
+    clinic = _clinic()
+    membership_id = models.BigIntegerField()
+    month = models.DateField()  # the first day of the statement's month
+    amount = models.BigIntegerField()
+    reason = models.CharField(max_length=200, blank=True, default="")
+    shift = _ref(Shift, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by_id = models.BigIntegerField(null=True, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by_id = models.BigIntegerField(null=True, blank=True)
+    seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "finance_deduction"
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="deduction_amount_positive"),
+            models.UniqueConstraint(fields=["clinic", "shift"], condition=Q(shift__isnull=False, voided_at__isnull=True),
+                                    name="deduction_one_per_shift"),
+            _fk("shift", "finance.Shift", "deduction_shift_fk"),
+        ]
+        indexes = [models.Index(fields=["clinic", "membership_id", "month"], name="deduction_member_month")]

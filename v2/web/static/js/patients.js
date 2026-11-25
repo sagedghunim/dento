@@ -223,6 +223,10 @@ document.addEventListener("click", async (event) => {
   const { isOk: ok, newKey: key, save: send, errorMessage: message } = await import("./api.js");
   const url = `/api/v1/patients/${button.dataset.id}/${del ? "delete" : "restore"}`;
   const result = await send("POST", url, {}, { key: key(), label: button.dataset.name });
+  if (result.settled && result.status === 202) {  // waits for the owner's permission (Saged, 2026-11-25)
+    toast(t("sent_for_permission"));
+    return;
+  }
   if (result.settled && ok(result)) {
     if (del) { window.location.href = "/patients"; return; }
     toast(t("patient_restored", { name: button.dataset.name }));

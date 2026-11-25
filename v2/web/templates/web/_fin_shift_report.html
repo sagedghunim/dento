@@ -14,6 +14,20 @@
 <ul class="lines cash-lines">
   {% for line in report.lines %}<li><span>{{ line.label }}</span><span class="amt">{{ line.amount|money }}</span></li>{% endfor %}
 </ul>
+{% if report.deduct %}{% with d=report.deduct %}
+{# The shortage taken from pay, only when the owner decides (Saged, 2026-11-25). #}
+<div class="deduct-box" data-deduct-box data-shift="{{ s.id }}">
+  {% if d.done %}
+  <p><span class="pill red">{% translate "Taken from pay" %}</span> {{ d.done.amount|money }} · <bdi dir="auto">{{ d.who }}</bdi>{% if d.done.seen_at %} · {% translate "Seen" %}{% endif %}</p>
+  {% if d.may %}<button type="button" class="btn ghost" data-void-deduction="{{ d.done.id }}">{% translate "Cancel the deduction" %}</button>{% endif %}
+  {% elif d.may %}
+  <label class="field">{% translate "Take the shortage from the pay of" %} <bdi dir="auto">{{ d.who }}</bdi>
+    <input name="deduct_amount" inputmode="decimal" dir="ltr" value="{{ d.short_input }}" data-short="{{ d.short }}"></label>
+  <button type="button" class="btn" data-deduct>{% translate "Take it from pay" %}</button>
+  <p class="form-error" data-deduct-error role="alert"></p>
+  {% endif %}
+</div>
+{% endwith %}{% endif %}
 {% include "web/_fin_methods.html" with r=report %}
 {% if report.movements %}
 <h3 class="sub-title">{% translate "Drawer movements" %}</h3>

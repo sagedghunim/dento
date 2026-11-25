@@ -55,6 +55,16 @@ def _replay_request(ctx, stored):
     return {"request": request_payload(ctx, found[0]) if found else None}
 
 
+def gate(ctx, what, kind, amount, note, data, extra=None):
+    """None, or the 202 answer when `what` waits for the owner's permission (Saged, 2026-11-25): the request is kept
+    and nothing else happens until the owner approves it."""
+    if not services.needs_approval(ctx, what):
+        return None
+    asked = services.ask_cash(ctx, kind, max(int(amount or 0), 0), note=note, data=data)
+    return Result({"request": request_payload(ctx, asked), **(extra or {})}, status=202, target_type="cash_request",
+                  target_id=asked["id"])
+
+
 def _asked(ctx, request):
     """Waiting for the owner's OK (Saged, 2026-11-25): 202, and nothing has left the drawer yet."""
     return Result({"request": request_payload(ctx, request)}, status=202, target_type="cash_request",
@@ -217,6 +227,10 @@ def drawer_expense_view(request, ctx, data):
 @api("POST", perm="expenses.manage", replay=_replay_expense)
 def void_expense_view(request, ctx, data, expense_id):
     expense_id = validate.path_id(expense_id, services.not_found("expense"))
+    current = services.get_expense(ctx, expense_id)
+    waiting = gate(ctx, "expense", "exvoid", current["amount"], current["note"], {"expense_id": expense_id})
+    if waiting:
+        return waiting
     services.void_expense(ctx, expense_id)
     return Result({"expense": _expense_payload(ctx, services.get_expense(ctx, expense_id))}, target_type="expense",
                   target_id=expense_id)
@@ -343,3 +357,32 @@ def decide_cash_request_view(request, ctx, data, request_id):
     request_id = validate.path_id(request_id, services.not_found("request"))
     decided = services.decide_cash(ctx, request_id, validate.boolean(data, "approve"))
     return Result({"request": request_payload(ctx, decided)}, target_type="cash_request", target_id=request_id)
+
+
+# --- A shortage taken from pay (Saged, 2026-11-25) -----------------------------------------------------------------
+
+
+def _deduction_id(value):
+    return validate.path_id(value, services.not_found("deduction"))
+
+
+@api("POST", perm="finances.pay")
+def deduct_view(request, ctx, data, shift_id):
+    """POST {amount}: take a closed shift's shortage (or part of it) from the pay of who closed it."""
+    _owner(ctx)
+    deduction = services.deduct_shortage(ctx, _shift_id(shift_id), parse_money(data.get("amount"), "amount", low=1))
+    return Result({"deduction": {**deduction, "month": deduction["month"].isoformat()}}, status=201,
+                  target_type="shift", target_id=int(shift_id))
+
+
+@api("POST", perm="finances.pay")
+def void_deduction_view(request, ctx, data, deduction_id):
+    _owner(ctx)
+    return {"voided": services.void_deduction(ctx, _deduction_id(deduction_id))}
+
+
+@api("POST", perm="cash.collect")
+def see_deduction_view(request, ctx, data, deduction_id):
+    """The member marks their own deduction seen."""
+    services.see_deduction(ctx, _deduction_id(deduction_id))
+    return {"seen": True}

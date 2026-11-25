@@ -137,9 +137,17 @@ def purchase_view(request, ctx, data, item_id):
 def count_view(request, ctx, data, item_id):
     """POST {counted, expected, reason?}: a stock count against the quantity the person saw (409 stale)."""
     item_id = _item_id(item_id)
-    item = services.adjust(ctx, item_id, parse_int(data.get("counted"), "counted", -MAX_QTY, MAX_QTY),
-                           parse_int(data.get("expected"), "expected", -MAX_QTY, MAX_QTY),
-                           validate.text(data, "reason", 200, required=False))
+    counted = parse_int(data.get("counted"), "counted", -MAX_QTY, MAX_QTY)
+    expected = parse_int(data.get("expected"), "expected", -MAX_QTY, MAX_QTY)
+    reason = validate.text(data, "reason", 200, required=False)
+    from finance.views import gate
+
+    current = services.get_item(ctx, item_id)
+    waiting = gate(ctx, "stock", "stock", 0, f"{current['name']} · {expected} → {counted}",
+                   {"item_id": item_id, "counted": counted, "expected": expected, "reason": reason})
+    if waiting:
+        return waiting
+    item = services.adjust(ctx, item_id, counted, expected, reason)
     return Result({"item": visibility.fields(ctx, item, "unit_cost")}, target_type="item", target_id=item_id)
 
 

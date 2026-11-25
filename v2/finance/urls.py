@@ -14,6 +14,10 @@ urlpatterns = [
     path("api/v1/register/shifts", views.shifts_view),
     path("api/v1/register/shifts/<int:shift_id>", views.shift_view),
     path("api/v1/register/shifts/<int:shift_id>/close", views.close_shift_view),
+    # A shortage taken from pay (Saged, 2026-11-25)
+    path("api/v1/register/shifts/<int:shift_id>/deduct", views.deduct_view),
+    path("api/v1/deductions/<int:deduction_id>/void", views.void_deduction_view),
+    path("api/v1/deductions/<int:deduction_id>/seen", views.see_deduction_view),
     # Expenses (F3)
     path("api/v1/expense-categories", by_method(GET=views.categories_view, POST=views.create_category_view)),
     path("api/v1/expense-categories/<int:category_id>", views.update_category_view),

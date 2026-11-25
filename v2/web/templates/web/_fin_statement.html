@@ -4,6 +4,7 @@
 <p class="muted">{% if s.rule_text %}{{ s.rule_text }}{% else %}{% translate "No pay rule yet" %}{% endif %}</p>
 <dl class="money-sum report-sum">
   <div><dt>{% translate "Earned" %}</dt><dd>{{ s.earned|money }}</dd></div>
+  {% if s.deducted %}<div data-deducted><dt>{% translate "Taken for shortages" %}</dt><dd>{{ s.deducted|money }}</dd></div>{% endif %}
   <div><dt>{% translate "Paid" %}</dt><dd>{{ s.paid|money }}</dd></div>
   <div><dt>{% translate "Still owed" %}</dt><dd data-balance-text>{{ s.balance|money }}</dd></div>
 </dl>

@@ -223,7 +223,8 @@ def _register_context(ctx, perms):
     from finance import services
 
     shift = services.current_shift(ctx)
-    context = {"current": _shift_report(ctx, shift) if shift else None}
+    context = {"current": _shift_report(ctx, shift) if shift else None,
+               "my_deductions": [d for d in services.my_deductions(ctx) if d["seen_at"] is None]}
     if perms["expenses"] or perms["drawer_expense"]:
         context.update(_pay_choices(ctx, _categories(ctx)))
     if perms["shifts"]:
@@ -465,7 +466,16 @@ def shift_report(request, ctx, shift_id):
 
     if shift_id > 2**63 - 1:
         raise services.not_found("shift")
-    report = _shift_report(ctx, services.get_shift(ctx, shift_id))
+    shift = services.get_shift(ctx, shift_id)
+    report = _shift_report(ctx, shift)
+    # A shortage the owner can take from pay (Saged, 2026-11-25): who it would be taken from, or what was taken.
+    if shift["status"] == "closed" and (shift["difference"] or 0) < 0:
+        who = shift["closed_by_id"] or shift["opened_by_id"]
+        found = services.shift_deduction(ctx, shift_id)
+        short = -shift["difference"]
+        report["deduct"] = {"may": ctx.membership.is_owner and ctx.can("finances.pay"), "short": short,
+                            "short_input": str(short // 100) if short % 100 == 0 else f"{short / 100:.2f}",
+                            "who": _people(ctx, [who]).get(who, "") if who else "", "done": found}
     return HttpResponse(render_to_string("web/_fin_shift_report.html", {"report": report}, request=request))
 
 

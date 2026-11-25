@@ -112,3 +112,26 @@ class CashRequestTests(ShardTestCase):
         self.assertIn('data-gate="cash" aria-pressed="false"', page)
         # Cash isn't listed now: the desk's expense goes out at once.
         self.assertEqual(self.spend(self.desk).status_code, 201)
+
+    def test_permission_on_every_action_that_can_wait(self):
+        # "بإذن" on every action (Saged, 2026-11-25), never on money put into the drawer.
+        self.approval(True, ("expense",))
+        page = self.owner.get("/alerts").content.decode()
+        for kind in ("cash", "line", "price", "discount", "refund", "void", "expense", "patient", "stock"):
+            self.assertIn(f'data-gate="{kind}"', page, kind)
+        for kind in ("cash_in", "register", "auto_close", "late"):
+            self.assertNotIn(f'data-gate="{kind}"', page, kind)
+        self.assertIn("بإذن", page)
+        # A voided expense by someone the owner allowed to void waits, then goes on approval.
+        expense = call(self.owner, "POST", "/api/v1/expenses",
+                       {"category_id": self.categories["utilities"], "amount": 400, "note": "x"}).json()["expense"]
+        with clinic_transaction(self.a.id, self.a.shard):
+            from clinics.models import Membership
+
+            Membership.objects.filter(clinic_id=self.a.id, id=self.desk.membership_id).update(granted=["expenses.manage"])
+        r = call(self.desk, "POST", f"/api/v1/expenses/{expense['id']}/void", {})
+        self.assertEqual(r.status_code, 202, r.content)
+        self.assertEqual(self.count(Expense, voided_at__isnull=True), 1)
+        url = f"/api/v1/cash-requests/{r.json()['request']['id']}/decide"
+        self.assertEqual(call(self.owner, "POST", url, {"approve": True}).status_code, 200)
+        self.assertEqual(self.count(Expense, voided_at__isnull=True), 0)

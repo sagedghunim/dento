@@ -72,6 +72,11 @@ function setup(id, build) {
     const result = await submitter.run(request.method, request.url, request.body, request.label, { headers: request.headers });
     if (!result || !isOk(result)) return;
     dialog.close();
+    if (result.status === 202 && result.data.request) {  // waits for the owner's permission (Saged, 2026-11-25)
+      toast(t("sent_for_permission"));
+      reload();
+      return;
+    }
     spec.done(result.data, current);
   });
   return {

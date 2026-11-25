@@ -61,6 +61,11 @@ function setup(id, build) {
     const result = await submitter.run(request.method, request.url, request.body, request.label);
     if (!result || !isOk(result)) return;
     dialog.close();
+    if (result.status === 202 && result.data.request && !spec.handlesWaiting) {  // waits for the owner's permission
+      toast(t("sent_for_permission"));
+      reloadTab();
+      return;
+    }
     spec.done(result.data, current);
   });
   return {
@@ -407,3 +412,43 @@ if (new URLSearchParams(window.location.search).get("close") === "1") {
   if (closer) closer.click();
   history.replaceState(null, "", window.location.pathname);
 }
+
+// --- a shortage taken from pay (Saged, 2026-11-25): the owner decides on the shift's report; the member sees it ---
+
+async function refreshReport(shiftId) {
+  const holder = reportDialog && reportDialog.querySelector("[data-report-body]");
+  if (!holder) return;
+  const result = await fetchText(`/finances/shifts/${encodeURIComponent(shiftId)}`);
+  if (result.status === 200) holder.replaceChildren(parseFragment(result.text));
+}
+
+document.addEventListener("click", async (event) => {
+  const deduct = event.target.closest("[data-deduct]");
+  const voidIt = event.target.closest("[data-void-deduction]");
+  const seen = event.target.closest("[data-see-deduction]");
+  if (deduct) {
+    const box = deduct.closest("[data-deduct-box]");
+    const error = box.querySelector("[data-deduct-error]");
+    const amount = parsePiastres(box.querySelector('[name="deduct_amount"]').value);
+    if (amount == null || amount <= 0) { error.textContent = t("bad_amount"); return; }
+    deduct.disabled = true;
+    const result = await save("POST", `/api/v1/register/shifts/${box.dataset.shift}/deduct`, { amount }, { label: t("deducted") });
+    deduct.disabled = false;
+    if (!isOk(result)) { error.textContent = errorMessage(result, t("failed")); return; }
+    toast(t("deducted"));
+    refreshReport(box.dataset.shift);
+  } else if (voidIt) {
+    const box = voidIt.closest("[data-deduct-box]");
+    voidIt.disabled = true;
+    const result = await save("POST", `/api/v1/deductions/${voidIt.dataset.voidDeduction}/void`, {}, { label: t("deduction_cancelled") });
+    voidIt.disabled = false;
+    if (!isOk(result)) { alertMessage(errorMessage(result, t("failed"))); return; }
+    toast(t("deduction_cancelled"));
+    refreshReport(box.dataset.shift);
+  } else if (seen) {
+    seen.disabled = true;
+    const result = await save("POST", `/api/v1/deductions/${seen.dataset.seeDeduction}/seen`, {}, { label: t("saved") });
+    if (isOk(result)) seen.closest("[data-my-deduction]").remove();
+    else { seen.disabled = false; alertMessage(errorMessage(result, t("failed"))); }
+  }
+});

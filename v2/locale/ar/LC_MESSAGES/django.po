@@ -4831,9 +4831,6 @@ msgstr "أقرب يوم فاضي: {day}"
 msgid "The register was short or over"
 msgstr "الخزنة كان فيها عجز أو زيادة"
 
-msgid "Money added to or taken from the drawer"
-msgstr "فلوس اتحطت في الخزنة أو اتسحبت منها"
-
 msgid "A file changed after its visit ended"
 msgstr "ملف مريض اتعدّل بعد ما الكشف خلص"
 
@@ -4964,4 +4961,77 @@ msgid "Change a price"
 msgstr "تغيير سعر"
 
 msgid "Green: it waits for your permission. Red: it happens, and you get an alert."
-msgstr "أخضر: يستنى إذنك. أحمر: يتنفذ على طول ويجيلك تنبيه."
+msgstr "أخضر: بإذنك، يستنى موافقتك. أحمر: يتنفذ على طول ويجيلك تنبيه."
+
+msgid "Taken from pay"
+msgstr "اتخصم من المرتب"
+
+msgid "The deduction was cancelled"
+msgstr "الخصم اتلغى"
+
+msgid "Cancel the deduction"
+msgstr "إلغاء الخصم"
+
+msgid "Take it from pay"
+msgstr "اخصمه من المرتب"
+
+msgid "Seen"
+msgstr "اطلع عليه"
+
+msgid "Taken for shortages"
+msgstr "خصم عجز"
+
+msgid "A shortage was taken from your pay"
+msgstr "اتخصم من مرتبك عجز"
+
+msgid "I've seen it"
+msgstr "اطلعت عليه"
+
+msgid "Register short"
+msgstr "عجز في الخزنة"
+
+msgid "Only a shift that closed short can be taken from pay."
+msgstr "الخصم بيبقى بس من شيفت اتقفل بعجز."
+
+#, python-format
+msgid "That is more than the shortage: %(amount)s."
+msgstr "ده أكتر من العجز: %(amount)s."
+
+msgid "This shortage was already taken from pay."
+msgstr "العجز ده اتخصم خلاص."
+
+msgid "Nobody is on this shift to take it from."
+msgstr "مفيش حد على الشيفت ده يتخصم منه."
+
+msgid "This deduction wasn't found."
+msgstr "الخصم ده مش موجود."
+
+msgid "Take the shortage from the pay of"
+msgstr "اخصم العجز من مرتب"
+
+msgid "With permission"
+msgstr "بإذن"
+
+msgid "Money put into the drawer"
+msgstr "حط فلوس في الخزنة"
+
+msgid "Money taken out of the drawer"
+msgstr "طلّع فلوس من الدرج"
+
+msgid "Give a discount"
+msgstr "عمل خصم"
+
+msgid "Refund money to a patient"
+msgstr "رجّع فلوس لمريض"
+
+msgid "Void a bill"
+msgstr "لغي فاتورة"
+
+msgid "Void an expense"
+msgstr "لغي مصروف"
+
+msgid "Delete a patient"
+msgstr "مسح مريض"
+
+msgid "Change the stock count"
+msgstr "تغيير كمية في الجرد"

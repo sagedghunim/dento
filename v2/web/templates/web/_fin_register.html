@@ -5,6 +5,13 @@
     {% if current %}<span class="pill teal">{% translate "Open" %}</span>{% else %}<span class="pill grey">{% translate "No open shift" %}</span>{% endif %}
   </div>
   <p class="card-sub">{% translate "The register opens by itself on the first cash payment. Counting it at the start or the end is optional." %}</p>
+  {# A shortage taken from this member's pay: they see it and mark it seen (Saged, 2026-11-25). #}
+  {% for d in my_deductions %}
+  <div class="deduct-note" data-my-deduction="{{ d.id }}">
+    <p><strong>{% translate "A shortage was taken from your pay" %}</strong> · {{ d.amount|money }} · {{ d.reason }}</p>
+    <button type="button" class="btn ghost" data-see-deduction="{{ d.id }}">{% translate "I've seen it" %}</button>
+  </div>
+  {% endfor %}
 
   {% if current %}
   <p class="shift-who">

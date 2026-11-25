@@ -227,6 +227,7 @@ export function initPay({ onChanged } = {}) {
       if (discount === null) { submitter.say(t("bad_amount")); return; }
       if (!(await ensureInvoice())) { afterUnknown(); return; }
       result = await submitter.run("PUT", `/api/v1/invoices/${invoice.id}/discount`, { discount, expected_discount: invoice.discount }, `${t("bill")} · ${visit.name}`);
+      if (result && result.status === 202) { toast(t("sent_for_permission")); await load(); return; }
       if (result && isOk(result)) { invoice = result.data.invoice; delete field("discount").dataset.touched; delete field("amount").dataset.touched; render(); toast(t("discount_saved")); }
       if (result && result.status === 409) await load();  // someone changed it meanwhile: show the current value
     } else if (name === "discount-type") {
@@ -253,12 +254,14 @@ export function initPay({ onChanged } = {}) {
       const amount = parsePiastres(field("refund_amount").value);
       if (!option || !amount) { submitter.say(t("bad_amount")); return; }
       result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount, lower_bill: !field("refund_lower") || field("refund_lower").checked }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
+      if (result && result.status === 202) { toast(t("sent_for_permission")); await load(); return; }
       if (result && isOk(result)) { toast(t("refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
     } else if (name === "give-back") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/give-back`, {}, [t("give_back"), visit.name].join(" · "));
       if (result && isOk(result)) { toast(t("given_back")); await load(); }
     } else if (name === "void") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/void`, {}, t("bill"));
+      if (result && result.status === 202) { toast(t("sent_for_permission")); await load(); return; }
       if (result && isOk(result)) { invoice = result.data.invoice; render(); toast(t("bill_voided")); }
     }
     afterUnknown();

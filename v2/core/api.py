@@ -225,6 +225,10 @@ def _record(alias, table, scope_column, scope_id, key, result):
 
 
 def _replayed(ctx_or_user, stored, replay):
+    if stored.get("target_type") == "cash_request":  # it waited for the owner's permission (Saged, 2026-11-25)
+        from finance.views import _replay_request
+
+        replay = _replay_request
     if replay is not None:
         result = replay(ctx_or_user, stored)
         if not isinstance(result, Result):

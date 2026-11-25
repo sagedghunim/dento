@@ -32,7 +32,8 @@ from .http import clinic_page
 KINDS = (
     ("register", ("shift.close",), "The register was short or over", "drawer"),
     ("auto_close", ("shift.auto_close",), "The register closed by itself without a count", "drawer"),
-    ("cash", ("cash.in", "cash.out"), "Money added to or taken from the drawer", "drawer"),
+    ("cash_in", ("cash.in",), "Money put into the drawer", "drawer"),
+    ("cash", ("cash.out",), "Money taken out of the drawer", "drawer"),  # with the drawer expenses' permission
     ("refund", ("payment.refund",), "Refunded money to a patient", "drawer"),
     ("expense", ("expense.void",), "Voided an expense", "drawer"),
     ("line", ("invoice.line_remove",), "Removed a line from a bill", "bills"),
@@ -62,7 +63,7 @@ def _labels():
     # Written out so the string catalogue finds them (core.i18n reads the gettext calls).
     return {"procedure": _("Removed a procedure after the visit ended"), "line": _("Removed a line from a bill"),
             "discount": _("Gave a discount"), "refund": _("Refunded money to a patient"), "void": _("Voided a bill"),
-            "register": _("The register was short or over"), "cash": _("Money added to or taken from the drawer"),
+            "register": _("The register was short or over"), "cash_in": _("Money put into the drawer"), "cash": _("Money taken out of the drawer"),
             "auto_close": _("The register closed by itself without a count"),
             "price": _("Changed a price"), "expense": _("Voided an expense"),
             "stock": _("A stock count changed the quantity"), "patient": _("Deleted a patient"),
@@ -131,7 +132,9 @@ def waiting_requests(ctx):
             return _("Remove a line from a bill")
         if r["kind"] == "price":
             return _("Change a price")
-        return _("Take money out of the drawer")
+        return {"discount": _("Give a discount"), "refund": _("Refund money to a patient"), "void": _("Void a bill"),
+                "exvoid": _("Void an expense"), "patient": _("Delete a patient"), "stock": _("Change the stock count"),
+                }.get(r["kind"], _("Take money out of the drawer"))
 
     return [{"id": r["id"], "amount": r["amount"], "who": names.get(r["requested_by_id"], ""),
              "at": local_iso(ctx.clinic, r["requested_at"]), "note": r["note"], "what": what(r),

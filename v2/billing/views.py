@@ -121,8 +121,15 @@ def remove_line_view(request, ctx, data, invoice_id, line_id):
 @api("PUT", perm="billing.discount", replay=_replay_invoice)
 def discount_view(request, ctx, data, invoice_id):
     invoice_id = _invoice_id(invoice_id)
-    _, version = services.set_discount(ctx, invoice_id, parse_money(data.get("discount"), "discount"),
-                                       parse_money(data.get("expected_discount"), "expected_discount"))
+    discount = parse_money(data.get("discount"), "discount")
+    expected = parse_money(data.get("expected_discount"), "expected_discount")
+    from finance.views import gate
+
+    waiting = gate(ctx, "discount", "discount", discount, "", {"invoice_id": invoice_id, "discount": discount,
+                                                              "expected": expected}, _invoice_answer(ctx, invoice_id))
+    if waiting:
+        return waiting
+    _, version = services.set_discount(ctx, invoice_id, discount, expected)
     return Result(_invoice_answer(ctx, invoice_id, next(iter(version.values())) if version else None),
                   target_type="invoice", target_id=invoice_id)
 
@@ -130,6 +137,12 @@ def discount_view(request, ctx, data, invoice_id):
 @api("POST", perm="billing.refund", replay=_replay_invoice)
 def void_view(request, ctx, data, invoice_id):
     invoice_id = _invoice_id(invoice_id)
+    from finance.views import gate
+
+    answer = _invoice_answer(ctx, invoice_id)
+    waiting = gate(ctx, "void", "void", answer["invoice"].get("total"), "", {"invoice_id": invoice_id}, answer)
+    if waiting:
+        return waiting
     version = services.void(ctx, invoice_id)
     return Result(_invoice_answer(ctx, invoice_id, next(iter(version.values())) if version else None),
                   target_type="invoice", target_id=invoice_id)
@@ -139,10 +152,17 @@ def void_view(request, ctx, data, invoice_id):
 def refund_view(request, ctx, data, payment_id):
     payment_id = validate.path_id(payment_id, services.not_found("payment"))
     method = data.get("method")
-    refund, invoice, version = services.refund(
-        ctx, payment_id, parse_money(data.get("amount"), "amount", low=1),
-        validate.choice(data, "method", METHODS) if method is not None else None,
-        validate.text(data, "note", 200, required=False), validate.boolean(data, "lower_bill", True))
+    amount = parse_money(data.get("amount"), "amount", low=1)
+    method = validate.choice(data, "method", METHODS) if method is not None else None
+    note = validate.text(data, "note", 200, required=False)
+    lower_bill = validate.boolean(data, "lower_bill", True)
+    from finance.views import gate
+
+    waiting = gate(ctx, "refund", "refund", amount, note, {"payment_id": payment_id, "amount": amount, "method": method,
+                                                          "note": note, "lower_bill": lower_bill})
+    if waiting:
+        return waiting
+    refund, invoice, version = services.refund(ctx, payment_id, amount, method, note, lower_bill)
     return Result(_payment_answer(ctx, refund, invoice, version), status=201, target_type="payment",
                   target_id=refund["id"])
 

@@ -35,7 +35,7 @@
   <h3 class="sub-title" data-group-head="{{ g.key }}">{{ g.label }}</h3>
 
   <div class="switch-list">
-    {% for k in g.kinds %}<div class="kind-row"><label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% if k.gate %}<button type="button" class="perm-box" data-gate="{{ k.key }}" aria-pressed="{{ k.gated|yesno:'true,false' }}" title="{% translate "Green: it waits for your permission. Red: it happens, and you get an alert." %}"><span class="perm-dot" aria-hidden="true"></span>{% translate "Permission" %}</button>{% endif %}</div>{% endfor %}
+    {% for k in g.kinds %}<div class="kind-row"><label class="check"><input type="checkbox" name="kind" value="{{ k.key }}"{% if k.on %} checked{% endif %}><span>{{ k.label }}</span></label>{% if k.gate %}<button type="button" class="perm-box" data-gate="{{ k.key }}" aria-pressed="{{ k.gated|yesno:'true,false' }}" title="{% translate "Green: it waits for your permission. Red: it happens, and you get an alert." %}"><span class="perm-dot" aria-hidden="true"></span>{% translate "With permission" %}</button>{% endif %}</div>{% endfor %}
   </div>
   {% endfor %}
   <p class="muted" role="status" data-settings-status></p>
