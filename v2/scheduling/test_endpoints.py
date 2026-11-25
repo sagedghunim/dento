@@ -123,6 +123,8 @@ def mutating(test, o):
                     {"status": "booked", "note": 1}, ["appointments.queue"]),
         "undo no show": ("POST", f"/api/v1/appointments/{o.no_show}/undo-no-show", {"status": "no_show"},
                          {"status": "no_show", "note": 1}, ["appointments.queue"]),
+        "change service": ("POST", f"/api/v1/appointments/{o.in_room}/service", {"service_id": o.procedure},
+                           {"service_id": o.consultation}, ["billing.collect", "procedures.record"]),
         "finish": ("POST", f"/api/v1/appointments/{o.in_room}/finish", {"status": "in_room"},
                    {"status": "in_room", "note": 1}, ["appointments.queue"]),
         "cancel": ("POST", f"/api/v1/appointments/{o.booked}/cancel", {"status": "booked"},

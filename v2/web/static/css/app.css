@@ -1268,4 +1268,12 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .perm-dot { width: 16px; height: 16px; border-radius: 4px; background: var(--red, #A93327); }
 .perm-box[aria-pressed="true"] .perm-dot { background: var(--teal, #1b8a6b); }
 .perm-box[aria-pressed="true"] { border-color: var(--teal, #1b8a6b); }
-.ov-team small.extra { color: var(--red, #A93327); font-weight: 700; }
+/* Materials against what was expected, and the small colour keys (Saged, 2026-11-25). */
+.use-tag { display: inline-flex; align-items: center; gap: 5px; font-size: .75rem; font-weight: 700; }
+.ov-team .use-tag { display: flex; margin-block-start: 2px; }
+.use-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.use-less { color: var(--teal-dark); } .use-less .use-dot { background: var(--teal, #1b8a6b); }
+.use-exact { color: var(--muted); }
+.use-more { color: var(--red, #A93327); } .use-more .use-dot { background: var(--red, #A93327); }
+.color-key { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: .78rem; margin-block: 8px 0; }
+.perm-box.key { min-height: 0; padding: 2px 8px; cursor: default; font-size: .75rem; }

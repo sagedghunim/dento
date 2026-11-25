@@ -104,6 +104,15 @@
     {% endif %}
     <ul class="proc-list bill" aria-label="{% translate "Done today" %}">
       <li class="bill-fee"><span><bdi dir="auto">{{ visit.service.name }}</bdi>{% if visit.qty > 1 %} × {{ visit.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ bill.fee|money }}</span>{% endif %}</li>
+      {% if services %}{# The visit turned out to be something else than was booked (Saged, 2026-11-25). #}
+      <li class="change-service"><details data-change-service>
+        <summary>{% translate "Change what was booked" %}</summary>
+        <label class="field">{% translate "What the visit really is" %}
+          <select name="service_id">{% for s in services %}<option value="{{ s.id }}"{% if s.on %} selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></label>
+        <button type="button" class="btn ghost" data-save-service>{% translate "Change it" %}</button>
+        <p class="form-error" data-service-error role="alert"></p>
+      </details></li>
+      {% endif %}
     </ul>
     <ul class="proc-list bill" data-procedures{% if perms.record %} data-removable{% endif %}>
       {% for p in record.procedures %}<li data-record="{{ p.id }}"><span class="proc-what"><bdi dir="auto">{{ p.name }}</bdi>{% if p.tooth %} · {% translate "Tooth" %} {{ p.tooth|digits }}{% endif %}{% if p.qty > 1 %} × {{ p.qty|digits }}{% endif %}</span>{% if perms.money %}<span class="num">{{ p.amount|money }}</span>{% endif %}{% if perms.record %}<button type="button" class="icon-btn danger-icon" data-remove-record aria-label="{% translate "Remove" %}: {{ p.name }}" title="{% translate "Remove" %}"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>{% endif %}</li>{% endfor %}

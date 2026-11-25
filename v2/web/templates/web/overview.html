@@ -44,7 +44,7 @@
             <td class="num">{{ m.procedures|num }}</td>
             {% if money %}<td class="num">{{ m.revenue|money }}</td>
             <td class="num">{% if m.per_visit is not None %}{{ m.per_visit|money }}{% if m.trend == "up" %} <span class="trend up" data-up aria-label="{% translate "Higher than before" %}">▲</span>{% elif m.trend == "down" %} <span class="trend down" data-down aria-label="{% translate "Lower than before" %}">▼</span>{% endif %}{% if m.before is not None %}<small class="muted before">{% translate "before" %} {{ m.before|money }}</small>{% endif %}{% else %}–{% endif %}</td>
-            <td class="num" data-materials>{% if m.materials is not None %}{{ m.materials|money }}{% if m.materials_extra %}<small class="before extra" data-extra>{% translate "extra over expected" %} {{ m.materials_extra|money }}</small>{% endif %}{% else %}–{% endif %}</td>{% endif %}
+            <td class="num" data-materials>{% if m.materials is not None %}{{ m.materials|money }}{% if m.materials_level %}<small class="use-tag use-{{ m.materials_level }}" data-use="{{ m.materials_level }}"><span class="use-dot" aria-hidden="true"></span>{% if m.materials_level == "more" %}{% translate "More than expected" %} {{ m.materials_diff|money }}{% elif m.materials_level == "less" %}{% translate "Less than expected" %} {{ m.materials_diff|money }}{% else %}{% translate "As expected" %}{% endif %}</small>{% endif %}{% else %}–{% endif %}</td>{% endif %}
             <td class="num">{% if m.avg_room is not None %}{{ m.avg_room }} {% translate "min" %}{% else %}–{% endif %}</td>
           </tr>
           {% endfor %}
@@ -54,6 +54,12 @@
         {% endif %}
       </table>
     </div>
+    {% if money %}{# What the colours mean, small (Saged, 2026-11-25). #}
+    <p class="color-key" data-color-key><span class="use-tag use-less"><span class="use-dot" aria-hidden="true"></span>{% translate "Less than expected" %}</span>
+      <span class="use-tag use-exact"><span class="use-dot" aria-hidden="true"></span>{% translate "As expected" %}</span>
+      <span class="use-tag use-more"><span class="use-dot" aria-hidden="true"></span>{% translate "More than expected" %}</span>
+      <span class="muted">· {% translate "Expected = the materials of each procedure on the price list." %}</span></p>
+    {% endif %}
     {% else %}<p class="empty-note">{% translate "No visits in this period yet." %}</p>{% endif %}
   </section>
 

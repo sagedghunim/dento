@@ -2,7 +2,7 @@
 
 from audit.models import AuditAccess
 from audit.services import record_access
-from core import validate
+from core import sql, validate
 from core.api import Result, api
 from core.errors import ApiError
 from core.numbers import parse_int, parse_money
@@ -421,3 +421,29 @@ def installments_cancel_view(request, ctx, data, patient_id):
 
     plan = installments.cancel(ctx, patient_id)
     return Result({"plan": plan}, target_type="patient", target_id=patient_id)
+
+
+@api("POST", perm="clinical.view", replay=lambda ctx, stored: _service_answer(ctx, stored["target_id"]))
+def change_service_view(request, ctx, data, appointment_id):
+    """POST {service_id}: the visit is something else than was booked (Saged, 2026-11-25). The doctor (who records
+    procedures) or the desk (who takes payments) changes it; the bill follows."""
+    if not (ctx.can("procedures.record") or ctx.can("billing.collect")):
+        ctx.require("procedures.record")
+    appointment_id = validate.path_id(appointment_id, services.not_found("appointment"))
+    invoice = services.change_service(ctx, appointment_id, validate.ident(data.get("service_id"), "service_id"))
+    from summaries.services import Deltas
+
+    day = sql.row(ctx, 'SELECT day FROM "scheduling_appointment" WHERE clinic_id = %s AND id = %s',
+                  [ctx.clinic_id, appointment_id])[0]
+    Deltas().clinic_day(day).write_clinics(ctx)
+    return Result(_service_answer(ctx, appointment_id), target_type="appointment", target_id=appointment_id)
+
+
+def _service_answer(ctx, appointment_id):
+    """The visit's open bill (none for a visit not billed yet) and the day's version, for the answer and a repeat."""
+    from scheduling.services import current_version
+
+    found = sql.row(ctx, 'SELECT id FROM "billing_invoice" WHERE clinic_id = %s AND appointment_id = %s '
+                         "AND status <> 'void' ORDER BY id DESC LIMIT 1", [ctx.clinic_id, appointment_id])
+    return {"invoice": selectors.invoice(ctx, found[0]) if found else None,
+            "version": current_version(ctx, appointment_id)}

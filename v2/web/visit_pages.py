@@ -185,8 +185,19 @@ def visit_page(request, ctx, appointment_id):
     if ctx.can("money.view"):
         done = sum(p["amount"] for p in record["procedures"])
         bill = {"fee": visit["fee"], "total": record["invoice"]["total"] if record["invoice"] else visit["fee"] + done}
+    # What the visit really is (Saged, 2026-11-25): the doctor changes the booked service; prices only with money.view.
+    services = []
+    if ctx.can("procedures.record") or ctx.can("billing.collect"):
+        money = ctx.can("money.view")
+        from .format import money_plain
+
+        services = [{"id": i, "label": pick(n, e) + (f" · {money_plain(p)}" if money else ""), "on": i == visit["service"]["id"]}
+                    for i, n, e, p in sql.rows(ctx, 'SELECT id, name, name_en, price FROM "clinics_service" '
+                                                    "WHERE clinic_id = %s AND section_id = %s AND is_active "
+                                                    "ORDER BY sort, id LIMIT 300",
+                                               [ctx.clinic_id, visit["section_id"]])]
     return render(request, "web/visit.html", {
-        "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms,
+        "ctx": ctx, "nav_active": "today", "visit": visit, "patient": patient, "perms": perms, "services": services,
         "last": _last_visit(ctx, patient_id, visit["id"]), "record": record, "config": config, "top": top, "bill": bill,
         "plan_offer": plan_offer,
         "dental": perms["chart"] and teeth.is_dental(ctx, visit["section_id"]),

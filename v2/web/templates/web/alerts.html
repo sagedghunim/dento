@@ -31,6 +31,9 @@
 <details class="card alert-settings" data-alert-settings>
   <summary>{% translate "Which alerts reach you" %}{% if some_off %} <span class="pill grey">{% translate "Some are off" %}</span>{% endif %}</summary>
   <p class="muted">{% translate "Turn off what you don't want to hear about. It is still kept in the patient's file and the records." %}</p>
+  {# What the permission square's colours mean, small (Saged, 2026-11-25). #}
+  <p class="color-key" data-color-key><span class="perm-box key" aria-pressed="true"><span class="perm-dot" aria-hidden="true"></span>{% translate "Green: waits for your OK" %}</span>
+    <span class="perm-box key" aria-pressed="false"><span class="perm-dot" aria-hidden="true"></span>{% translate "Red: happens, and you get an alert" %}</span></p>
   {% for g in groups %}
   <h3 class="sub-title" data-group-head="{{ g.key }}">{{ g.label }}</h3>
 

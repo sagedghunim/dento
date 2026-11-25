@@ -168,5 +168,5 @@ class MaterialsPerDoctorTests(M2TestCase):
         row = team.split(f'data-member="{doctor}"')[1].split("</tr>")[0]
         cell = row.split("data-materials")[1].split("</td>")[0]
         self.assertIn("50", cell)                 # 5 units × EGP 10 over 1 visit
-        self.assertIn("زيادة عن المتوقع", cell)
-        self.assertIn("30", cell.split("data-extra")[1])  # the 3 taken beyond the recipe
+        self.assertIn("أكتر من المتوقع", cell)
+        self.assertIn("30", cell.split("data-use")[1])  # the 3 taken beyond the recipe

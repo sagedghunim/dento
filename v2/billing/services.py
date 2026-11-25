@@ -1071,3 +1071,40 @@ def consultation_rule(ctx, appointment, invoice):
     record_change(ctx, "invoice_line.consultation_free" if new_price == 0 else "invoice_line.consultation_charged",
                   "invoice_line", line_id, before={"unit_price": unit_price}, after={"unit_price": new_price})
     return after
+
+
+def change_service(ctx, appointment_id, service_id):
+    """The visit turned out to be something else (Saged, 2026-11-25): the booked service changes, at the new service's
+    list price, and so does the bill's service line. More paid than the new total stays the patient's credit, given
+    back from the drawer. Not on a visit that is over. Audited."""
+    appointment = lock_appointment(ctx, appointment_id)
+    if appointment["status"] in ("done", "cancelled", "no_show"):
+        raise ApiError("visit_closed", _("The service can be changed only before the visit is finished."), 409,
+                       fields={"status": appointment["status"]})
+    found = sql.row(ctx, 'SELECT id, name, price FROM "clinics_service" WHERE clinic_id = %s AND id = %s AND is_active',
+                    [ctx.clinic_id, service_id])
+    if found is None:
+        raise not_found("service")
+    if found[0] == appointment["service_id"]:
+        return open_invoice(ctx, appointment_id, lock=False)
+    fee = found[2] or 0
+    sql.run(ctx, 'UPDATE "scheduling_appointment" SET service_id = %s, fee = %s, qty = 1, updated_at = %s, '
+                 "updated_by_id = %s WHERE clinic_id = %s AND id = %s",
+            [service_id, fee, timezone.now(), ctx.membership_id, ctx.clinic_id, appointment_id])
+    invoice = open_invoice(ctx, appointment_id)
+    if invoice is not None:
+        line = sql.row(ctx, 'SELECT id, amount FROM "billing_invoice_line" WHERE clinic_id = %s AND invoice_id = %s '
+                            "AND kind = 'service' ORDER BY id LIMIT 1 FOR UPDATE", [ctx.clinic_id, invoice["id"]])
+        if line is not None:
+            delta = fee - line[1]
+            if invoice["discount_percent"] is None and invoice["discount"] > invoice["subtotal"] + delta:
+                raise ApiError("discount_exceeds", _("Lower the discount before changing the service."), 409)
+            sql.run(ctx, 'UPDATE "billing_invoice_line" SET service_id = %s, description = %s, qty = 1, unit_price = %s, '
+                         "amount = %s, from_list = true WHERE clinic_id = %s AND id = %s",
+                    [service_id, found[1][:200], fee, fee, ctx.clinic_id, line[0]])
+            invoice = move_subtotal(ctx, invoice["id"], delta)
+    record_change(ctx, "appointment.service_change", "appointment", appointment_id, patient_id=appointment["patient_id"],
+                  before={"service_id": appointment["service_id"], "fee": appointment["fee"],
+                          "service": appointment["service_name"]},
+                  after={"service_id": service_id, "fee": fee, "service": found[1]})
+    return invoice

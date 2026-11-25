@@ -1086,3 +1086,19 @@ if (fileDialog) {
     openDialog(fileDialog, link);
   });
 }
+
+// --- What the visit really is (Saged, 2026-11-25): the doctor changes the booked service; the bill follows ---
+const serviceBox = document.querySelector("[data-change-service]");
+if (serviceBox) {
+  const button = serviceBox.querySelector("[data-save-service]");
+  const error = serviceBox.querySelector("[data-service-error]");
+  button.addEventListener("click", async () => {
+    const serviceId = Number(serviceBox.querySelector('[name="service_id"]').value);
+    button.disabled = true;
+    error.textContent = "";
+    const result = await save("POST", `/api/v1/appointments/${id}/service`, { service_id: serviceId }, { label: t("service_changed") });
+    button.disabled = false;
+    if (isOk(result)) { toast(t("service_changed")); window.location.reload(); return; }
+    error.textContent = errorMessage(result, t("failed"));
+  });
+}

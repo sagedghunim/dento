@@ -4302,7 +4302,7 @@ msgid "Pick a service"
 msgstr "اختار الخدمة"
 
 msgid "Paid over the bill:"
-msgstr "مدفوع زيادة عن الفاتورة:"
+msgstr "ليه مردود:"
 
 msgid "Give the money back from the drawer"
 msgstr "رد المبلغ من الخزنة"
@@ -5039,5 +5039,38 @@ msgstr "تغيير كمية في الجرد"
 msgid "Materials per visit"
 msgstr "خامات لكل زيارة"
 
-msgid "extra over expected"
-msgstr "زيادة عن المتوقع"
+msgid "Change what was booked"
+msgstr "غيّر الحاجة المحجوزة"
+
+msgid "What the visit really is"
+msgstr "الكشف طلع إيه"
+
+msgid "Change it"
+msgstr "غيّر"
+
+msgid "Changed. The bill follows the new service."
+msgstr "اتغيّر، والفاتورة اتعدّلت على الحاجة الجديدة."
+
+msgid "The service can be changed only before the visit is finished."
+msgstr "تقدر تغيّرها بس قبل ما الكشف يخلص."
+
+msgid "Lower the discount before changing the service."
+msgstr "قلّل الخصم الأول قبل ما تغيّر."
+
+msgid "More than expected"
+msgstr "أكتر من المتوقع"
+
+msgid "Less than expected"
+msgstr "أقل من المتوقع"
+
+msgid "As expected"
+msgstr "زي المتوقع"
+
+msgid "Expected = the materials of each procedure on the price list."
+msgstr "المتوقع = خامات كل إجراء في قايمة الأسعار."
+
+msgid "Green: waits for your OK"
+msgstr "أخضر: يستنى موافقتك"
+
+msgid "Red: happens, and you get an alert"
+msgstr "أحمر: يتنفذ ويجيلك تنبيه"
