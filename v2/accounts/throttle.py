@@ -60,6 +60,8 @@ PLACE_LIMITS = {
     "signup_h": (3, dt.timedelta(hours=1)),
     "signup_d": (10, dt.timedelta(days=1)),
     "signup_try": (20, dt.timedelta(hours=1)),
+    # Wrong six-digit codes per account per day (keyed by username), across sign-ins and devices.
+    "totp_day": (15, dt.timedelta(days=1)),
 }
 
 

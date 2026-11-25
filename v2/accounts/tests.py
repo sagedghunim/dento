@@ -57,6 +57,115 @@ class SignInTests(ShardTestCase):
         codes = [post(client, "/api/v1/auth/code", {"code": "000000"}).status_code for _ in range(5)]
         self.assertEqual(codes, [400, 400, 400, 400, 401])
 
+    def test_a_phone_up_to_two_minutes_off_still_signs_in(self):
+        # Saged, 2026-11-25: a doctor's code was refused again and again.
+        owner = self.a.user("owner")
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        code = totp.code_at(owner.plain_totp_secret, totp.current_step() - 4)  # the phone is two minutes slow
+        self.assertEqual(post(client, "/api/v1/auth/code", {"code": code}).status_code, 200)
+
+    def test_a_phone_whose_clock_is_wrong_is_told_so(self):
+        owner = self.a.user("owner")
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        code = totp.code_at(owner.plain_totp_secret, totp.current_step() + 10)  # five minutes fast
+        r = post(client, "/api/v1/auth/code", {"code": code})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (400, "clock_off"))
+        self.assertEqual(client.get("/api/v1/me").status_code, 401)  # never accepted
+
+    def test_a_device_that_passed_the_code_is_not_asked_again_for_30_days(self):
+        owner = self.a.user("owner")
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        r = post(client, "/api/v1/auth/code", {"code": totp.code_at(owner.plain_totp_secret, totp.current_step())})
+        cookie = r.cookies["hamada_device"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(int(cookie["max-age"]), 30 * 24 * 3600)
+        post(client, "/api/v1/auth/logout", {})
+        again = post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        self.assertNotEqual(again.json()["next"], "code")
+        self.assertEqual(client.get("/api/v1/me").status_code, 200)
+        # Another device still needs the code; several devices can each be remembered.
+        other = Client()
+        self.assertEqual(post(other, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"}).json()["next"], "code")
+        # A mark copied to another account, or one from before a password change, is worthless.
+        fresh = Client()
+        fresh.cookies["hamada_device"] = cookie.value
+        user = User.objects.get(pk=owner.pk)
+        user.set_password("another-pass-word-456")
+        user.save(update_fields=["password"])
+        self.assertEqual(post(fresh, "/api/v1/auth/login", {"username": "a_owner", "password": "another-pass-word-456"}).json()["next"], "code")
+        forged = Client()
+        forged.cookies["hamada_device"] = cookie.value + "x"
+        self.assertEqual(post(forged, "/api/v1/auth/login", {"username": "a_owner", "password": "another-pass-word-456"}).json()["next"], "code")
+
+    def _trusted_cookie(self, place):
+        user = place.user("owner")
+        username = user.username
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": username, "password": "pass-word-123"})
+        r = post(client, "/api/v1/auth/code", {"code": totp.code_at(user.plain_totp_secret, totp.current_step())})
+        return r.cookies["hamada_device"].value
+
+    def test_a_device_mark_is_for_one_account_and_dies_with_a_new_code_secret(self):
+        self.clinic("b")
+        mark = self._trusted_cookie(self.a)
+        other = Client()
+        other.cookies["hamada_device"] = mark
+        self.assertEqual(post(other, "/api/v1/auth/login", {"username": "b_owner", "password": "pass-word-123"}).json()["next"], "code")
+        # Setting the code up again (a lost phone) forgets every device.
+        User.objects.filter(username="a_owner").update(totp_secret=User.objects.get(username="b_owner").totp_secret)
+        again = Client()
+        again.cookies["hamada_device"] = mark
+        self.assertEqual(post(again, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"}).json()["next"], "code")
+
+    def test_the_device_mark_is_secure_on_the_live_site(self):
+        from django.test import override_settings
+
+        with override_settings(SESSION_COOKIE_SECURE=True):
+            owner = self.a.user("owner")
+            client = Client()
+            post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+            r = post(client, "/api/v1/auth/code", {"code": totp.code_at(owner.plain_totp_secret, totp.current_step())})
+            self.assertTrue(r.cookies["hamada_device"]["secure"])
+
+    def test_a_clock_off_answer_is_still_a_strike(self):
+        owner = self.a.user("owner")
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        codes = [post(client, "/api/v1/auth/code", {"code": totp.code_at(owner.plain_totp_secret, totp.current_step() + 10 + i)})
+                 .status_code for i in range(5)]
+        self.assertEqual(codes, [400, 400, 400, 400, 401])
+
+    def test_wrong_codes_are_capped_per_day_but_a_recovery_code_still_works(self):
+        from accounts import crypto
+        from accounts.models import RecoveryCode
+
+        owner = self.a.user("owner")
+        for _ in range(3):  # 3 sign-ins x 5 wrong codes = the day's 15
+            client = Client()
+            post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+            for _ in range(5):
+                post(client, "/api/v1/auth/code", {"code": "000000"})
+        client = Client()
+        post(client, "/api/v1/auth/login", {"username": "a_owner", "password": "pass-word-123"})
+        right = totp.code_at(owner.plain_totp_secret, totp.current_step())
+        self.assertEqual(post(client, "/api/v1/auth/code", {"code": right}).status_code, 429)
+        RecoveryCode.objects.create(user_id=owner.pk, code_hash=crypto.hash_recovery_code("abcde-12345"))
+        self.assertEqual(post(client, "/api/v1/auth/code", {"code": "abcde-12345"}).status_code, 200)
+
+    def test_signing_in_by_phone_meets_the_accounts_limit(self):
+        from accounts import throttle
+        from core.text import normalize_phone
+
+        owner = self.a.user("owner")
+        User.objects.filter(pk=owner.pk).update(phone=normalize_phone("01012345678"))
+        for _ in range(throttle.LIMITS["user"]):
+            throttle.record_failure([("user", "a_owner")])
+        r = post(Client(), "/api/v1/auth/login", {"username": "01012345678", "password": "pass-word-123"})
+        self.assertEqual(r.status_code, 429)
+
     def test_owner_without_the_code_set_up_is_sent_to_set_it_up(self):
         owner = self.a.user("owner")
         User.objects.filter(pk=owner.pk).update(totp_secret="", totp_confirmed_at=None)

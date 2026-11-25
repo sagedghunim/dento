@@ -15,6 +15,11 @@ from core.text import ascii_digits
 
 STEP_SECONDS = 30
 DIGITS = 6
+# Phones whose clock runs a little fast or slow still sign in: codes up to two minutes either way are accepted
+# (Saged, 2026-11-25, after a doctor's code was refused again and again).
+WINDOW = 4
+# Further off than that, the code is still refused, but the person is told their phone's clock is wrong.
+DRIFT_WINDOW = 20
 
 
 def new_secret():
@@ -38,7 +43,7 @@ def current_step(now=None):
     return int((time.time() if now is None else now) // STEP_SECONDS)
 
 
-def verify(secret, code, *, last_step=0, now=None, window=1):
+def verify(secret, code, *, last_step=0, now=None, window=WINDOW):
     """Return the time step the code belongs to, or None.
 
     Steps at or before `last_step` are refused, so a code can't be used twice.
@@ -58,7 +63,7 @@ def clean(code):
     return "".join(ascii_digits(code or "").split()).replace("-", "")
 
 
-def used_recently(secret, code, *, last_step, now=None, window=1):
+def used_recently(secret, code, *, last_step, now=None, window=WINDOW):
     """True when the code is right but its step was already used: on another phone, or a second tap."""
     code = clean(code)
     if len(code) != DIGITS or not code.isdigit():
@@ -66,6 +71,19 @@ def used_recently(secret, code, *, last_step, now=None, window=1):
     step = current_step(now)
     return any(candidate <= last_step and hmac.compare_digest(code_at(secret, candidate), code)
                for candidate in range(step - window, step + window + 1))
+
+
+def clock_off_minutes(secret, code, *, now=None):
+    """Minutes the phone's clock is off when a code is right for a time beyond the window, else None."""
+    code = clean(code)
+    if len(code) != DIGITS or not code.isascii() or not code.isdigit():
+        return None
+    step = current_step(now)
+    for distance in range(WINDOW + 1, DRIFT_WINDOW + 1):
+        for candidate in (step - distance, step + distance):
+            if hmac.compare_digest(code_at(secret, candidate), code):
+                return max(1, round(distance * STEP_SECONDS / 60))
+    return None
 
 
 def provisioning_uri(secret, account, issuer="Dento"):

@@ -5,7 +5,9 @@ import io
 
 import segno
 from django.contrib.auth import login, logout, password_validation, update_session_auth_hash
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -23,6 +25,12 @@ PENDING_UNTIL = "hamada_pending_until"
 PENDING_FAILURES = "hamada_pending_failures"
 PENDING_SECONDS = 600  # ten minutes to fetch the code from the phone (Saged, 2026-11-24)
 _DUMMY_HASH = make_password("not-a-real-password-for-timing")
+# A device that passed the code is remembered for 30 days, so the code is asked once a month per phone or
+# computer (Saged, 2026-11-25). The mark is signed and ends early when the password or the code's secret changes.
+# Platform admins are always asked.
+DEVICE_COOKIE = "hamada_device"
+DEVICE_DAYS = 30
+_DEVICE_SALT = "hamada.accounts.trusted-device"
 
 
 def event(user_id, kind, request=None):
@@ -54,10 +62,22 @@ def sign_in(request, identifier, password):
     if user is None:
         check_password(password, _DUMMY_HASH)  # same time as a real check
         _wrong(request, keys, None)
+    # Signing in by phone counts against the account too, so a phone number is no way around its limit.
+    if user.username != (identifier or "").strip().lower():
+        keys = keys + [k for k in throttle.keys_for(user.username, ip) if k[0] != "ip"]
+        wait = throttle.wait_seconds(keys)
+        if wait:
+            minutes = max(1, round(wait / 60))
+            raise ApiError("too_many_attempts", _("Too many attempts. Try again in %(minutes)s minutes.") % {"minutes": minutes},
+                           429, retry_after=wait)
     if not user.check_password(password) or not user.is_active:
         _wrong(request, keys, user.id)
     if user.must_change_password and user.temp_password_expires_at and user.temp_password_expires_at < timezone.now():
         raise ApiError("temp_password_expired", _("This temporary password has expired. Ask for a new one."), 401)
+    if user.has_totp and _trusted_device(request, user):
+        _complete(request, user, mfa=True)
+        event(user.id, "sign_in_device", request)
+        return {"next": next_step(request, user)}
     if user.has_totp:
         request.session.cycle_key()
         request.session[PENDING_USER] = user.id
@@ -66,6 +86,36 @@ def sign_in(request, identifier, password):
         return {"next": "code"}
     _complete(request, user, mfa=False)
     return {"next": next_step(request, user)}
+
+
+def _device_mark(user):
+    """Changes when the password or the code's secret changes, so an old mark stops working."""
+    from django.utils.crypto import salted_hmac
+
+    return salted_hmac(_DEVICE_SALT, f"{user.password}|{user.totp_secret}|{user.totp_confirmed_at}").hexdigest()[:24]
+
+
+def _trusted_device(request, user):
+    if user.is_platform_admin:
+        return False
+    raw = request.COOKIES.get(DEVICE_COOKIE)
+    if not raw:
+        return False
+    try:
+        value = signing.loads(raw, salt=_DEVICE_SALT, max_age=DEVICE_DAYS * 24 * 3600)
+    except signing.BadSignature:
+        return False
+    return isinstance(value, dict) and value.get("u") == user.id and value.get("m") == _device_mark(user)
+
+
+def _remember_device(request, user):
+    """The API answer sets the mark (core.api writes request.hamada_cookies)."""
+    if user.is_platform_admin:
+        return
+    value = signing.dumps({"u": user.id, "m": _device_mark(user)}, salt=_DEVICE_SALT)
+    request.hamada_cookies = [(DEVICE_COOKIE, value, {
+        "max_age": DEVICE_DAYS * 24 * 3600, "httponly": True, "samesite": "Lax",
+        "secure": settings.SESSION_COOKIE_SECURE, "path": "/"})]
 
 
 def _complete(request, user, mfa):
@@ -101,19 +151,33 @@ def verify_code(request, code):
             request.session.pop(key, None)
         raise ApiError("signed_out", _("Your sign-in expired. Sign in again."), 401)
     user = User.objects.get(pk=user_id)
+    # Wrong codes per account per day, across sign-ins: someone with the password can't keep guessing.
+    # A recovery code (10 characters, can't be guessed) still works, so the owner is never locked out.
+    six_digits = len(totp.clean(code)) == totp.DIGITS
+    wait = throttle.place_wait(["totp_day"], user.username) if six_digits else 0
+    if wait:
+        hours = max(1, round(wait / 3600))
+        raise ApiError("too_many_attempts", _("Too many wrong codes today. Try again in %(hours)s hours, or enter a recovery code.") % {"hours": hours},  # noqa: E501
+                       429, retry_after=wait)
     if _accept_code(user, code):
         _complete(request, user, mfa=True)
+        user.refresh_from_db(fields=["password", "totp_secret", "totp_confirmed_at"])
+        _remember_device(request, user)
         return {"next": next_step(request, user)}
     if _code_just_used(user, code):  # right, but already used: no strike, and a message that says so
         raise ApiError("code_used", _("This code was just used. Wait for the next code, then enter it."), 400)
+    # Every refused code is a strike, the clock-off one too (it is still a guess that didn't get in).
     failures = request.session.get(PENDING_FAILURES, 0) + 1
     request.session[PENDING_FAILURES] = failures
     event(user.id, "totp_failed", request)
+    if not throttle.place_take("totp_day", user.username):
+        event(user.id, "totp_locked", request)
     if failures >= throttle.LIMITS["totp"]:
         for key in (PENDING_USER, PENDING_UNTIL, PENDING_FAILURES):
             request.session.pop(key, None)
         throttle.record_failure([("user", user.username)])
         raise ApiError("signed_out", _("Too many wrong codes. Sign in again."), 401)
+    _clock_off(user.totp_secret, code)
     raise ApiError("invalid_code", _("That code is wrong. Try the newest one."), 400)
 
 
@@ -127,6 +191,14 @@ def _accept_code(user, code):
     if step is None:
         return False
     return User.objects.filter(pk=user.pk, totp_last_step__lt=step).update(totp_last_step=step) == 1
+
+
+def _clock_off(secret, code):
+    """A code that is right for another time: the phone's clock is wrong. Said plainly, never accepted."""
+    minutes = totp.clock_off_minutes(crypto.decrypt(secret), code)
+    if minutes:
+        message = _("Your phone's clock is about %(minutes)s minutes off. In the phone's settings, turn on automatic date and time, then enter the new code.")  # noqa: E501
+        raise ApiError("clock_off", message % {"minutes": minutes}, 400)
 
 
 def _code_just_used(user, code):
@@ -160,7 +232,8 @@ def change_password(request, user, current, new):
 def _qr(user):
     """The secret and its QR code, for an authenticator app."""
     secret = crypto.decrypt(user.totp_secret)
-    uri = totp.provisioning_uri(secret, user.username)
+    # The laptop copy has its own name in the authenticator app, so its codes are never taken for the live site's.
+    uri = totp.provisioning_uri(secret, user.username, issuer="Dento laptop" if settings.DEBUG else "Dento")
     buffer = io.BytesIO()
     # A full 4-module quiet zone on an opaque white background: phone scanners
     # fail on a thin margin or a transparent background in dark mode.
@@ -210,6 +283,7 @@ def totp_confirm(request, user, code):
         raise ApiError("not_started", _("Start the set-up first."), 409)
     step = totp.verify(crypto.decrypt(user.totp_secret), code)
     if step is None:
+        _clock_off(user.totp_secret, code)
         raise ApiError("invalid_code", _("That code is wrong. Try the newest one."), 400)
     codes = [crypto.new_recovery_code() for _ in range(10)]
     with transaction.atomic(using="default"):

@@ -127,6 +127,8 @@ def _respond(request, result, key=None):
         response[name] = value
     if key is not None:
         response["Idempotency-Key"] = str(key)
+    for name, value, options in getattr(request, "hamada_cookies", ()):  # e.g. the remembered device (accounts)
+        response.set_cookie(name, value, **options)
     return response
 
 

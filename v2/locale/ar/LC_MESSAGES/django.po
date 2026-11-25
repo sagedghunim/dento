@@ -5141,3 +5141,9 @@ msgstr ""
 
 msgid "At most 30 items in one visit."
 msgstr "أقصى حاجة 30 صنف في الكشف الواحد."
+
+msgid "Your phone's clock is about %(minutes)s minutes off. In the phone's settings, turn on automatic date and time, then enter the new code."
+msgstr "ساعة موبايلك متأخرة أو متقدمة حوالي %(minutes)s دقيقة. من إعدادات الموبايل شغّل «التاريخ والوقت تلقائي»، وبعدين اكتب الكود الجديد."
+
+msgid "Too many wrong codes today. Try again in %(hours)s hours, or enter a recovery code."
+msgstr "أكواد غلط كتير النهارده. جرّب تاني بعد %(hours)s ساعة، أو اكتب كود استرداد."
