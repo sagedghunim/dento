@@ -411,3 +411,21 @@ class SupplierRedesignTests(M2TestCase):
         lines = {d["supplier_id"]: [l["item_id"] for l in OrderTests.order(self, d["id"])["lines"]] for d in self.drafts()}
         self.assertEqual(lines.get(new["id"]), [low["id"]])
         self.assertFalse(lines.get(old["id"]))
+        # The old supplier's side of the move is in its own change log (Saged, 2026-11-26).
+        from audit.models import AuditChange
+
+        with clinic_transaction(self.a.id, self.a.shard):
+            row = AuditChange.objects.filter(clinic_id=self.a.id, action="supplier.items", target_type="supplier",
+                                             target_id=old["id"]).values_list("details", flat=True).get()
+        self.assertEqual((row["before"], row["after"]), ({"item_ids": [low["id"]]}, {"item_ids": []}))
+        self.assertEqual(row["to_supplier_id"], new["id"])
+
+    def test_an_unticked_item_leaves_the_suppliers_own_draft(self):
+        supplier = self.supplier()
+        low = self.item("Low", quantity=3, threshold=2, supplier=supplier)
+        self.use(low, 1)
+        self.assertEqual([d["supplier_id"] for d in self.drafts()], [supplier["id"]])
+        r = call(self.owner, "PATCH", f"/api/v1/inventory/suppliers/{supplier['id']}", {"item_ids": []})
+        self.assertEqual(r.status_code, 200, r.content)
+        lines = [l["item_id"] for d in self.drafts() for l in OrderTests.order(self, d["id"])["lines"]]
+        self.assertNotIn(low["id"], lines)

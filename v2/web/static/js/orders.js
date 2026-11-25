@@ -118,7 +118,7 @@ if (moreButton) moreButton.addEventListener("click", () => { if (!moreButton.dis
 document.querySelectorAll("[data-orders-state]").forEach((chip) => chip.addEventListener("click", () => {
   ordersState = chip.dataset.ordersState;
   document.querySelectorAll("[data-orders-state]").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
-  loadOrders();
+  loadOrders().catch(() => {});
 }));
 
 // "Order all that's short": every low item with a supplier goes on its supplier's draft.
@@ -135,7 +135,7 @@ if (refillButton) refillButton.addEventListener("click", async () => {
   toast(n ? t("ord_refilled", { n: localDigits(n) }) : t("ord_refill_none"));
   ordersState = "open";
   document.querySelectorAll("[data-orders-state]").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.ordersState === "open")));
-  loadOrders();
+  loadOrders().catch(() => {});
 });
 
 // --- a pick list that drops under the field and filters on each letter (Saged, 2026-11-25) ---
@@ -920,3 +920,10 @@ document.addEventListener("click", (event) => {
 renderOrders(data.orders || []);
 renderSuppliers();
 fillSelects();
+
+// A save retried from the pending list (shell.js) may have changed orders, suppliers or stock: show them again.
+window.addEventListener("hamada:pending-settled", () => {
+  loadOrders().catch(() => {});
+  loadSuppliers().catch(() => {});
+  window.dispatchEvent(new CustomEvent("hamada:stock-changed"));
+});

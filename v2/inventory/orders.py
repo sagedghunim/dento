@@ -179,10 +179,27 @@ def link_items(ctx, supplier_id, item_ids):
     before = supplier_items(ctx, supplier_id)
     if set(before) == set(wanted):
         return
-    sql.rows(ctx, """
+    # The suppliers losing an item, with their items before, for their side of the change log (Saged, 2026-11-26).
+    # Their other items are not locked (locking them would break supplier -> items order): an item edited at the
+    # same moment can make this list one off. That touches the log only, never the data.
+    losers = {}
+    for loser_id, item_id in sql.rows(ctx, """
+        SELECT supplier_id, id FROM "inventory_item" WHERE clinic_id = %s AND is_active AND supplier_id IN (
+            SELECT supplier_id FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])
+               AND supplier_id <> %s)
+         ORDER BY supplier_id, name, id""", [ctx.clinic_id, ctx.clinic_id, wanted, supplier_id]):
+        losers.setdefault(loser_id, []).append(item_id)
+    unlinked = [r[0] for r in sql.rows(ctx, """
         UPDATE "inventory_item" SET supplier_id = NULL
          WHERE clinic_id = %s AND supplier_id = %s AND is_active AND NOT (id = ANY(%s::bigint[])) RETURNING id""",
-             [ctx.clinic_id, supplier_id, wanted])
+             [ctx.clinic_id, supplier_id, wanted])]
+    if unlinked:
+        # An unticked item leaves this supplier's own draft too: nobody orders it from them now.
+        sql.run(ctx, """
+            DELETE FROM "inventory_order_line" l USING "inventory_order" o
+             WHERE l.clinic_id = %s AND l.item_id = ANY(%s::bigint[]) AND o.clinic_id = l.clinic_id
+               AND o.id = l.order_id AND o.status = 'draft' AND o.supplier_id = %s""",
+                [ctx.clinic_id, unlinked, supplier_id])
     moved = [r[0] for r in sql.rows(ctx, """
         UPDATE "inventory_item"
            SET supplier_id = %s,
@@ -200,6 +217,10 @@ def link_items(ctx, supplier_id, item_ids):
     refill(ctx, moved)  # a low item newly linked goes on this supplier's draft, as when its own dialog sets it
     record_change(ctx, "supplier.items", "supplier", supplier_id, before={"item_ids": before},
                   after={"item_ids": wanted})
+    taken = set(moved)
+    for loser_id in sorted(losers):
+        record_change(ctx, "supplier.items", "supplier", loser_id, before={"item_ids": losers[loser_id]},
+                      after={"item_ids": [i for i in losers[loser_id] if i not in taken]}, to_supplier_id=supplier_id)
 
 
 def check_item_suppliers(ctx, supplier_id, backup_id):
