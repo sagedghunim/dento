@@ -1345,3 +1345,4 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 .link-items li { padding-block: 2px; }
 .link-items .check { min-height: 44px; }
 .link-items .muted { font-size: .85rem; }
+.link-all { padding-inline: 8px; }

@@ -79,7 +79,7 @@ class OrderTests(OrderHelpers):
         r = call(self.owner, "PATCH", f"/api/v1/inventory/items/{loose['id']}", {"supplier_id": supplier["id"]})
         self.assertEqual(r.status_code, 200, r.content)  # a supplier newly set on a low item
         self.assertEqual(len(self.drafts()), 1)
-        counted = self.item("Counted", quantity=9, threshold=3, supplier=self.supplier("Other"))
+        counted = self.item("Counted", quantity=9, threshold=3, supplier=self.supplier("Other Co"))
         r = call(self.owner, "POST", f"/api/v1/inventory/items/{counted['id']}/count", {"counted": 1, "expected": 9})
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(len(self.drafts()), 2)
@@ -107,7 +107,7 @@ class OrderTests(OrderHelpers):
         same = call(self.owner, "PATCH", f"/api/v1/inventory/items/{item['id']}",
                     {"supplier_id": supplier["id"], "backup_supplier_id": supplier["id"]})
         self.assertEqual(same.status_code, 400, same.content)
-        other = call(self.b.client("owner"), "POST", "/api/v1/inventory/suppliers", {"name": "B's"}).json()["supplier"]
+        other = call(self.b.client("owner"), "POST", "/api/v1/inventory/suppliers", {"name": "B's Co", "phone": "01001234567"}).json()["supplier"]
         foreign = call(self.owner, "PATCH", f"/api/v1/inventory/items/{item['id']}", {"supplier_id": other["id"]})
         self.assertEqual(foreign.status_code, 404, foreign.content)
 
@@ -306,9 +306,29 @@ class SupplierRedesignTests(M2TestCase):
             return {i["id"]: Item.objects.filter(clinic_id=self.a.id, id=i["id"]).values_list(
                 "supplier_id", "backup_supplier_id").get() for i in items}
 
+    def test_a_supplier_needs_a_two_word_name_and_a_mobile(self):
+        """Saged, 2026-11-26: name in two words at least and an Egyptian mobile; the rest is optional."""
+        url = "/api/v1/inventory/suppliers"
+        r = call(self.owner, "POST", url, {"name": "Nile", "phone": "01001234567"})
+        self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"name": "two_words"}))
+        for phone in ("", "0100123456", "01301234567", "0223456789"):
+            r = call(self.owner, "POST", url, {"name": "Nile Dental", "phone": phone})
+            self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"phone": "mobile"}), phone)
+        r = call(self.owner, "POST", url, {"name": "Nile Dental", "phone": "٠١٥١٢٣٤٥٦٧٨"})
+        self.assertEqual(r.status_code, 201, r.content)
+        supplier = r.json()["supplier"]
+        self.assertEqual(supplier["phone"], "201512345678")
+        # An edit checks only what it sends.
+        r = call(self.owner, "PATCH", f"{url}/{supplier['id']}", {"notes": "Mornings"})
+        self.assertEqual(r.status_code, 200, r.content)
+        r = call(self.owner, "PATCH", f"{url}/{supplier['id']}", {"name": "Nile"})
+        self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"name": "two_words"}))
+        r = call(self.owner, "PATCH", f"{url}/{supplier['id']}", {"phone": ""})
+        self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"phone": "mobile"}))
+
     def test_visit_days_and_time_are_saved_and_checked(self):
         r = call(self.owner, "POST", "/api/v1/inventory/suppliers",
-                 {"name": "Weekly", "visit_days": [5, 1, 1], "visit_time": "11:30"})
+                 {"name": "Weekly Co", "phone": "01001234567", "visit_days": [5, 1, 1], "visit_time": "11:30"})
         self.assertEqual(r.status_code, 201, r.content)
         supplier = r.json()["supplier"]
         self.assertEqual((supplier["visit_days"], supplier["visit_time"]), ([1, 5], "11:30"))
@@ -320,7 +340,7 @@ class SupplierRedesignTests(M2TestCase):
             self.assertEqual(r.status_code, 400, (bad, r.content))
 
     def test_ticked_items_move_to_the_supplier_and_unticked_ones_leave_it(self):
-        first, second = self.supplier("First"), self.supplier("Second")
+        first, second = self.supplier("First Co"), self.supplier("Second Co")
         a = self.item("A", quantity=9, supplier=first)
         b = self.item("B", quantity=9, supplier=first, backup_supplier_id=second["id"])
         c = self.item("C", quantity=9)
@@ -336,7 +356,7 @@ class SupplierRedesignTests(M2TestCase):
 
     def test_a_new_supplier_takes_its_ticked_items(self):
         a = self.item("A", quantity=9)
-        r = call(self.owner, "POST", "/api/v1/inventory/suppliers", {"name": "New", "item_ids": [a["id"]]})
+        r = call(self.owner, "POST", "/api/v1/inventory/suppliers", {"name": "New Co", "phone": "01001234567", "item_ids": [a["id"]]})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(self.links(a), {a["id"]: (r.json()["supplier"]["id"], None)})
 
@@ -353,9 +373,9 @@ class SupplierRedesignTests(M2TestCase):
         self.assertEqual(self.links(a), {a["id"]: (None, None)})  # nothing of the request stayed
 
     def test_the_desk_manages_suppliers_and_items_by_default_and_the_doctor_does_not(self):
-        r = call(self.desk, "POST", "/api/v1/inventory/suppliers", {"name": "By the desk"})
+        r = call(self.desk, "POST", "/api/v1/inventory/suppliers", {"name": "By the desk", "phone": "01001234567"})
         self.assertEqual(r.status_code, 201, r.content)
-        r = call(self.doc, "POST", "/api/v1/inventory/suppliers", {"name": "By the doctor"})
+        r = call(self.doc, "POST", "/api/v1/inventory/suppliers", {"name": "By the doctor", "phone": "01001234567"})
         self.assertEqual(r.status_code, 403, r.content)
 
     def test_the_order_message_follows_the_owners_template(self):
@@ -373,14 +393,14 @@ class SupplierRedesignTests(M2TestCase):
         self.assertTrue(text.endswith("Bye"))
 
     def test_a_name_that_looks_like_a_word_is_filled_once(self):
-        supplier = self.supplier("{items}")
+        supplier = self.supplier("{items} Co")
         item = self.item(quantity=3, supplier=supplier)
         self.use(item, 1)
         draft = self.drafts()[0]
         call(self.owner, "PUT", "/api/v1/settings/clinic",
              {"changes": {"order_message": "To {المورد}:\n{الأصناف}"}, "expected": {"order_message": ""}})
         text = call(self.desk, "POST", f"/api/v1/inventory/orders/{draft['id']}/send").json()["text"]
-        self.assertEqual(text.splitlines()[0], "To {items}:")
+        self.assertEqual(text.splitlines()[0], "To {items} Co:")
         self.assertEqual(text.count("- Composite"), 1)
 
     def test_a_template_without_the_items_word_still_sends_the_items(self):
@@ -409,7 +429,7 @@ class SupplierRedesignTests(M2TestCase):
         self.assertEqual([d["supplier_id"] for d in self.drafts()], [supplier["id"]])
 
     def test_an_item_moved_to_another_supplier_leaves_the_old_draft(self):
-        old, new = self.supplier("Old"), self.supplier("New")
+        old, new = self.supplier("Old Co"), self.supplier("New Co")
         low = self.item("Low", quantity=3, threshold=2, supplier=old)
         self.use(low, 1)
         self.assertEqual([d["supplier_id"] for d in self.drafts()], [old["id"]])

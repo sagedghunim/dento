@@ -48,7 +48,7 @@ class BackupTests(OrderHelpers):
     # --- The supplier's backup ---
 
     def test_a_supplier_takes_a_backup_checked_like_an_item_backup(self):
-        main, other = self.supplier("Main"), self.supplier("Other")
+        main, other = self.supplier("Main Co"), self.supplier("Other Co")
         self.assertEqual(self.set_backup(main, other)["backup_id"], other["id"])
         r = call(self.owner, "PATCH", f"/api/v1/inventory/suppliers/{main['id']}", {"backup_id": main["id"]})
         self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"backup_id": "same"}))
@@ -62,7 +62,7 @@ class BackupTests(OrderHelpers):
     # --- "مش عنده" ---
 
     def test_not_available_moves_the_rest_to_the_suppliers_backup_and_closes_the_order(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         a = self.item("A", quantity=50, supplier=main)
         b = self.item("B", quantity=50, supplier=main)
@@ -71,7 +71,7 @@ class BackupTests(OrderHelpers):
         r = self.missing(order, a)
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.json()["moved"], [{"item_id": a["id"], "qty": 6, "to": "supplier",
-                                               "supplier_id": backup["id"], "supplier_name": "Backup"}])
+                                               "supplier_id": backup["id"], "supplier_name": "Backup Co"}])
         line = {l["item_id"]: l for l in r.json()["order"]["lines"]}[a["id"]]
         self.assertEqual((line["missing"], r.json()["order"]["status"]), (6, "sent"))
         self.assertEqual(self.draft_lines(backup), {a["id"]: 6})
@@ -83,7 +83,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(self.draft_lines(backup), {a["id"]: 6, b["id"]: 3})
 
     def test_the_items_own_backup_comes_before_the_suppliers(self):
-        main, sup_backup, item_backup = self.supplier("Main"), self.supplier("SB"), self.supplier("IB")
+        main, sup_backup, item_backup = self.supplier("Main Co"), self.supplier("SB Co"), self.supplier("IB Co")
         self.set_backup(main, sup_backup)
         a = self.item("A", quantity=50, supplier=main, backup_supplier_id=item_backup["id"])
         order = self.sent_order(main, (a, 5))
@@ -91,7 +91,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(self.draft_lines(sup_backup), {})
 
     def test_an_inactive_backup_is_skipped_and_no_backup_goes_to_the_list(self):
-        main, gone = self.supplier("Main"), self.supplier("Gone")
+        main, gone = self.supplier("Main Co"), self.supplier("Gone Co")
         self.set_backup(main, gone)
         call(self.owner, "PATCH", f"/api/v1/inventory/suppliers/{gone['id']}", {"is_active": False})
         a = self.item("A", quantity=50, supplier=main)
@@ -102,7 +102,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(self.needs(), {a["id"]: 5})
 
     def test_one_step_only_a_backup_line_short_again_goes_to_the_list(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         self.set_backup(backup, main)  # A -> B and B -> A is harmless
         a = self.item("A", quantity=50, supplier=main)
@@ -114,7 +114,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual((self.needs(), self.draft_lines(main)), ({a["id"]: 5}, {}))
 
     def test_a_moved_qty_adds_to_the_backups_draft_and_marks_the_line(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         a = self.item("A", quantity=50, supplier=main)
         call(self.desk, "POST", "/api/v1/inventory/orders", {"supplier_id": backup["id"],
@@ -125,7 +125,7 @@ class BackupTests(OrderHelpers):
             self.assertTrue(OrderLine.objects.get(clinic_id=self.a.id, item_id=a["id"], order__status="draft").is_backup)
 
     def test_not_available_needs_a_sent_order_and_a_line_on_it(self):
-        main = self.supplier("Main")
+        main = self.supplier("Main Co")
         a, b = self.item("A", quantity=50, supplier=main), self.item("B", quantity=50, supplier=main)
         r = call(self.desk, "POST", "/api/v1/inventory/orders", {"supplier_id": main["id"],
                                                                 "lines": [{"item_id": a["id"], "qty": 2}]})
@@ -138,7 +138,7 @@ class BackupTests(OrderHelpers):
     # --- Receiving ---
 
     def test_closing_a_short_order_moves_exactly_the_short_qty(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         a = self.item("A", quantity=50, supplier=main)
         b = self.item("B", quantity=50, supplier=main)
@@ -150,31 +150,31 @@ class BackupTests(OrderHelpers):
         self.assertEqual(self.draft_lines(main), {})  # not back to the one who didn't bring it
 
     def test_an_order_closes_by_itself_when_the_rest_is_missing(self):
-        main = self.supplier("Main")
+        main = self.supplier("Main Co")
         a, b = self.item("A", quantity=50, supplier=main), self.item("B", quantity=50, supplier=main)
         order = self.sent_order(main, (a, 10), (b, 2))
         self.missing(order, a)
         self.assertEqual(self.receive(order, [(b, 2)])["order"]["status"], "done")
 
     def test_a_late_receipt_on_a_missing_line_is_allowed_and_reported(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         a, b = self.item("A", quantity=50, supplier=main), self.item("B", quantity=50, supplier=main)
         order = self.sent_order(main, (a, 5), (b, 1))
         self.missing(order, a)
         answer = self.receive(order, [(a, 5)])
-        self.assertEqual(answer["late"], [{"item_id": a["id"], "moved_to": "supplier", "supplier_name": "Backup"}])
+        self.assertEqual(answer["late"], [{"item_id": a["id"], "moved_to": "supplier", "supplier_name": "Backup Co"}])
 
     def test_a_receipt_lowers_what_the_list_waits_for(self):
-        main = self.supplier("Main")
+        main = self.supplier("Main Co")
         a = self.item("A", quantity=50, supplier=main)
         self.missing(self.sent_order(main, (a, 5)), a)
         self.assertEqual(self.need_qty(a), 5)
-        self.receive(self.sent_order(self.supplier("Other"), (a, 3)), [(a, 3)])
+        self.receive(self.sent_order(self.supplier("Other Co"), (a, 3)), [(a, 3)])
         self.assertEqual(self.needs(), {a["id"]: 2})
 
     def test_cancelling_a_backup_order_sends_its_moved_lines_to_the_list(self):
-        main, backup = self.supplier("Main"), self.supplier("Backup")
+        main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         a = self.item("A", quantity=50, supplier=main)
         self.missing(self.sent_order(main, (a, 5)), a)
@@ -185,7 +185,7 @@ class BackupTests(OrderHelpers):
     # --- The list ---
 
     def test_the_list_has_low_items_with_no_supplier_once_and_refill_skips_listed_items(self):
-        main = self.supplier("Main")
+        main = self.supplier("Main Co")
         loose = self.item("Loose", quantity=3, threshold=2)
         self.use(loose, 2)  # low, nobody sells it: 2 x 2 - 1 = 3
         a = self.item("A", quantity=50, threshold=2, supplier=main)
@@ -198,7 +198,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(r.json()["needs"], 1)  # the badge counts the short ones only
 
     def test_picking_a_supplier_orders_from_it_and_a_repeat_adds_nothing(self):
-        main, other = self.supplier("Main"), self.supplier("Other")
+        main, other = self.supplier("Main Co"), self.supplier("Other Co")
         a = self.item("A", quantity=50, supplier=main)
         self.missing(self.sent_order(main, (a, 5)), a)
         url = f"/api/v1/inventory/needs/{a['id']}/order"
@@ -213,7 +213,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(bad.status_code, 400)
 
     def test_a_low_item_with_no_supplier_can_be_picked_from_the_list(self):
-        other = self.supplier("Other")
+        other = self.supplier("Other Co")
         loose = self.item("Loose", quantity=3, threshold=2)
         self.use(loose, 2)
         r = call(self.desk, "POST", f"/api/v1/inventory/needs/{loose['id']}/order",
@@ -222,7 +222,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual((self.draft_lines(other), self.needs()), ({loose["id"]: 3}, {}))
 
     def test_dismissing_and_setting_a_supplier_clear_the_list(self):
-        main, other = self.supplier("Main"), self.supplier("Other")
+        main, other = self.supplier("Main Co"), self.supplier("Other Co")
         a = self.item("A", quantity=50, supplier=main)
         b = self.item("B", quantity=50, supplier=main)
         order = self.sent_order(main, (a, 5), (b, 5))
@@ -234,7 +234,7 @@ class BackupTests(OrderHelpers):
         self.assertEqual(self.needs(), {})
 
     def test_another_place_cant_see_or_touch_the_list(self):
-        main = self.supplier("Main")
+        main = self.supplier("Main Co")
         a = self.item("A", quantity=50, supplier=main)
         order = self.sent_order(main, (a, 5))
         self.missing(order, a)
@@ -256,8 +256,8 @@ class BackupConcurrencyTests(TransactionTestCase):
 
     def test_two_not_available_at_once_move_once(self):
         owner = self.a.client("owner")
-        main = call(owner, "POST", "/api/v1/inventory/suppliers", {"name": "Main"}).json()["supplier"]
-        backup = call(owner, "POST", "/api/v1/inventory/suppliers", {"name": "Backup"}).json()["supplier"]
+        main = call(owner, "POST", "/api/v1/inventory/suppliers", {"name": "Main Co", "phone": "01001234567"}).json()["supplier"]
+        backup = call(owner, "POST", "/api/v1/inventory/suppliers", {"name": "Backup Co", "phone": "01001234567"}).json()["supplier"]
         call(owner, "PATCH", f"/api/v1/inventory/suppliers/{main['id']}", {"backup_id": backup["id"]})
         item = call(owner, "POST", "/api/v1/inventory/items",
                     {"name": "A", "quantity": 50, "supplier_id": main["id"]}).json()["item"]

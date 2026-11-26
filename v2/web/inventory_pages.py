@@ -97,6 +97,8 @@ def inventory_page(request, ctx):
     context = _items_context(ctx)
     # Ready items to pick from when adding one (Saged, 2026-11-25), without the ones the clinic already has.
     have = [name for i in context["items"] for name in (i["name"], i.get("name_ar") or "")]
+    needs = orders.needs(ctx) if perms["order"] else []
+    waiting = {n["item_id"]: n["qty"] for n in needs if n["kind"] == "short"}
     return render(request, "web/inventory.html", {
         "ctx": ctx, "nav_active": "inventory", **context,
         "ready_items": [{**r, "price_text": fmt.money_plain(r["cost"]) if r["price"] else ""}
@@ -111,10 +113,13 @@ def inventory_page(request, ctx):
         "show_items": perms["use"] or perms["manage"],
         # For the orders' pick lists and their first view (orders.js); prices only with money.view.
         "order_data": {
-            "items": [{k: i[k] for k in ("id", "name", "unit", "quantity", "threshold", "supplier_id", "backup_supplier_id")}
+            # need_qty > 0 (waiting for a supplier) is left out of "all that is short", as the server's refill does.
+            "items": [{**{k: i[k] for k in ("id", "name", "unit", "quantity", "threshold", "supplier_id",
+                                            "backup_supplier_id", "max_qty")},
+                       "need_qty": waiting.get(i["id"], 0)}
                       for i in context["items"] if i["is_active"]],
             "orders": orders.orders(ctx),
-            "needs": orders.needs(ctx),  # the "need a supplier" box, shown at once (design H1 backup)
+            "needs": needs,  # the "need a supplier" box, shown at once (design H1 backup)
             "perms": {k: perms[k] for k in ("manage", "order", "money", "pay", "drawer", "owner")},
             # The days on the orders are the clinic's, not the browser's.
             "zone": str(zone(ctx.clinic)),

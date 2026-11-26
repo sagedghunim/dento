@@ -5301,9 +5301,6 @@ msgstr "مفيش موردين لسه. ضيف اللي العيادة بتشتر�
 msgid "Order from them"
 msgstr "اطلب منه"
 
-msgid "Write the supplier's name."
-msgstr "اكتب اسم المورد."
-
 msgid "Supplier saved: {name}"
 msgstr "المورد اتحفظ: {name}"
 
@@ -5681,3 +5678,48 @@ msgstr "الأصناف دي ناقصة ومفيش مورد هيجيبها. اخ�
 
 msgid "An item"
 msgstr "صنف"
+
+msgid "Write the supplier's name in two words at least."
+msgstr "اكتب اسم المورد كلمتين على الأقل."
+
+msgid "Write the supplier's mobile: 11 digits starting with 01."
+msgstr "اكتب موبايل المورد: ١١ رقم بيبدأ بـ 01."
+
+msgid "From this supplier"
+msgstr "من المورد ده"
+
+msgid "+ All that is short from this supplier ({n})"
+msgstr "+ كل اللي ناقص من المورد ده ({n})"
+
+msgid "+ All this supplier's items ({n})"
+msgstr "+ كل أصناف المورد ده ({n})"
+
+msgid "Added {n} items."
+msgstr "اتضاف {n} صنف."
+
+msgid "Picked: {n} items"
+msgstr "اخترت: {n} صنف"
+
+msgid "One order takes {n} items at most; the rest go in another order."
+msgstr "الطلب الواحد ياخد {n} صنف بس؛ الباقي في طلب تاني."
+
+msgid "Write the name in two words at least."
+msgstr "اكتب الاسم كلمتين على الأقل."
+
+msgid "Write a mobile: 11 digits starting with 010, 011, 012 or 015."
+msgstr "اكتب موبايل: ١١ رقم بيبدأ بـ 010 أو 011 أو 012 أو 015."
+
+msgid "Already here"
+msgstr "موجود"
+
+msgid "Name (two words at least)"
+msgstr "الاسم (كلمتين على الأقل)"
+
+msgid "This supplier is already here."
+msgstr "المورد ده موجود."
+
+msgid "Open it"
+msgstr "افتحه"
+
+msgid "Select all"
+msgstr "اختار الكل"

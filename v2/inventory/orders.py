@@ -10,6 +10,7 @@ with money.view; without it the desk receives quantities alone, at the item's cu
 
 import datetime as dt
 import re
+import unicodedata
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -38,10 +39,15 @@ def _not_found(what):
 
 def phone_digits(value):
     """Digits only; an Egyptian mobile (01x, 11 digits) gets the country code (201x) so wa.me opens it."""
-    digits = "".join(c for c in (value or "") if c.isdigit())
+    digits = "".join(str(unicodedata.decimal(c)) for c in (value or "") if c.isdecimal())  # Arabic digits too
     if len(digits) == 11 and digits.startswith("01"):
         digits = "2" + digits
     return digits[:20]
+
+
+def is_mobile(value):
+    """An Egyptian mobile: 010, 011, 012 or 015 and 8 more digits (Saged, 2026-11-26: a supplier must have one)."""
+    return re.fullmatch(r"201[0125]\d{8}", phone_digits(value)) is not None
 
 
 # --- Suppliers --------------------------------------------------------------------------------------------------

@@ -147,7 +147,9 @@ const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "
   .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
 
 // onPick may answer the text to leave in the field; onNew (optional) adds "+ New: <typed text>" at the end.
-function picker(input, list, source, onPick, onNew = null) {
+// opts.top() gives lines shown first while nothing is typed ({name, run}); opts.quiet closes the list when
+// nothing matches; opts.noFocus opens it on a tap or a letter, not on focus. An item's .tag is a small note.
+function picker(input, list, source, onPick, onNew = null, opts = {}) {
   let shown = [];
   let active = -1;
   const mark = () => {
@@ -158,7 +160,7 @@ function picker(input, list, source, onPick, onNew = null) {
   };
   const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
   const choose = (item) => {
-    const after = item.isNew ? onNew(item.name) : onPick(item);
+    const after = item.run ? item.run() : item.isNew ? onNew(item.name) : onPick(item);
     input.value = typeof after === "string" ? after : "";
     close();
   };
@@ -168,12 +170,16 @@ function picker(input, list, source, onPick, onNew = null) {
       .sort((a, b) => (q && plain(a.name).startsWith(q) ? 0 : 1) - (q && plain(b.name).startsWith(q) ? 0 : 1)).slice(0, 40);
     const typed = input.value.trim();
     if (onNew && typed && !shown.some((item) => plain(item.name) === q)) shown.push({ isNew: true, name: typed });
+    if (!q && opts.top) shown.unshift(...opts.top());
+    if (!shown.length && opts.quiet) { close(); return; }
     list.replaceChildren(...shown.map((item, i) => {
       const li = el("li");
       li.id = `${list.id}-${i}`;
       li.setAttribute("role", "option");
       if (item.isNew) li.append(t("ord_add_new"), " ", bdi(item.name));
+      else if (item.run) { li.append(el("strong", "", item.name)); li.classList.add("on"); }
       else li.append(bdi(item.name));
+      if (item.tag) li.append(el("small", "muted", item.tag));
       if (item.quantity != null) li.append(el("small", "muted", t("ord_have", { n: localDigits(item.quantity), unit: item.unit || "" })));
       li.addEventListener("mousedown", (e) => e.preventDefault());
       li.addEventListener("click", () => choose(item));
@@ -189,7 +195,7 @@ function picker(input, list, source, onPick, onNew = null) {
     active = -1;
     mark();
   };
-  input.addEventListener("focus", open);
+  if (!opts.noFocus) input.addEventListener("focus", open);
   input.addEventListener("click", () => { if (list.hidden) open(); });
   input.addEventListener("input", open);
   input.addEventListener("blur", close);
@@ -231,6 +237,34 @@ function twoTaps(node) {
 }
 
 // Where short quantities went (design H1 backup): the backup supplier's order, or the "need a supplier" list.
+// A supplier's items for the pick lists: theirs first with a small mark, then the rest (Saged, 2026-11-26).
+const ownFirst = (supplierId) => items.map((i) => (supplierId && i.supplier_id === supplierId ? { ...i, tag: t("ord_from_this") } : i))
+  .sort((a, b) => (a.tag ? 0 : 1) - (b.tag ? 0 : 1));
+// The refill qty, as the server's refill counts it: up to the most, or twice the alert line; at least 1.
+const refillQty = (i) => Math.max((i.max_qty > 0 ? i.max_qty : 2 * i.threshold) - i.quantity, 1);
+// As the server's is_mobile (inventory/orders.py): 010, 011, 012 or 015 and 8 more digits; Arabic digits too.
+function isMobile(value) {
+  let digits = [...(value || "")].map((c) => { const n = "٠١٢٣٤٥٦٧٨٩".indexOf(c); const m = "۰۱۲۳۴۵۶۷۸۹".indexOf(c);
+    return n >= 0 ? String(n) : m >= 0 ? String(m) : /[0-9]/.test(c) ? c : ""; }).join("");
+  if (digits.length === 11 && digits.startsWith("01")) digits = "2" + digits;
+  return /^201[0125]\d{8}$/.test(digits);
+}
+const twoWords = (name) => name.trim().split(/\s+/).filter(Boolean).length >= 2;
+
+const MAX_LINES = 30;  // as the server takes in one order (inventory/views.py)
+// The two lines on top: all that is short from this supplier, or all of its items; never one already there.
+function supplierLines(supplierId, there, add) {
+  if (!supplierId) return [];
+  const own = items.filter((i) => i.supplier_id === supplierId && !there.has(i.id));
+  const short = own.filter((i) => i.quantity <= i.threshold && !(i.need_qty > 0));  // as the server's refill
+  const out = [];
+  if (short.length) out.push({ name: t("ord_add_short", { n: localDigits(String(short.length)) }), run: () => add(short.map((i) => [i, refillQty(i)])) });
+  if (own.length > short.length) {
+    out.push({ name: t("ord_add_all", { n: localDigits(String(own.length)) }), run: () => add(own.map((i) => [i, 1])) });
+  }
+  return out;
+}
+
 const itemName = (id, fallback = "") => (items.find((i) => i.id === id) || {}).name || fallback || t("ord_an_item");
 function movedText(moved, fallback = "") {
   return (moved || []).map((m) => (m.to === "supplier"
@@ -334,16 +368,25 @@ if (orderDialog) {
     shownAs = draft ? JSON.stringify(draftNow()) : "";
   }
 
-  const addLine = (item) => {
+  const addLine = (item, qty = 1, many = false) => {
     const there = lines.querySelector(`[data-line="${item.id}"]`);
-    if (there) { there.querySelector("input").focus(); return; }
+    if (there) { if (!many) there.querySelector("input").focus(); return; }
     const empty = lines.querySelector(".empty-note");
     if (empty) empty.remove();
-    lines.append(lineNode({ item_id: item.id, name: item.name, unit: item.unit, quantity: item.quantity, qty: 1 }, true));
-    lines.lastElementChild.querySelector("input").select();
+    lines.append(lineNode({ item_id: item.id, name: item.name, unit: item.unit, quantity: item.quantity, qty }, true));
+    if (!many) lines.lastElementChild.querySelector("input").select();
     submitter.say("");
   };
-  picker(addBox.querySelector("[data-item-q]"), addBox.querySelector("[data-item-list]"), () => items, addLine);
+  const addMany = (pairs) => {
+    const room = Math.max(MAX_LINES - lines.querySelectorAll("[data-line]").length, 0);
+    pairs.slice(0, room).forEach(([item, qty]) => addLine(item, qty, true));
+    if (room) toast(t("ord_added_n", { n: localDigits(String(Math.min(pairs.length, room))) }));
+    if (pairs.length > room) alertMessage(t("ord_max_lines", { n: localDigits(String(MAX_LINES)) }));
+  };
+  const onOrder = () => new Set([...lines.querySelectorAll("[data-line]")].map((li) => Number(li.dataset.line)));
+  picker(addBox.querySelector("[data-item-q]"), addBox.querySelector("[data-item-list]"),
+         () => ownFirst(current && current.supplier_id), (item) => addLine(item), null,
+         { top: () => (current ? supplierLines(current.supplier_id, onOrder(), addMany) : []) });
 
   // Enter in a quantity never sends the order: it moves on to the next box, then to Save.
   lines.addEventListener("keydown", (event) => {
@@ -605,18 +648,23 @@ if (newOrderDialog) {
   const select = form.elements.namedItem("supplier_id");
   const q = newOrderDialog.querySelector("[data-item-q]");
   let picked = null;
+  let pickedMany = null;  // [[item, qty], ...] from "all that is short" or "all its items"
   wireClose(newOrderDialog);
-  // The supplier's own items first.
-  const source = () => {
-    const id = Number(select.value);
-    return [...items].sort((a, b) => (a.supplier_id === id ? 0 : 1) - (b.supplier_id === id ? 0 : 1));
-  };
+  const qtyField = form.elements.namedItem("qty");
   const pickedLine = newOrderDialog.querySelector("[data-picked]");
   const show = () => {
     q.placeholder = t("ord_type_item");
-    pickedLine.textContent = picked ? t("ord_picked", { name: picked.name }) : "";
+    pickedLine.textContent = pickedMany ? t("ord_picked_n", { n: localDigits(String(pickedMany.length)) })
+      : picked ? t("ord_picked", { name: picked.name }) : "";
+    qtyField.closest(".field").hidden = Boolean(pickedMany);
   };
-  picker(q, newOrderDialog.querySelector("[data-item-list]"), source, (item) => { picked = item; show(); form.elements.namedItem("qty").focus(); });
+  picker(q, newOrderDialog.querySelector("[data-item-list]"), () => ownFirst(Number(select.value)),
+         (item) => { picked = item; pickedMany = null; show(); qtyField.focus(); }, null,
+         { top: () => supplierLines(Number(select.value), new Set(), (pairs) => {
+           if (pairs.length > MAX_LINES) alertMessage(t("ord_max_lines", { n: localDigits(String(MAX_LINES)) }));
+           pickedMany = pairs.slice(0, MAX_LINES); picked = null; show();
+         }) });
+  select.addEventListener("change", () => { if (pickedMany) { pickedMany = null; show(); } });
 
   startOrder = (supplierId, opener) => {
     if (submitter.holdsUnknown()) { openDialog(newOrderDialog, opener); return; }
@@ -624,6 +672,7 @@ if (newOrderDialog) {
     form.reset();
     submitter.reset();
     picked = null;
+    pickedMany = null;
     show();
     if (supplierId) select.value = String(supplierId);
     openDialog(newOrderDialog, opener);
@@ -635,10 +684,14 @@ if (newOrderDialog) {
     let body = null;
     if (!submitter.unknown) {
       if (!select.value) { submitter.say(t("ord_pick_supplier")); select.focus(); return; }
-      if (!picked) { submitter.say(t("ord_pick_item")); q.focus(); return; }
-      const qty = parseWhole(form.elements.namedItem("qty").value);
-      if (!qty || qty > 100000) { submitter.say(t("bad_qty")); return; }
-      body = { supplier_id: Number(select.value), lines: [{ item_id: picked.id, qty }] };
+      if (pickedMany) {
+        body = { supplier_id: Number(select.value), lines: pickedMany.map(([item, qty]) => ({ item_id: item.id, qty: Math.min(qty, 100000) })) };
+      } else {
+        if (!picked) { submitter.say(t("ord_pick_item")); q.focus(); return; }
+        const qty = parseWhole(qtyField.value);
+        if (!qty || qty > 100000) { submitter.say(t("bad_qty")); return; }
+        body = { supplier_id: Number(select.value), lines: [{ item_id: picked.id, qty }] };
+      }
     }
     const result = await submitter.run("POST", "/api/v1/inventory/orders", body, t("ord_started_label"));
     if (!result || !isOk(result)) return;
@@ -687,7 +740,11 @@ function needRow(need) {
   error.setAttribute("role", "alert");
   li.append(main, side, error);
   picker(sup, drop, () => suppliers.filter((x) => x.is_active), (x) => { li.dataset.supplier = String(x.id); error.textContent = ""; return x.name; },
-         perms.manage ? (name) => { newSupplier(li, name); return name; } : null);
+         perms.manage ? (name) => {
+           // The supplier dialog, its name filled in; once saved, the new supplier is this row's (Saged, 2026-11-26).
+           editSupplier(null, sup, { name, onSaved: (x) => { li.dataset.supplier = String(x.id); sup.value = x.name; error.textContent = ""; } });
+           return name;
+         } : null);
   sup.addEventListener("input", () => { delete li.dataset.supplier; });
   return li;
 }
@@ -714,25 +771,6 @@ function renderNeeds(list) {
   }
   needsBox.hidden = !list.length;
   if (needsCount) needsCount.textContent = list.length ? `(${localDigits(list.length)})` : "";
-}
-
-async function newSupplier(li, name) {
-  const error = li.querySelector(".form-error");
-  const go = li.querySelector("[data-need-order]");
-  const sup = li.querySelector("[data-need-supplier]");
-  go.disabled = true;
-  error.textContent = "";
-  const result = await save("POST", "/api/v1/inventory/suppliers", { name }, { key: newKey(), label: t("ord_supplier_saved", { name }) });
-  go.disabled = false;
-  if (!isOk(result)) {
-    error.textContent = result.settled ? errorMessage(result, t("failed")) : t("ord_not_sure");
-    if (sup.value === name) sup.value = "";
-    loadSuppliers();
-    return;
-  }
-  if (sup.value === name) li.dataset.supplier = String(result.data.supplier.id);
-  toast(t("ord_supplier_saved", { name: result.data.supplier.name }));
-  loadSuppliers();
 }
 
 async function orderNeed(li) {
@@ -896,6 +934,7 @@ if (supplierDialog) {
   const linkList = supplierDialog.querySelector("[data-link-items]");
   const linkFilter = supplierDialog.querySelector("[data-link-filter]");
   const linkCount = supplierDialog.querySelector("[data-link-count]");
+  const linkAll = supplierDialog.querySelector("[data-link-all]");
   let linked = new Set();   // the item ids ticked now
   let linkedBefore = new Set();
   wireClose(supplierDialog);
@@ -933,11 +972,31 @@ if (supplierDialog) {
     supplierDialog.querySelector("[data-link-empty]").hidden = items.length > 0;
     linkFilter.hidden = items.length < 8;
     linkCount.textContent = countText();
+    markAll();
   }
+  // "Select all" ticks only what the search shows (Saged, 2026-11-26).
+  const boxesShown = () => [...linkList.querySelectorAll("input[type=checkbox]")];
+  function markAll() {
+    if (!linkAll) return;
+    const boxes = boxesShown();
+    const on = boxes.filter((b) => b.checked).length;
+    linkAll.closest("label").hidden = boxes.length < 2;
+    linkAll.checked = boxes.length > 0 && on === boxes.length;
+    linkAll.indeterminate = on > 0 && on < boxes.length;
+  }
+  if (linkAll) linkAll.addEventListener("change", () => {
+    for (const box of boxesShown()) {
+      box.checked = linkAll.checked;
+      if (linkAll.checked) linked.add(Number(box.value)); else linked.delete(Number(box.value));
+    }
+    linkCount.textContent = countText();
+    markAll();
+  });
   linkList.addEventListener("change", (event) => {
     const id = Number(event.target.value);
     if (event.target.checked) linked.add(id); else linked.delete(id);
     linkCount.textContent = countText();
+    markAll();
   });
   linkFilter.addEventListener("input", renderLinks);
   linkFilter.addEventListener("keydown", (event) => { if (event.key === "Enter") event.preventDefault(); });
@@ -945,11 +1004,42 @@ if (supplierDialog) {
   const dayBoxes = () => [...form.querySelectorAll("[name=visit_day]")];
   const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
-  editSupplier = (supplier, opener) => {
-    if (submitter.holdsUnknown()) { openDialog(supplierDialog, opener); return; }
+  // Under a field: what is wrong with it.
+  const fieldError = (name, text) => {
+    const holder = form.querySelector(`[data-field-error="${name}"]`);
+    if (holder) holder.textContent = text;
+    if (text) field(name).setAttribute("aria-invalid", "true"); else field(name).removeAttribute("aria-invalid");
+  };
+  // The suppliers already here: the name list, and "already here" when the name is one of them.
+  const others = () => suppliers.filter((x) => !editing || x.id !== editing.id);
+  const existsNote = supplierDialog.querySelector("[data-name-exists]");
+  let same = null;
+  const checkName = () => {
+    const name = plain(field("name").value.trim().replace(/\s+/g, " "));
+    same = name ? others().find((x) => plain(x.name.trim().replace(/\s+/g, " ")) === name) || null : null;
+    existsNote.hidden = !same;
+  };
+  let onSaved = null;  // what the "need a supplier" row does with the new supplier
+  const switchTo = (supplier) => { const after = onSaved; fill(supplier); onSaved = after; field("name").focus(); };
+  picker(field("name"), supplierDialog.querySelector("[data-name-list]"),
+         () => others().map((x) => ({ ...x, tag: t("ord_exists") })), (x) => { switchTo(x); return x.name; }, null,
+         { quiet: true, noFocus: true });
+  field("name").addEventListener("input", () => { checkName(); fieldError("name", ""); });
+  field("phone").addEventListener("input", () => fieldError("phone", ""));
+  supplierDialog.querySelector("[data-open-existing]").addEventListener("click", () => { if (same) switchTo(same); });
+
+  editSupplier = (supplier, opener, options = {}) => {
+    if (submitter.holdsUnknown()) { onSaved = options.onSaved || null; openDialog(supplierDialog, opener); return; }
+    fill(supplier, options);
+    openDialog(supplierDialog, opener);
+  };
+  function fill(supplier, options = {}) {
     editing = supplier;
+    onSaved = options.onSaved || null;
     form.reset();
     submitter.reset();
+    fieldError("name", "");
+    fieldError("phone", "");
     supplierDialog.querySelectorAll("[data-title-new]").forEach((n) => { n.hidden = Boolean(supplier); });
     supplierDialog.querySelectorAll("[data-title-edit]").forEach((n) => { n.hidden = !supplier; });
     if (supplier) {
@@ -975,9 +1065,15 @@ if (supplierDialog) {
     linkedBefore = new Set(supplier ? items.filter((i) => i.supplier_id === supplier.id).map((i) => i.id) : []);
     linked = new Set(linkedBefore);
     linkFilter.value = "";
+    if (!supplier && options.name) field("name").value = options.name;
     renderLinks();
-    openDialog(supplierDialog, opener);
-  };
+    checkName();
+    // A supplier from before the rule: say at once what is missing.
+    if (supplier) {
+      if (!twoWords(supplier.name)) fieldError("name", t("ord_name_two"));
+      if (!isMobile(supplier.phone)) fieldError("phone", t("ord_phone_mobile"));
+    }
+  }
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (supplierDialog.dataset.busy) return;
@@ -986,7 +1082,12 @@ if (supplierDialog) {
     let body = null;
     if (!submitter.unknown) {
       const v = { name: field("name").value.trim(), phone: field("phone").value.trim(), notes: field("notes").value.trim() };
-      if (!v.name) { submitter.say(t("ord_need_name")); return; }
+      const badName = !twoWords(v.name);
+      const badPhone = !isMobile(v.phone);
+      fieldError("name", badName ? t("ord_name_two") : "");
+      fieldError("phone", badPhone ? t("ord_phone_mobile") : "");
+      if (badName || badPhone) { field(badName ? "name" : "phone").focus(); return; }
+      if (same) { existsNote.hidden = false; supplierDialog.querySelector("[data-open-existing]").focus(); return; }
       const days = dayBoxes().filter((box) => box.checked).map((box) => Number(box.value)).sort((a, b) => a - b);
       const time = field("visit_time").value;
       const backupField = field("backup_id");
@@ -1009,8 +1110,16 @@ if (supplierDialog) {
       }
     }
     const result = await submitter.run(method, url, body, t("ord_supplier_saved", { name: field("name").value.trim() }));
+    if (result && result.settled && !isOk(result)) {
+      const fields = (result.data && result.data.error && result.data.error.fields) || {};
+      if (fields.name === "two_words") fieldError("name", t("ord_name_two"));
+      if (fields.phone === "mobile") fieldError("phone", t("ord_phone_mobile"));
+    }
     if (!result || !isOk(result)) return;
+    const done = onSaved;
+    onSaved = null;
     supplierDialog.close();
+    if (done) done(result.data.supplier);
     toast(t("ord_supplier_saved", { name: result.data.supplier.name }));
     // The page's own copy of who each item comes from, as the server now has it.
     const id = result.data.supplier.id;

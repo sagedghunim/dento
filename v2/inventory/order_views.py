@@ -1,5 +1,7 @@
 """Supplier and purchase-order endpoints (design H1). Views validate, check codes and call one service."""
 
+from django.utils.translation import gettext as _
+
 from core import paging, validate
 from core.api import Result, api
 from core.errors import ApiError
@@ -36,6 +38,14 @@ def _supplier_values(data, partial):
         values["visit_days"] = sorted(set(days))
     if "visit_time" in data:
         values["visit_time"] = _clock(data["visit_time"])
+    # A supplier has a name of two words at least and a mobile (Saged, 2026-11-26); an old one without them is asked
+    # for them when edited, as the dialog does.
+    if "name" in values and len(values["name"].split()) < 2:
+        raise ApiError("invalid", _("Write the supplier's name in two words at least."), fields={"name": "two_words"})
+    if not partial or "phone" in values:
+        if not orders.is_mobile(values.get("phone", "")):
+            raise ApiError("invalid", _("Write the supplier's mobile: 11 digits starting with 01."),
+                           fields={"phone": "mobile"})
     if "backup_id" in data:  # design H1 backup: null clears it
         values["backup_id"] = None if data["backup_id"] in (None, "") else validate.ident(data["backup_id"], "backup_id")
     return values

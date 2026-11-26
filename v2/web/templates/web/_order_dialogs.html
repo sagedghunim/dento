@@ -102,8 +102,16 @@
     <button type="button" class="icon-btn" data-close aria-label="{% translate "Close" %}"><svg class="icon"><use href="#i-x"/></svg></button>
   </header>
   <div class="dialog-body tight">
-    <label class="field">{% translate "Name" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus></label>
-    <label class="field">{% translate "WhatsApp number" %}<input name="phone" type="tel" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01xxxxxxxxx"></label>
+    {# Name and mobile are a must (Saged, 2026-11-26); the name list shows the suppliers already here. #}
+    <div class="combo">
+      <label class="field">{% translate "Name (two words at least)" %}<input name="name" maxlength="120" dir="auto" autocomplete="off" required data-autofocus
+        role="combobox" aria-expanded="false" aria-controls="supplier-name-list" aria-autocomplete="list" aria-describedby="supplier-name-error supplier-name-exists"></label>
+      <ul class="combo-list" id="supplier-name-list" role="listbox" data-name-list hidden></ul>
+    </div>
+    <p class="form-error" id="supplier-name-error" data-field-error="name" role="alert"></p>
+    <p class="muted" id="supplier-name-exists" data-name-exists role="status" hidden>{% translate "This supplier is already here." %} <button type="button" class="link-btn" data-open-existing>{% translate "Open it" %}</button></p>
+    <label class="field">{% translate "WhatsApp number" %}<input name="phone" type="tel" maxlength="20" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01xxxxxxxxx" required aria-describedby="supplier-phone-error"></label>
+    <p class="form-error" id="supplier-phone-error" data-field-error="phone" role="alert"></p>
     {# When the supplier usually comes by (Saged, 2026-11-25): any days, and a time if there is one. #}
     <fieldset class="group">
       <legend>{% translate "Usually comes on" %}</legend>
@@ -118,6 +126,7 @@
     <fieldset class="group">
       <legend id="supplier-items-title">{% translate "Items we order from this supplier" %} <span class="muted" data-link-count role="status"></span></legend>
       <input class="link-filter" type="search" dir="auto" autocomplete="off" placeholder="{% translate "Search the items" %}" aria-label="{% translate "Search the items" %}" data-link-filter>
+      <label class="check link-all"><input type="checkbox" data-link-all>{% translate "Select all" %}</label>
       <ul class="link-items" role="group" aria-labelledby="supplier-items-title" data-link-items></ul>
       <p class="muted" data-link-empty hidden>{% translate "No items yet. Add the items first." %}</p>
     </fieldset>
