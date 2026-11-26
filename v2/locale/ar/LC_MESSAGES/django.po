@@ -566,10 +566,10 @@ msgid "At the clinic"
 msgstr "في العيادة"
 
 msgid "By phone"
-msgstr "بالهاتف"
+msgstr "بالتليفون"
 
 msgid "Online"
-msgstr "أونلاين"
+msgstr "من النت"
 
 msgid "WhatsApp"
 msgstr "واتساب"
@@ -642,7 +642,7 @@ msgid "Service"
 msgstr "الخدمة"
 
 msgid "Booked by"
-msgstr "طريقة الحجز"
+msgstr "الحجز جه منين"
 
 msgid "The patient is here now"
 msgstr "المريض موجود الآن"

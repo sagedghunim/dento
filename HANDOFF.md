@@ -4,6 +4,7 @@
 Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql, RLS), plain JS front end, Arabic RTL first.
 
 ## State now
+- Committed, NOT deployed: booking source labels: الحجز جه منين · في العيادة · بالتليفون · من النت (web tests 183 OK).
 - Live on dento-jet (commit fdd5871: waste alert + expenses card, overpaid box fix, FDI text; 0012 applied on all 3 DBs). Earlier, also live:
   - The "need a supplier" box shows the real shortage.
   - An item name in that box opens its card under Items.
@@ -36,6 +37,7 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Deploy script: `deploy5.sh` in the old session scratchpad. It runs git archive, migrate_all on Neon, then vercel --prod. Open https://dento-jet.vercel.app in Brave.
 
 ## Next step
+0. Booking/walk-in amount (Saged 2026-11-27, waiting on his answer): the amount fills itself from the chosen service and can't be typed higher (so no overpaid box). Asked: is a part payment (deposit) allowed or only full / nothing? Walk-in too? Also check that a visit costing more than the booking leaves the rest owed at the desk (Saged insists). Money → full panel.
 1. Build the approved booked-service change (section below), then run the full panel review.
 2. Prescription message: wait for Saged's screenshot, then fix it.
 3. Build the visit-summary WhatsApp button (names only, no prices).
