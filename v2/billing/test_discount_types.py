@@ -314,15 +314,15 @@ class ApplyTests(DiscountTestCase):
         r = call(self.desk, "PUT", f"/api/v1/invoices/{invoice['id']}/discount", {"discount": 0, "expected_discount": 0})
         self.assertEqual(r.status_code, 403)
 
-    def test_a_fixed_type_larger_than_the_invoice_and_one_below_what_was_paid_are_refused(self):
+    def test_a_fixed_type_larger_than_the_invoice_is_refused_and_one_below_what_was_paid_is_not(self):
         huge = self.kind("Huge", "fixed", self.fee + 1)
         most = self.kind("Most", "fixed", self.fee - 100)
         invoice = self.invoice()
         r = self.apply(invoice, huge)
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "discount_too_large"))
         self.pay(invoice, 200)
-        r = self.apply(invoice, most)
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
+        r = self.apply(invoice, most)  # below what was paid: the rest waits to be given back (Saged, 2026-11-26)
+        self.assertEqual((r.status_code, r.json()["invoice"]["total"]), (200, 100))
 
     def test_a_stopped_type_and_a_void_invoice_are_refused(self):
         friends = self.kind()

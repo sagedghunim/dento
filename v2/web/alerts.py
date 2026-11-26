@@ -24,6 +24,7 @@ from core.api import Result, api, page
 from core.days import local_iso
 from core.errors import ApiError
 
+from .format import money_plain
 from .http import clinic_page
 
 # The kinds the owner can turn off, by group, in the settings' order (Saged, 2026-11-25: grouped, so it reads
@@ -56,6 +57,51 @@ _WHERE = ("clinic_id = %s AND (action = ANY(%s){late}) AND at >= %s "
           "AND NOT (action = 'shift.close' AND coalesce((details->'after'->>'difference')::bigint, 0) = 0) "
           "AND NOT (action = 'invoice.line_remove' AND details->>'from_procedure' = 'true') "
           "AND NOT (action = 'visit_procedure.remove' AND coalesce(details->>'after_finish', '') <> 'true')")
+
+
+def _method_labels():
+    from .finance_pages import _method_labels as labels
+
+    return {**labels(), "credit": _("From the patient's credit")}
+
+
+def _fold_discounts(rows, payments):
+    """A refund of money paid over the bill, or one that lowered the bill, is told with the discount that went with
+    it in one alert (Saged, 2026-11-26). One give-back refunds several payments (one row each): they show as one,
+    the newest, with their amounts added. A give-back takes only a discount made after the bill's last payment
+    (one made before was no money paid over); a lowered bill takes the discount its own refund wrote.
+    {"into": {refund row id: discount row}, "hidden": {row ids told elsewhere}, "sum": {refund row id: amount}}."""
+    into, hidden, total = {}, set(), {}
+    window = dt.timedelta(seconds=5)
+    for r in rows:  # newest first
+        d = r["details"] or {}
+        paid = payments.get(r["target_id"])
+        if r["action"] != "payment.refund" or r["id"] in hidden or paid is None:
+            continue
+        if d.get("given_back"):
+            total[r["id"]] = d.get("amount") or 0
+            for x in rows:  # the other parts of the same give-back
+                xp = payments.get(x["target_id"]) if x["action"] == "payment.refund" else None
+                if (x["id"] != r["id"] and xp and xp[2] == paid[2] and (x["details"] or {}).get("given_back")
+                        and abs(x["at"] - r["at"]) <= window and x["id"] not in hidden):
+                    hidden.add(x["id"])
+                    total[r["id"]] += (x["details"] or {}).get("amount") or 0
+        elif not d.get("lowered"):
+            continue
+        for x in rows:
+            xd = x["details"] or {}
+            if x["action"] != "invoice.discount" or x["target_id"] != paid[2] or x["id"] in hidden:
+                continue
+            if d.get("lowered"):
+                if xd.get("reason") == "refund" and abs(x["at"] - r["at"]) <= window:
+                    into[r["id"]] = x
+                    hidden.add(x["id"])
+                    break
+            elif xd.get("reason") != "refund" and x["at"] <= r["at"] and (paid[8] is None or x["at"] >= paid[8]):
+                into[r["id"]] = x
+                hidden.add(x["id"])
+                break
+    return {"into": into, "hidden": hidden, "sum": total}
 
 
 def _labels():
@@ -153,15 +199,23 @@ def items(ctx, group=None):
             r["details"] = json.loads(r["details"])
     names = dict(sql.rows(ctx, 'SELECT id, display_name FROM "clinics_membership" WHERE clinic_id = %s', [ctx.clinic_id]))
     invoice_ids = [r["target_id"] for r in rows if r["action"].startswith("invoice.")]
-    invoices = {r[0]: (r[1], r[2], r[3]) for r in sql.rows(ctx, """
-        SELECT i.id, i.number, i.patient_id, p.full_name FROM "billing_invoice" i
+    invoices = {r[0]: r[1:] for r in sql.rows(ctx, """
+        SELECT i.id, i.number, i.patient_id, p.full_name, i.total, i.paid - greatest(i.total, i.deposit), i.status
+          FROM "billing_invoice" i
           JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
          WHERE i.clinic_id = %s AND i.id = ANY(%s::bigint[])""", [ctx.clinic_id, invoice_ids])} if invoice_ids else {}
     refunds = [r["target_id"] for r in rows if r["action"] == "payment.refund"]
-    payments = {r[0]: (r[1], r[2]) for r in sql.rows(ctx, """
-        SELECT y.id, y.patient_id, p.full_name FROM "billing_payment" y
+    refunds += [r["details"].get("refund_id") for r in rows if r["action"] == "payment.refund"]
+    # The refunded payment and the refund itself: its bill, how it went back and why (Saged, 2026-11-26: every detail).
+    payments = {r[0]: r[1:] for r in sql.rows(ctx, """
+        SELECT y.id, y.patient_id, p.full_name, y.invoice_id, i.number, i.total, y.method, y.note, y.amount,
+               (SELECT max(z.received_at) FROM "billing_payment" z WHERE z.clinic_id = y.clinic_id
+                   AND z.invoice_id = y.invoice_id AND z.kind = 'payment')
+          FROM "billing_payment" y
           JOIN "patients_patient" p ON p.clinic_id = y.clinic_id AND p.id = y.patient_id
-         WHERE y.clinic_id = %s AND y.id = ANY(%s::bigint[])""", [ctx.clinic_id, refunds])} if refunds else {}
+          JOIN "billing_invoice" i ON i.clinic_id = y.clinic_id AND i.id = y.invoice_id
+         WHERE y.clinic_id = %s AND y.id = ANY(%s::bigint[])""", [ctx.clinic_id, [i for i in refunds if i]])} if refunds else {}
+    folded = _fold_discounts(rows, payments)
     procedure_ids = [r["target_id"] for r in rows if r["action"] == "procedure.price"]
     procedure_ids += [r["details"].get("before", {}).get("procedure_id") for r in rows if r["action"] == "visit_procedure.remove"]
     procedures = dict(sql.rows(ctx, 'SELECT id, name_ar FROM "clinical_procedure" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
@@ -182,7 +236,10 @@ def items(ctx, group=None):
     shift_of = _shifts(ctx, rows[-1]["at"], names)
     seen = ctx.membership.alerts_seen_at
     out = []
+    methods = _method_labels()
     for r in rows:
+        if r["id"] in folded["hidden"]:
+            continue  # told inside the refund it led to
         d, action = r["details"] or {}, r["action"]
         before, after = d.get("before") or {}, d.get("after") or {}
         item = {"id": r["id"], "at": local_iso(ctx.clinic, r["at"]), "who": names.get(r["membership_id"], _("The system")),
@@ -201,7 +258,7 @@ def items(ctx, group=None):
             item["patient_id"] = before.get("patient_id")
             item["patient"] = patients.get(item["patient_id"])
         elif action.startswith("invoice."):
-            number, item["patient_id"], item["patient"] = invoices.get(r["target_id"], (None, None, None))
+            number, item["patient_id"], item["patient"], total, over, status = invoices.get(r["target_id"], (None,) * 6)
             bill = _("Bill %(number)s") % {"number": number} if number else ""
             if action == "invoice.line_remove":
                 item["what"] = _("Removed a line from a bill")
@@ -209,14 +266,43 @@ def items(ctx, group=None):
                 item["amount"] = before.get("amount")
             else:  # invoice.discount (a voided bill is no alert: Saged, 2026-11-26)
                 item["what"] = _("Gave a discount")
-                item["detail"] = bill
+                item["detail"] = " · ".join(x for x in (bill, after.get("name", "")) if x)
                 item["amount"] = after.get("discount")
+                if before.get("discount"):
+                    item["before_amount"] = before.get("discount")
                 item["level"] = "info"
+                if total is not None:
+                    item["lines"] = [_("The bill is now %(total)s") % {"total": money_plain(total)}]
+                    if over and over > 0 and status == "open":  # paid before the discount: waits in the file
+                        item["lines"].append(_("Paid over the bill: %(amount)s, not given back yet") % {"amount": money_plain(over)})
+                        item["level"] = "warn"
         elif action == "payment.refund":
-            item["what"] = _("Refunded money to a patient")
-            item["amount"] = d.get("amount")
-            item["patient_id"], item["patient"] = payments.get(r["target_id"], (None, None))
+            paid = payments.get(r["target_id"])
+            back = payments.get(d.get("refund_id"))
+            item["amount"] = folded["sum"].get(r["id"], d.get("amount"))
             item["level"] = "bad"
+            item["what"] = _("Refunded money to a patient")
+            lines = []
+            if paid:
+                item["patient_id"], item["patient"] = paid[0], paid[1]
+                lines.append(_("Bill %(number)s") % {"number": paid[3]} + " · " + _("Paid %(amount)s by %(method)s") % {
+                    "amount": money_plain(paid[7]), "method": methods.get(paid[5], paid[5])})
+            if back:
+                lines.append(_("Given back by %(method)s") % {"method": methods.get(back[5], back[5])}
+                             + (f" · {back[6]}" if back[6] else ""))
+            discount = folded["into"].get(r["id"])
+            if discount is not None:
+                dd = discount["details"] or {}
+                was, now = (dd.get("before") or {}).get("discount") or 0, (dd.get("after") or {}).get("discount") or 0
+                item["what"] = (_("Refunded money to a patient, and the bill went down by it") if d.get("lowered")
+                                else _("A discount after paying, and the difference given back"))
+                text = _("Discount %(before)s → %(after)s") % {"before": money_plain(was), "after": money_plain(now)}
+                name = (dd.get("after") or {}).get("name")
+                who = names.get(discount["membership_id"], "")
+                lines.insert(0, " · ".join(x for x in (text, name, _("by %(name)s") % {"name": who} if who else "") if x))
+                if paid:
+                    lines.insert(1, _("The bill is now %(total)s") % {"total": money_plain(paid[4])})
+            item["lines"] = lines
         elif action == "shift.close":
             difference = after.get("difference") or 0
             item["what"] = _("The register was short") if difference < 0 else _("The register was over")

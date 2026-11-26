@@ -471,10 +471,6 @@ def _return_package_session(ctx, appointment_id, line_id):
                   visit_procedure=procedure[0], line=line_id, returned=bool(returned))
 
 
-def _paid_exceeds():
-    return ApiError("paid_exceeds", _("More has been paid than the new total. Refund first."), 409)
-
-
 def set_discount(ctx, invoice_id, discount, expected):
     """An absolute, free-typed discount with the value it replaces (design 5.3). Audited.
 
@@ -490,8 +486,8 @@ def set_discount(ctx, invoice_id, discount, expected):
     if discount > invoice["subtotal"]:
         raise ApiError("discount_too_large", _("The discount can't be more than the invoice."), 409,
                        fields={"discount": "range"})
-    if not fits(invoice, invoice["subtotal"] - discount):
-        raise _paid_exceeds()
+    # More paid than the new total stays as the patient's credit, shown in the file and given back from the drawer
+    # (give_back), as for a removed line: no "refund first" (Saged, 2026-11-26).
     updated = write_discount(ctx, invoice["id"], discount)
     before = {"discount": invoice["discount"]}
     if invoice["discount_type_id"] is not None:
@@ -521,7 +517,7 @@ def void(ctx, invoice_id):
     return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
 
 
-def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False):
+def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, given_back=False):
     """Refund part or all of a payment (design 5.3). Audited.
 
     `lower_bill` (Saged, 2026-11-23: money given back never leaves the patient owing it): the bill goes down by what
@@ -559,6 +555,7 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False):
     invoice = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid - %s, deposit = deposit - %s '
                                     f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
                                [amount, amount if was_deposit else 0, ctx.clinic_id, invoice["id"]]))
+    lowered = False
     if lower_bill and invoice["status"] == "open":
         owed_before = max(0, invoice["total"] - (invoice["paid"] + amount))
         lower = min(amount, max(0, invoice["total"] - invoice["paid"]) - owed_before)
@@ -567,8 +564,11 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False):
             invoice = write_discount(ctx, invoice["id"], before + lower)
             record_change(ctx, "invoice.discount", "invoice", invoice["id"], before={"discount": before},
                           after={"discount": invoice["discount"]}, reason="refund", patient_id=invoice["patient_id"])
+            lowered = True
     record_change(ctx, "payment.refund", "payment", payment_id, before={"refunded": refunded - amount},
-                  after={"refunded": refunded}, amount=amount, refund_id=row["id"], patient_id=invoice["patient_id"])
+                  after={"refunded": refunded}, amount=amount, refund_id=row["id"], patient_id=invoice["patient_id"],
+                  # paid over the bill (a discount or a removed line after paying): one alert tells both (2026-11-26)
+                  **({"given_back": True} if given_back else {}), **({"lowered": True} if lowered else {}))
     deltas = Deltas()
     if doctor_id is not None:
         deltas.doctor_day(today, doctor_id, refunded=amount)
@@ -598,7 +598,7 @@ def give_back(ctx, invoice_id, method="cash"):
     left, answer = credit, None
     for payment_id, available in payments:
         part = min(left, available)
-        answer = refund(ctx, payment_id, part, method, _("Paid over the bill, given back"))
+        answer = refund(ctx, payment_id, part, method, _("Paid over the bill, given back"), given_back=True)
         left -= part
         if not left:
             break

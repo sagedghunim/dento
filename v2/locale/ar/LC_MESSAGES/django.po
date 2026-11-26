@@ -295,9 +295,6 @@ msgstr "أدخل اسم المريض."
 msgid "Lower the discount before removing this line."
 msgstr "قلّل الخصم قبل حذف هذا البند."
 
-msgid "More has been paid than the new total. Refund first."
-msgstr "المدفوع أكبر من الإجمالي الجديد. ردّ المبلغ أولًا."
-
 msgid "Only payments can be refunded."
 msgstr "لا يُرد إلا الدفعات."
 
@@ -734,9 +731,6 @@ msgstr "ردّ مبلغ"
 msgid "From the payment"
 msgstr "من الدفعة"
 
-msgid "Void the bill"
-msgstr "إلغاء الفاتورة"
-
 msgid "Receipt A5"
 msgstr "إيصال A5"
 
@@ -975,9 +969,6 @@ msgstr "رجع للمريض {amount}"
 
 msgid "Discount saved"
 msgstr "تم حفظ الخصم"
-
-msgid "The bill was voided"
-msgstr "أُلغيت الفاتورة"
 
 msgid "Owes {amount}"
 msgstr "باقي {amount}"
@@ -4138,9 +4129,6 @@ msgstr "شهر"
 msgid "A week"
 msgstr "أسبوع"
 
-msgid "Delete the patient"
-msgstr "مسح المريض"
-
 msgid "Deleted patients"
 msgstr "المرضى الممسوحين"
 
@@ -4154,18 +4142,8 @@ msgstr ""
 msgid "Bring back"
 msgstr "رجّعه"
 
-msgid ""
-"Delete {name}? A file with visits or money is hidden and its money stays in "
-"the accounts; you can bring it back from Patients."
-msgstr ""
-"تمسح {name}؟ لو ليه زيارات أو فلوس هيستخبّى وفلوسه تفضل في الحسابات، وتقدر "
-"ترجّعه من صفحة المرضى."
-
 msgid "{name} is back."
 msgstr "{name} رجع."
-
-msgid "Deleted a patient"
-msgstr "مسح مريض"
 
 msgid "Only the account's owner can delete a patient."
 msgstr "صاحب الحساب بس هو اللي يقدر يمسح مريض."
@@ -4617,13 +4595,6 @@ msgstr "ده أكتر من الباقي له عن الشهر ده: %(amount)s."
 
 msgid "The bill goes down by the same amount, so the patient doesn't owe it"
 msgstr "الفاتورة تقل بنفس المبلغ، فالمريض ميبقاش عليه حاجة"
-
-msgid ""
-"This patient has a visit not finished, money owed or given, or installments "
-"running. Finish those first."
-msgstr ""
-"المريض ده عنده زيارة لسه مخلصتش، أو فلوس عليه أو ليه، أو تقسيط شغال. خلّصهم "
-"الأول."
 
 msgid "This procedure is for a molar. Tooth %(tooth)s isn't one."
 msgstr "الإجراء ده للضروس بس، والسنة %(tooth)s مش ضرس."
@@ -5199,7 +5170,8 @@ msgstr "اتبعت ومستنيينه"
 msgid "Received"
 msgstr "اتسلّم"
 
-msgid "No open orders. Short items that have a supplier show here by themselves."
+msgid ""
+"No open orders. Short items that have a supplier show here by themselves."
 msgstr "مفيش طلبات مفتوحة. الأصناف الناقصة اللي ليها مورد بتظهر هنا لوحدها."
 
 msgid "No received or cancelled orders yet."
@@ -5238,7 +5210,9 @@ msgstr "مفيش صنف بالاسم ده."
 msgid "Sure? Tap again"
 msgstr "متأكد؟ اضغط تاني"
 
-msgid "Your changes to the order aren't saved. Save them, or close again to leave them."
+msgid ""
+"Your changes to the order aren't saved. Save them, or close again to leave "
+"them."
 msgstr "تعديلاتك على الطلب ما اتحفظتش. احفظها، أو اقفل تاني تسيبها."
 
 msgid "Quantity of {name}"
@@ -5376,8 +5350,12 @@ msgstr "الموردين"
 msgid "Send purchase orders to suppliers by themselves"
 msgstr "ابعت طلبات الشراء للموردين لوحدها"
 
-msgid "Off: the desk checks each order and sends it. Works only after the clinic's WhatsApp is linked."
-msgstr "لو مقفول: الاستقبال بيراجع كل طلب ويبعته. بيشتغل بس بعد ما واتساب العيادة يتربط."
+msgid ""
+"Off: the desk checks each order and sends it. Works only after the clinic's "
+"WhatsApp is linked."
+msgstr ""
+"لو مقفول: الاستقبال بيراجع كل طلب ويبعته. بيشتغل بس بعد ما واتساب العيادة "
+"يتربط."
 
 msgid "Ordering"
 msgstr "الطلب من المورد"
@@ -5445,8 +5423,12 @@ msgstr "اختار مورد"
 msgid "First item"
 msgstr "أول صنف"
 
-msgid "Add more items in the order after this. If this supplier has an order not sent yet, the item goes on it."
-msgstr "تقدر تضيف أصناف تانية في الطلب بعد كده. لو المورد ده عنده طلب لسه ما اتبعتش، الصنف هيتضاف عليه."
+msgid ""
+"Add more items in the order after this. If this supplier has an order not "
+"sent yet, the item goes on it."
+msgstr ""
+"تقدر تضيف أصناف تانية في الطلب بعد كده. لو المورد ده عنده طلب لسه ما اتبعتش،"
+" الصنف هيتضاف عليه."
 
 msgid "Start the order"
 msgstr "ابدأ الطلب"
@@ -5484,23 +5466,42 @@ msgstr "أنهي طلبات"
 msgid "Received or cancelled"
 msgstr "اتسلمت أو اتلغت"
 
-msgid "Add the clinic's suppliers under Suppliers, then pick each item's supplier here so short items are ordered on their own."
-msgstr "ضيف موردين العيادة من جزء الموردين، وبعدين اختار مورد كل صنف هنا علشان الناقص يتطلب لوحده."
+msgid ""
+"Add the clinic's suppliers under Suppliers, then pick each item's supplier "
+"here so short items are ordered on their own."
+msgstr ""
+"ضيف موردين العيادة من جزء الموردين، وبعدين اختار مورد كل صنف هنا علشان "
+"الناقص يتطلب لوحده."
 
-msgid "When an item reaches its alert line it goes on its supplier's order by itself. Check the order, then send it on WhatsApp."
-msgstr "لما صنف يوصل لحد التنبيه بيتضاف لطلب المورد بتاعه لوحده. راجع الطلب وابعته على واتساب."
+msgid ""
+"When an item reaches its alert line it goes on its supplier's order by "
+"itself. Check the order, then send it on WhatsApp."
+msgstr ""
+"لما صنف يوصل لحد التنبيه بيتضاف لطلب المورد بتاعه لوحده. راجع الطلب وابعته "
+"على واتساب."
 
-msgid "When the stock reaches the alert line, the item goes on its supplier's order up to this number (empty: twice the alert line)."
-msgstr "لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الرقم ده (لو فاضي: ضعف حد التنبيه)."
+msgid ""
+"When the stock reaches the alert line, the item goes on its supplier's order"
+" up to this number (empty: twice the alert line)."
+msgstr ""
+"لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الرقم ده (لو فاضي:"
+" ضعف حد التنبيه)."
 
 msgid "Item: {name}"
 msgstr "الصنف: {name}"
 
-msgid "Your phone's clock is about %(minutes)s minutes off. In the phone's settings, turn on automatic date and time, then enter the new code."
-msgstr "ساعة موبايلك متأخرة أو متقدمة حوالي %(minutes)s دقيقة. من إعدادات الموبايل شغّل «التاريخ والوقت تلقائي»، وبعدين اكتب الكود الجديد."
+msgid ""
+"Your phone's clock is about %(minutes)s minutes off. In the phone's "
+"settings, turn on automatic date and time, then enter the new code."
+msgstr ""
+"ساعة موبايلك متأخرة أو متقدمة حوالي %(minutes)s دقيقة. من إعدادات الموبايل "
+"شغّل «التاريخ والوقت تلقائي»، وبعدين اكتب الكود الجديد."
 
-msgid "Too many wrong codes today. Try again in %(hours)s hours, or enter a recovery code."
-msgstr "أكواد غلط كتير النهارده. جرّب تاني بعد %(hours)s ساعة، أو اكتب كود استرداد."
+msgid ""
+"Too many wrong codes today. Try again in %(hours)s hours, or enter a "
+"recovery code."
+msgstr ""
+"أكواد غلط كتير النهارده. جرّب تاني بعد %(hours)s ساعة، أو اكتب كود استرداد."
 
 msgid "Usually comes on"
 msgstr "بيعدي عادةً يوم"
@@ -5556,5 +5557,36 @@ msgstr "مينفعش تربط أصناف بمورد وقفنا نطلب منه."
 msgid "The order message to suppliers"
 msgstr "رسالة الطلب للموردين"
 
-msgid "These words are filled in for each order: {supplier} the supplier's name, {clinic} the clinic's name, {items} the items and quantities."
-msgstr "الكلمات دي بتتملى في كل طلب: {المورد} اسم المورد، {العيادة} اسم العيادة، {الأصناف} الأصناف والكميات."
+msgid ""
+"These words are filled in for each order: {supplier} the supplier's name, "
+"{clinic} the clinic's name, {items} the items and quantities."
+msgstr ""
+"الكلمات دي بتتملى في كل طلب: {المورد} اسم المورد، {العيادة} اسم العيادة، "
+"{الأصناف} الأصناف والكميات."
+
+msgid "Deleting a patient isn't possible any more. Refuse this request."
+msgstr "مسح المريض مبقاش متاح. ارفض الطلب ده."
+
+msgid "Paid %(amount)s by %(method)s"
+msgstr "اتدفع %(amount)s · %(method)s"
+
+msgid "Given back by %(method)s"
+msgstr "اترجع للمريض: %(method)s"
+
+msgid "A discount after paying, and the difference given back"
+msgstr "خصم بعد الدفع، والفرق اترجع للمريض"
+
+msgid "Refunded money to a patient, and the bill went down by it"
+msgstr "رجّع فلوس لمريض، والفاتورة نزلت بيها"
+
+msgid "Discount %(before)s → %(after)s"
+msgstr "الخصم %(before)s ← %(after)s"
+
+msgid "by %(name)s"
+msgstr "عمله %(name)s"
+
+msgid "The bill is now %(total)s"
+msgstr "الفاتورة بقت %(total)s"
+
+msgid "Paid over the bill: %(amount)s, not given back yet"
+msgstr "مدفوع زيادة %(amount)s، لسه ما اترجعش للمريض"

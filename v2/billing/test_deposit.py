@@ -283,7 +283,24 @@ class DiscountTests(DepositTestCase):
             self.assertEqual(self.pay(visit["id"], 650_00).status_code, 201)
             self.assertEqual(self.figures(visit["id"])["due"], 0)
 
-    def test_a_discount_may_take_the_bill_under_the_deposit_but_never_under_other_payments(self):
+    def test_a_bill_under_the_deposit_gives_back_only_what_is_over_the_deposit(self):
+        # Saged, 2026-11-26: the file shows what give-back returns, and nothing is left after it.
+        with self.on(0):
+            self.deposit_on()
+            most = self.kind("Most", "fixed", CONSULT - 50_00)
+            visit = self.book(payment=self.deposit(), doctor_id=self.owner_id).json()["appointment"]
+            self.assertEqual(self.pay(visit["id"], CONSULT - DEPOSIT).status_code, 201)
+            self.assertEqual(self.apply(self.bill(visit["id"]), most).status_code, 200)
+            bill = self.bill(visit["id"])
+            page = self.owner.get(f"/patients/{visit['patient']['id']}").content.decode()
+            self.assertIn(f"give_back={bill['id']}", page)
+            r = call(self.owner, "POST", f"/api/v1/invoices/{bill['id']}/give-back", {"method": "card"})
+            self.assertEqual(r.status_code, 201, r.content)
+            self.assertEqual(self.figures(visit["id"])["paid"], DEPOSIT)
+            page = self.owner.get(f"/patients/{visit['patient']['id']}").content.decode()
+            self.assertNotIn(f"give_back={bill['id']}", page)
+
+    def test_a_discount_may_take_the_bill_under_the_deposit_and_under_other_payments(self):
         with self.on(0):
             self.deposit_on()
             all_of_it = self.kind("Free", "percent", 100)
@@ -293,10 +310,11 @@ class DiscountTests(DepositTestCase):
                                                          "deposit": DEPOSIT})
             self.assertEqual(self.apply(self.bill(visit["id"]), None).status_code, 200)
             self.assertEqual(self.pay(visit["id"], 200_00).status_code, 201)  # the rest of the EGP 300
+            # Under other payments too now (Saged, 2026-11-26): what was paid over waits to be given back.
             r = self.apply(self.bill(visit["id"]), all_of_it)
-            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
-            self.assertEqual(self.figures(visit["id"]), {"total": CONSULT, "paid": CONSULT, "due": 0, "credit": 0,
-                                                         "deposit": DEPOSIT})
+            self.assertEqual(r.status_code, 200, r.content)
+            figures = self.figures(visit["id"])
+            self.assertEqual((figures["total"], figures["paid"], figures["due"]), (0, CONSULT, 0))
 
 
 class CreditTests(DepositTestCase):

@@ -155,11 +155,51 @@ class LineAndDiscountTests(BillingTestCase):
         too_much = call(self.desk, "PUT", url, {"discount": self.fee + 1, "expected_discount": 5000})
         self.assertEqual(too_much.json()["error"]["code"], "discount_too_large")
         self.pay(appt["id"], self.fee - 5000)
+        # A discount after paying (Saged, 2026-11-26): it goes through, and what was paid over waits in the file.
         r = call(self.desk, "PUT", url, {"discount": 6000, "expected_discount": 5000})
-        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "paid_exceeds"))
+        self.assertEqual((r.status_code, r.json()["invoice"]["total"]), (200, self.fee - 6000))
         with clinic_transaction(self.a.id, self.a.shard):
-            change = AuditChange.objects.get(clinic_id=self.a.id, action="invoice.discount")
-        self.assertEqual(change.details, {"before": {"discount": 0}, "after": {"discount": 5000}})
+            changes = list(AuditChange.objects.filter(clinic_id=self.a.id, action="invoice.discount").order_by("id"))
+        self.assertEqual([c.details for c in changes], [{"before": {"discount": 0}, "after": {"discount": 5000}},
+                                                        {"before": {"discount": 5000}, "after": {"discount": 6000}}])
+
+    def test_a_discount_after_paying_and_the_money_given_back_is_one_alert(self):
+        appt = self.visit()
+        invoice = self.invoice_of(appt["id"])
+        self.pay(appt["id"], self.fee)
+        self.grant("billing.discount")
+        r = call(self.desk, "PUT", f"/api/v1/invoices/{invoice['id']}/discount", {"discount": 1000, "expected_discount": 0})
+        self.assertEqual(r.status_code, 200, r.content)
+        page = self.owner.get(f"/patients/{appt['patient']['id']}").content.decode()
+        self.assertIn(f"give_back={invoice['id']}", page)  # the file shows what waits to be given back
+        alerts = self.owner.get("/alerts").content.decode()
+        self.assertEqual(alerts.count('class="alert-row'), 1)
+        self.assertIn("alert-row level-warn", alerts)  # a discount with money still owed back
+        self.assertEqual(alerts.count('class="alert-line"'), 2)
+        r = call(self.owner, "POST", f"/api/v1/invoices/{invoice['id']}/give-back", {"method": "card"})
+        self.assertEqual(r.status_code, 201, r.content)
+        alerts = self.owner.get("/alerts").content.decode()
+        self.assertEqual(alerts.count('class="alert-row'), 1)  # the discount told inside the refund
+        self.assertIn("alert-row level-bad", alerts)
+        self.assertEqual(alerts.count('class="alert-line"'), 4)
+        self.assertIn(f'href="/patients/{appt["patient"]["id"]}"', alerts)
+
+    def test_a_give_back_over_two_payments_is_one_alert_and_keeps_an_earlier_discount_apart(self):
+        appt = self.visit()
+        invoice = self.invoice_of(appt["id"])
+        url = f"/api/v1/invoices/{invoice['id']}/discount"
+        self.assertEqual(call(self.owner, "PUT", url, {"discount": 1000, "expected_discount": 0}).status_code, 200)
+        half = (self.fee - 1000) // 2
+        self.assertEqual(self.pay(appt["id"], half, method="card").status_code, 201)
+        self.assertEqual(self.pay(appt["id"], self.fee - 1000 - half, method="card").status_code, 201)
+        # More than one payment's worth, so it comes back from both.
+        self.assertEqual(call(self.owner, "PUT", url, {"discount": 1000 + half + 500, "expected_discount": 1000}).status_code, 200)
+        r = call(self.owner, "POST", f"/api/v1/invoices/{invoice['id']}/give-back", {"method": "card"})
+        self.assertEqual(r.status_code, 201, r.content)
+        alerts = self.owner.get("/alerts").content.decode()
+        self.assertEqual(alerts.count('class="alert-row'), 2)  # the discount before paying, and one give-back
+        self.assertEqual(alerts.count("alert-row level-bad"), 1)
+        self.assertEqual(alerts.count("alert-row level-info"), 1)
 
 
 class RefundAndVoidTests(BillingTestCase):
@@ -347,6 +387,12 @@ class MoneyInvariantTests(BillingTestCase):
                         target = min(in_room)  # no draw from rng: the rest of the sequence stays as it was
                     source = {"arrive": "booked", "call": "waiting", "finish": "in_room"}[choice]
                     body = {"payment": {"amount": rng.randint(1, 3000), "method": "card"}} if choice == "finish" else {}
+                    if body:  # a discount after paying can leave nothing due (Saged, 2026-11-26): then no payment
+                        due = call(desk, "GET", f"/api/v1/appointments/{target}").json().get("appointment", {}).get("due")
+                        if not due:
+                            body = {}
+                        else:
+                            body["payment"]["amount"] = min(body["payment"]["amount"], due)
                     r = self.act(target, choice, source, client=desk, **body)
                     if r.status_code < 300:
                         (in_room.add if choice == "call" else in_room.discard)(target)

@@ -178,18 +178,19 @@ def patient_credits(ctx, patient_id):
     """What the clinic holds for a patient (Saged, 2026-11-22): open bills paid over their total, each given back
     from the drawer with POST /invoices/{id}/give-back. Oldest first; a handful at most."""
     return sql.dicts(ctx, """
-        SELECT i.id, i.number, i.paid - i.total AS credit FROM "billing_invoice" i
-         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status = 'open' AND i.paid > i.total
+        SELECT i.id, i.number, i.paid - greatest(i.total, i.deposit) AS credit FROM "billing_invoice" i
+         WHERE i.clinic_id = %s AND i.patient_id = %s AND i.status = 'open' AND i.paid > greatest(i.total, i.deposit)
          ORDER BY i.created_at, i.id LIMIT 20""", [ctx.clinic_id, patient_id])
 
 
 def invoice_credit(ctx, invoice_id):
     """One open bill paid over its total, with its patient's name, or None (the drawer's give-back question)."""
     found = sql.dicts(ctx, """
-        SELECT i.id, i.number, i.paid - i.total AS credit, p.id AS patient_id, p.full_name AS patient
+        SELECT i.id, i.number, i.paid - greatest(i.total, i.deposit) AS credit, p.id AS patient_id, p.full_name AS patient
           FROM "billing_invoice" i
           JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
-         WHERE i.clinic_id = %s AND i.id = %s AND i.status = 'open' AND i.paid > i.total""", [ctx.clinic_id, invoice_id])
+         WHERE i.clinic_id = %s AND i.id = %s AND i.status = 'open'
+           AND i.paid > greatest(i.total, i.deposit)""", [ctx.clinic_id, invoice_id])
     return found[0] if found else None
 
 
