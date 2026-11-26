@@ -181,6 +181,7 @@ function picker(input, list, source, onPick) {
   input.addEventListener("click", () => { if (list.hidden) open(); });
   input.addEventListener("input", open);
   input.addEventListener("blur", close);
+  list.addEventListener("mousedown", (event) => event.preventDefault());  // its scrollbar keeps the list open
   input.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();

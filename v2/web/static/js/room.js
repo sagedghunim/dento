@@ -871,6 +871,7 @@ if (rxDialog) {
     input.addEventListener("click", () => { if (listEl.hidden) open(); });
     input.addEventListener("input", open);
     input.addEventListener("blur", close);
+    listEl.addEventListener("mousedown", (event) => event.preventDefault());  // its scrollbar keeps the list open
     input.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
