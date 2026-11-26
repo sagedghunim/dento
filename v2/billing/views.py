@@ -36,6 +36,10 @@ def _payment_answer(ctx, payment, invoice, version):
 
 
 def _replay_payment(ctx, stored):
+    if stored["target_type"] == "cash_request":  # a refund that waited for the owner
+        from finance.views import _replay_request
+
+        return _replay_request(ctx, stored)
     payment = selectors.payment(ctx, stored["target_id"])
     return _payment_answer(ctx, payment, selectors.invoice_row(ctx, payment["invoice_id"]),
                            _version_of_invoice(ctx, payment["invoice_id"]))
@@ -156,8 +160,11 @@ def refund_view(request, ctx, data, payment_id):
     method = validate.choice(data, "method", METHODS) if method is not None else None
     note = validate.text(data, "note", 200, required=False)
     lower_bill = validate.boolean(data, "lower_bill", True)
+    from finance.services import needs_approval
     from finance.views import gate
 
+    if needs_approval(ctx, "refund"):
+        services.check_refund_request(ctx, payment_id, amount)  # told now, not when the owner taps Approve
     waiting = gate(ctx, "refund", "refund", amount, note, {"payment_id": payment_id, "amount": amount, "method": method,
                                                           "note": note, "lower_bill": lower_bill})
     if waiting:

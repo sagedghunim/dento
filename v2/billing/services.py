@@ -517,6 +517,32 @@ def void(ctx, invoice_id):
     return Deltas().clinic_day(_visit_day(ctx, invoice, appointment)).write_clinics(ctx)
 
 
+def check_refund_request(ctx, payment_id, amount):
+    """Before a refund waits for the owner's OK (Saged, 2026-11-26): the checks the refund itself makes on the amount,
+    now, so the desk hears at once and the owner never gets a request that can't be done. One refund of a payment
+    waits at a time: a second one is refused while the first is pending. The payment row stays locked until the
+    request is kept (one transaction per call), so two taps at once make one request."""
+    found = sql.row(ctx, 'SELECT kind, amount - refunded FROM "billing_payment" WHERE clinic_id = %s AND id = %s '
+                         "FOR NO KEY UPDATE", [ctx.clinic_id, payment_id])
+    if found is None:
+        raise not_found("payment")
+    if found[0] != "payment":
+        raise ApiError("invalid", _("Only payments can be refunded."), fields={"payment": "refund"})
+    if sql.row(ctx, 'SELECT 1 FROM "finance_cash_request" WHERE clinic_id = %s AND kind = \'refund\' '
+                    "AND status = 'pending' AND (data->>'payment_id')::bigint = %s LIMIT 1", [ctx.clinic_id, payment_id]):
+        raise ApiError("already_asked", _("A refund of this payment is already waiting for the owner's OK."), 409,
+                       fields={"amount": "already_asked"})
+    if amount > found[1]:
+        raise over_refund(found[1])
+
+
+def over_refund(left):
+    from web.format import money_plain
+
+    return ApiError("over_refund", _("The refund is more than what is left of this payment (%(left)s).")
+                    % {"left": money_plain(left)}, 409, fields={"amount": "over_refund"}, extra={"left": left})
+
+
 def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, given_back=False):
     """Refund part or all of a payment (design 5.3). Audited.
 

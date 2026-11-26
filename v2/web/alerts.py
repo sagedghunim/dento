@@ -181,9 +181,54 @@ def waiting_requests(ctx):
                 "exvoid": _("Void an expense"), "patient": _("Delete a patient"), "stock": _("Change the stock count"),
                 }.get(r["kind"], _("Take money out of the drawer"))
 
+    about = _requests_about(ctx, rows)
     return [{"id": r["id"], "amount": r["amount"], "who": names.get(r["requested_by_id"], ""),
              "at": local_iso(ctx.clinic, r["requested_at"]), "note": r["note"], "what": what(r),
-             "before_amount": (r["data"] or {}).get("before") if r["kind"] == "price" else None} for r in rows]
+             "before_amount": (r["data"] or {}).get("before") if r["kind"] == "price" else None,
+             **about.get(r["id"], {})} for r in rows]
+
+
+def _requests_about(ctx, rows):
+    """Whose file each waiting request is about, its bill, and for a refund the payment it takes from (Saged,
+    2026-11-26: every alert shows its file). A refund that can no longer be done says so before the owner taps
+    Approve. Three reads at most, only for the requests that touch a bill."""
+    pay_ids = [(r["data"] or {}).get("payment_id") for r in rows if r["kind"] == "refund"]
+    payments = {p[0]: p[1:] for p in sql.rows(ctx, """
+        SELECT id, invoice_id, amount, refunded, method FROM "billing_payment"
+         WHERE clinic_id = %s AND id = ANY(%s::bigint[])""", [ctx.clinic_id, [i for i in pay_ids if i]])} if any(pay_ids) else {}
+
+    def invoice_of(r):
+        d = r["data"] or {}
+        if r["kind"] == "refund":
+            return payments.get(d.get("payment_id"), (None,))[0]
+        return d.get("invoice_id") if r["kind"] in ("line", "discount", "void") else None
+
+    invoice_ids = [i for i in (invoice_of(r) for r in rows) if i]
+    invoices = {i[0]: i[1:] for i in sql.rows(ctx, """
+        SELECT i.id, i.number, i.total, i.patient_id, p.full_name
+          FROM "billing_invoice" i
+          JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
+         WHERE i.clinic_id = %s AND i.id = ANY(%s::bigint[])""", [ctx.clinic_id, invoice_ids])} if invoice_ids else {}
+    methods = _method_labels()
+    out = {}
+    for r in rows:
+        item = {"lines": []}
+        found = invoices.get(invoice_of(r))
+        if found is not None:
+            number, total, patient_id, patient = found
+            item.update(patient_id=patient_id, patient=patient, detail=_("Bill %(number)s") % {"number": number})
+            item["lines"].append(_("The bill is now %(total)s") % {"total": money_plain(total)})
+        paid = payments.get((r["data"] or {}).get("payment_id")) if r["kind"] == "refund" else None
+        if paid is not None:  # the warning stands even when the bill or its file can't be found
+            _invoice, amount, refunded, method = paid
+            item["lines"].append(_("Paid %(amount)s by %(method)s") % {"amount": money_plain(amount),
+                                                                         "method": methods.get(method, method)})
+            if r["amount"] > amount - refunded:
+                item["problem"] = _("This can't be done: only %(left)s is left of this payment. Refuse it.") % {
+                    "left": money_plain(amount - refunded)}
+        if found is not None or paid is not None:
+            out[r["id"]] = item
+    return out
 
 
 def items(ctx, group=None):
@@ -223,6 +268,12 @@ def items(ctx, group=None):
     patient_ids = [r["details"].get("before", {}).get("patient_id") for r in rows if r["action"] == "visit_procedure.remove"]
     patients = dict(sql.rows(ctx, 'SELECT id, full_name FROM "patients_patient" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                              [ctx.clinic_id, [i for i in patient_ids if i]])) if patient_ids else {}
+    # The visit that used more than the stock showed: whose file it is (Saged, 2026-11-26).
+    visit_ids = [r["details"].get("appointment") for r in rows if r["action"] == "item.short"]
+    visits = {v[0]: v[1:] for v in sql.rows(ctx, """
+        SELECT a.id, a.patient_id, p.full_name FROM "scheduling_appointment" a
+          JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
+         WHERE a.clinic_id = %s AND a.id = ANY(%s::bigint[])""", [ctx.clinic_id, [i for i in visit_ids if i]])} if any(visit_ids) else {}
     item_ids = [r["target_id"] for r in rows if r["action"] in ("item.count", "item.short")]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
@@ -230,7 +281,7 @@ def items(ctx, group=None):
 
     late = [r for r in rows if r["action"] not in ACTIONS]
     told = {r["id"]: text for r, text in zip(late, describe(ctx, late))}
-    late_ids = [r["patient_id"] for r in late if r["patient_id"]]
+    late_ids = list({r["patient_id"] for r in rows if r["patient_id"]})  # also any other alert's own file
     late_names = dict(sql.rows(ctx, 'SELECT id, full_name FROM "patients_patient" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                                [ctx.clinic_id, late_ids])) if late_ids else {}
     shift_of = _shifts(ctx, rows[-1]["at"], names)
@@ -335,6 +386,9 @@ def items(ctx, group=None):
             item["what"] = _("A visit used more than the stock showed")
             item["detail"] = _("%(item)s · the stock showed %(had)s, the visit used %(used)s. Count it.") % {
                 "item": stock.get(r["target_id"], ""), "had": before.get("quantity"), "used": after.get("used")}
+            item["patient_id"], item["patient"] = visits.get(d.get("appointment"), (None, None))
+        if item["patient_id"] is None and r["patient_id"]:  # every alert about a patient shows their file
+            item["patient_id"], item["patient"] = r["patient_id"], late_names.get(r["patient_id"])
         out.append(item)
     return out
 

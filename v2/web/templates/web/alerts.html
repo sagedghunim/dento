@@ -14,7 +14,9 @@
     <li class="alert-row level-warn" data-request="{{ w.id }}">
       <div class="alert-main">
         <p class="alert-what"><strong>{{ w.what }}</strong></p>
-        <p class="muted"><bdi dir="auto">{{ w.who }}</bdi> · {{ w.at|shortday }} · {{ w.at|clock }}{% if w.note %} · <bdi dir="auto">{{ w.note }}</bdi>{% endif %}</p>
+        <p class="muted"><bdi dir="auto">{{ w.who }}</bdi> · {{ w.at|shortday }} · {{ w.at|clock }}{% if w.patient_id %} · <a href="/patients/{{ w.patient_id }}"><bdi dir="auto">{{ w.patient }}</bdi></a>{% endif %}{% if w.detail %} · <bdi dir="auto">{{ w.detail }}</bdi>{% endif %}{% if w.note %} · <bdi dir="auto">{{ w.note }}</bdi>{% endif %}</p>
+        {% for line in w.lines %}<p class="alert-line"><bdi dir="auto">{{ line }}</bdi></p>{% endfor %}
+        {% if w.problem %}<p class="form-error" data-request-problem>{{ w.problem }}</p>{% endif %}
         <div class="request-actions">
           <button type="button" class="btn" data-decide="approve">{% translate "Approve" %}</button>
           <button type="button" class="btn ghost" data-decide="reject">{% translate "Refuse" %}</button>

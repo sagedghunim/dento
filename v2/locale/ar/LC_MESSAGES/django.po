@@ -5590,3 +5590,12 @@ msgstr "الفاتورة بقت %(total)s"
 
 msgid "Paid over the bill: %(amount)s, not given back yet"
 msgstr "مدفوع زيادة %(amount)s، لسه ما اترجعش للمريض"
+
+msgid "A refund of this payment is already waiting for the owner's OK."
+msgstr "فيه طلب ترجيع فلوس من الدفعة دي مستني موافقة صاحب الحساب."
+
+msgid "The refund is more than what is left of this payment (%(left)s)."
+msgstr "المبلغ اللي هيرجع أكبر من الباقي من الدفعة دي (%(left)s)."
+
+msgid "This can't be done: only %(left)s is left of this payment. Refuse it."
+msgstr "ده ما ينفعش يتنفّذ: الباقي من الدفعة دي %(left)s بس. ارفضه."

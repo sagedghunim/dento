@@ -1,5 +1,6 @@
 import datetime as dt
 import random
+import uuid
 from collections import defaultdict
 from zoneinfo import ZoneInfo
 
@@ -439,3 +440,34 @@ class LineApprovalTests(BillingTestCase):
         lines = call(self.owner, "POST", f"/api/v1/invoices/{invoice['id']}/lines",
                      {"kind": "procedure", "service_id": self.services_a["procedure"].id}).json()["invoice"]["lines"]
         self.assertEqual(call(self.owner, "DELETE", f"/api/v1/invoices/{invoice['id']}/lines/{lines[-1]['id']}").status_code, 200)
+
+
+class RefundRequestTests(BillingTestCase):
+    """A refund that waits for the owner is checked when it is asked (Saged, 2026-11-26): four requests the owner
+    could only refuse reached the alerts, each one more than the payment had left."""
+
+    def test_checked_when_asked_one_at_a_time_and_shown_with_its_file(self):
+        r = call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"approvals": ["refund"]}, "expected": {"approvals": []}})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.grant("billing.refund")
+        appt = self.visit(payment={"amount": 10000, "method": "card"})
+        invoice = call(self.desk, "GET", f"/api/v1/invoices/{appt['invoice']['id']}").json()["invoice"]
+        url = f"/api/v1/payments/{invoice['payments'][0]['id']}/refund"
+        over = call(self.desk, "POST", url, {"amount": 10001})
+        self.assertEqual((over.status_code, over.json()["error"]["code"]), (409, "over_refund"))
+        self.assertIn("100", over.json()["error"]["message"])  # what is left, said at once
+        key = str(uuid.uuid4())
+        asked = call(self.desk, "POST", url, {"amount": 4000}, key=key)
+        self.assertEqual(asked.status_code, 202)
+        retried = call(self.desk, "POST", url, {"amount": 4000}, key=key)  # the same tap sent again: the same request
+        self.assertEqual((retried.status_code, retried.json()["request"]["id"]), (202, asked.json()["request"]["id"]))
+        again = call(self.desk, "POST", url, {"amount": 1000})
+        self.assertEqual((again.status_code, again.json()["error"]["code"]), (409, "already_asked"))
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn(f'href="/patients/{invoice["patient"]["id"]}"', page)  # the file it is about
+        self.assertIn(f"فاتورة {invoice['number']}", page)
+        self.assertNotIn("data-request-problem", page)
+        # The owner gives most of it back meanwhile: the request can no longer be done, and says so before Approve.
+        self.assertEqual(call(self.owner, "POST", url, {"amount": 7000}).status_code, 201)
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn("data-request-problem", page)
