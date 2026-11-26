@@ -5371,9 +5371,6 @@ msgstr "لو واتساب ما فتحش لوحده:"
 msgid "Open WhatsApp"
 msgstr "افتح واتساب"
 
-msgid "Send again"
-msgstr "ابعت تاني"
-
 msgid "Receive the order"
 msgstr "استلام الطلب"
 

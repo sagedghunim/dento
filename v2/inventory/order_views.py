@@ -141,13 +141,15 @@ def orders_view(request, ctx, data):
     state = request.GET.get("state", "open")
     if state not in ("open", "closed"):
         raise ApiError("invalid", "state must be open or closed", fields={"state": "choice"})
+    # The "need a supplier" list comes with the first page, so the page asks once (design H1 backup).
     if state == "open":
         return {"orders": orders.orders(ctx, state), "next": None, "drafts": orders.draft_count(ctx),
-                "needs": orders.need_count(ctx)}
+                "needs": orders.need_count(ctx), "need_items": orders.needs(ctx)}
     rows = orders.orders(ctx, state, CLOSED_PAGE + 1, paging.time_cursor(request))
     found = paging.page(rows, CLOSED_PAGE, lambda o: paging.encode_time(o["created_at"], o["id"]))
     return {"orders": found["items"], "next": found["next"], "drafts": orders.draft_count(ctx),
-            "needs": orders.need_count(ctx)}
+            "needs": orders.need_count(ctx),
+            "need_items": None if request.GET.get("after") else orders.needs(ctx)}
 
 
 @api("POST", perm="inventory.order", replay=_replay_order)

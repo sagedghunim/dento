@@ -114,6 +114,7 @@ def inventory_page(request, ctx):
             "items": [{k: i[k] for k in ("id", "name", "unit", "quantity", "threshold", "supplier_id", "backup_supplier_id")}
                       for i in context["items"] if i["is_active"]],
             "orders": orders.orders(ctx),
+            "needs": orders.needs(ctx),  # the "need a supplier" box, shown at once (design H1 backup)
             "perms": {k: perms[k] for k in ("manage", "order", "money", "pay", "drawer", "owner")},
             # The days on the orders are the clinic's, not the browser's.
             "zone": str(zone(ctx.clinic)),

@@ -100,6 +100,7 @@ let ordersTicket = 0;
 async function loadOrders(more = false) {
   if (!ordersList) return;
   const ticket = ++ordersTicket;
+  const needsAt = needsTicket;
   ordersStatus.textContent = t("loading");
   if (moreButton) moreButton.disabled = true;
   const after = more && ordersNext ? `&after=${encodeURIComponent(ordersNext)}` : "";
@@ -112,7 +113,8 @@ async function loadOrders(more = false) {
   ordersNext = result.data.next || null;
   if (ordersFoot) ordersFoot.hidden = !ordersNext;
   showDrafts((result.data.drafts || 0) + (result.data.needs || 0));
-  if (!more) loadNeeds();
+  // The "need a supplier" box comes with the orders; one changed here since this load was asked keeps its rows.
+  if (Array.isArray(result.data.need_items) && needsAt === needsTicket) renderNeeds(result.data.need_items);
 }
 if (moreButton) moreButton.addEventListener("click", () => { if (!moreButton.disabled) loadOrders(true); });
 
@@ -256,7 +258,6 @@ if (orderDialog) {
   const submit = orderDialog.querySelector("[data-submit]");
   const cancelButton = orderDialog.querySelector("[data-cancel-order]");
   const saveButton = orderDialog.querySelector("[data-save-order]");
-  const resendButton = orderDialog.querySelector("[data-resend]");
   let warned = false;
 
   const draftNow = () => ({
@@ -325,7 +326,6 @@ if (orderDialog) {
     noteText.hidden = draft || !order.note;
     noteText.textContent = order.note || "";
     saveButton.hidden = !draft;
-    resendButton.hidden = order.status !== "sent";
     cancelButton.hidden = !["draft", "sent"].includes(order.status);
     cancelButton.textContent = t("ord_cancel");
     delete cancelButton.dataset.armed;
@@ -467,7 +467,6 @@ if (orderDialog) {
     if (await saveDraft()) { toast(t("ord_saved_label", { name: current.supplier_name })); loadOrders(); }
   });
 
-  resendButton.addEventListener("click", () => { if (!orderDialog.dataset.busy && !submitter.unknown) sendNow(); });
 
   cancelButton.addEventListener("click", async () => {
     if (orderDialog.dataset.busy || submitter.unknown || !twoTaps(cancelButton)) return;
@@ -654,15 +653,7 @@ if (newOrderDialog) {
 const needsBox = document.querySelector("[data-needs]");
 const needsList = document.querySelector("[data-needs-list]");
 const needsCount = document.querySelector("[data-needs-count]");
-let needsTicket = 0;
-
-async function loadNeeds() {
-  if (!needsBox) return;
-  const ticket = ++needsTicket;
-  const result = await get("/api/v1/inventory/needs");
-  if (ticket !== needsTicket || !isOk(result)) return;
-  renderNeeds(result.data.items);
-}
+let needsTicket = 0;  // goes up when a row is ordered or dismissed here
 
 function needText(need) {
   const n = localDigits(need.qty);
@@ -1159,6 +1150,7 @@ document.addEventListener("click", (event) => {
 });
 
 renderOrders(data.orders || []);
+renderNeeds(data.needs || []);
 renderSuppliers();
 fillSelects();
 
