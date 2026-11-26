@@ -1,4 +1,8 @@
 import re
+import shutil
+import subprocess
+import unittest
+from pathlib import Path
 
 import polib
 from django.test import Client, SimpleTestCase
@@ -14,6 +18,19 @@ from core.testing import ShardTestCase, call, new_patient
 from scheduling.testing import M1TestCase
 from web import format as fmt
 from web.http import route_exists
+
+
+class ScriptSyntaxTests(SimpleTestCase):
+    """Every page script parses as a module: one broken file blanks a whole page (the Team page, 2026-11-27)."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_every_script_parses(self):
+        folder = Path(__file__).resolve().parent / "static" / "js"
+        for path in sorted(folder.glob("*.js")):
+            with self.subTest(script=path.name):
+                done = subprocess.run(["node", "--input-type=module", "--check"], input=path.read_bytes(),
+                                      capture_output=True, timeout=60)
+                self.assertEqual(done.returncode, 0, done.stderr.decode(errors="replace")[:500])
 
 
 class CatalogueTests(SimpleTestCase):

@@ -791,9 +791,7 @@ function initBooking() {
       if (autoSend) changes.orders_auto_send = autoSend.checked;
       const message = form.elements.namedItem("order_message");
       if (message) {
-        const lines = (value) => value.replace(/
-?/g, "
-").trim();
+        const lines = (value) => value.replace(/\r\n?/g, "\n").trim();
         const text = lines(message.value);
         changes.order_message = text === lines(message.dataset.default) ? "" : text;  // the built-in text stays ""
       }
