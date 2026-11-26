@@ -37,7 +37,7 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Deploy script: `deploy5.sh` in the old session scratchpad. It runs git archive, migrate_all on Neon, then vercel --prod. Open https://dento-jet.vercel.app in Brave.
 
 ## Next step
-0. Booking/walk-in amount (Saged 2026-11-27, waiting on his answer): the amount fills itself from the chosen service and can't be typed higher (so no overpaid box). Asked: is a part payment (deposit) allowed or only full / nothing? Walk-in too? Also check that a visit costing more than the booking leaves the rest owed at the desk (Saged insists). Money → full panel.
+0. Booking amount (Saged decided 2026-11-27): the field stays open and shows the service price; the desk can type LESS (the rest stays owed by the patient), never MORE than the price (block it: field max + server check; the overpaid box goes away in booking). Walk-in: proposed the same, waiting on Saged's yes. First, a test that a visit costing more than what was paid leaves the rest owed at the desk. Money → full panel.
 1. Build the approved booked-service change (section below), then run the full panel review.
 2. Prescription message: wait for Saged's screenshot, then fix it.
 3. Build the visit-summary WhatsApp button (names only, no prices).
