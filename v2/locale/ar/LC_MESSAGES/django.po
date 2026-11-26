@@ -3662,13 +3662,6 @@ msgstr "الإجراء اللي بيتعمل في الجلسة"
 msgid "The deposit amount changed. Reload and try again."
 msgstr "مبلغ العربون اتغيّر. حمّل الصفحة تاني وجرّب."
 
-msgid ""
-"The deposit is paid on the visit's bill. If the patient doesn't come, the "
-"clinic keeps it; refund it from the bill when needed."
-msgstr ""
-"العربون بيتسجل مدفوع على فاتورة الزيارة. لو المريض ماجاش العيادة بتحتفظ بيه،"
-" ولو لازم يترجع رجّعه من الفاتورة."
-
 msgid "The visit fee in this session"
 msgstr "سعر الكشف في الجلسة دي"
 
@@ -5599,3 +5592,26 @@ msgstr "المبلغ اللي هيرجع أكبر من الباقي من الد�
 
 msgid "This can't be done: only %(left)s is left of this payment. Refuse it."
 msgstr "ده ما ينفعش يتنفّذ: الباقي من الدفعة دي %(left)s بس. ارفضه."
+
+msgid "Money goes back only before the patient goes in."
+msgstr "الفلوس بترجع بس قبل ما المريض يدخل."
+
+msgid ""
+"The deposit is paid on the visit's bill. Money goes back only before the "
+"patient goes in: a booking called off, or a patient who leaves the waiting "
+"room."
+msgstr ""
+"العربون بيتدفع على فاتورة الكشف. الفلوس بترجع بس قبل ما المريض يدخل: حجز "
+"اتلغى، أو مريض مشي من الانتظار."
+
+msgid "The deposit can be given back when the patient doesn't come"
+msgstr "العربون يرجع لو المريض ما جاش"
+
+msgid "Off: the clinic keeps a no-show's deposit."
+msgstr "لو مقفولة: العيادة بتحتفظ بعربون اللي ما جاش."
+
+msgid "This can't be done: %(why)s Refuse it."
+msgstr "ده ما ينفعش يتنفّذ: %(why)s ارفضه."
+
+msgid "The clinic keeps the deposit of a patient who didn't come."
+msgstr "العيادة بتحتفظ بعربون اللي ما جاش."

@@ -1,30 +1,37 @@
 # HANDOFF
 
 ## Project
-- Dento (Hamada) multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (port 5433, sharded), plain JS front end, Arabic RTL first. Reply to Saged in Egyptian Arabic only.
+- Dento / Hamada clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql), plain JS front end, Arabic RTL. Live: dento-jet.vercel.app.
 
 ## State now
-- Done + pushed + deployed live (2026-11-26): suppliers work; void-bill button and its alert removed; deleting a patient removed everywhere (button, API, alert, approval switch; old hidden files can still be restored; old pending delete requests can only be refused).
-- Done + pushed + deployed (ba5684a, full suite 853 green): a discount on a paid bill now goes through; the extra shows in the patient file as "paid over the bill" → give back from the drawer; discount + give-back show as ONE owner alert with full details (web/alerts.py `_fold_discounts`); credit selectors now use `paid - greatest(total, deposit)` like give_back. Reviewed: senior-backend (2 bugs, fixed + tests), judge APPROVE.
+- **Done, tested, NOT committed, NOT deployed:**
+  - Refund rule: money goes back only before going in (booked/waiting). After going in, only money paid over the bill can go back. A no-show keeps the deposit unless the owner switch `deposit_back_no_show` (team page, off by default) is on, and then only the deposit goes back. The billing.refund permission and the "بإذنك" approval stay. Old pending requests on a visit that went in say "ارفضه".
+  - The voided-expense alert now shows the category and note (web/alerts.py `items()`).
+  - pay.js: a no-show offers only its deposit for refund.
+  - New tests: over-bill refund after going in, no-show deposit only, voided-expense alert.
+  - billing + finance + web: 362 tests OK. The full suite was 857 OK before the last small changes.
+- **Fix before commit:** `v2/web/test_alerts.py` shows a 268-line diff. `sed -i` probably changed its line endings, so restore the original endings and keep only the new test.
+- Flaky, old: scheduling TodayTests `test_queues_counts_and_money_only_with_finances_view` (ordering).
 
 ## Decisions
-- Paid-over money after a discount = patient credit, given back by tap (Saged's choice), not refused.
-- A give-back folds only a discount made after the bill's last payment; split give-back (several payments) shows as one row with summed amount.
-- APPROVAL_KINDS keeps "void" and "patient" only so stored settings stay valid.
-- Live site is NOT linked to GitHub: every push needs the manual deploy.
+- Kept the "bill goes down by the refund" option (Saged, 2026-11-23). The judge flagged it: a waiting patient refunded with the bill lowered could still go in owing nothing. The alert shows it to the owner. Ask Saged whether to block lowering before going in.
+- Keep billing.refund and the approval switch (approval off by default).
 
 ## Key paths
-- Deploy: `bash C:/Users/TECHNO~1/AppData/Local/Temp/claude/6410da52230ccd69/bfcb25bc-00ac-4ab7-a0a9-231f41c76a0c/scratchpad/deploy5.sh` (runs migrate_all on Neon + vercel --prod; secrets live in that scratchpad). Check https://dento-jet.vercel.app/static/js/orders.js = 200.
-- Tests (Bash, from v2): `export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_main && .venv/Scripts/python.exe manage.py test --noinput`
-- Arabic strings: po_edit.py + JSON in this session's scratchpad, then `manage.py compile_translations`; keep django.po CRLF.
-- Watch line endings: Python rewrites turned CRLF files into LF (billing/tests.py, selectors.py, alerts.html are CRLF; pay.js, _dialog_pay.html are LF).
-- billing/services.py (set_discount, refund, give_back), billing/discounts.py, billing/selectors.py (patient_credits), web/alerts.py, web/templates/web/alerts.html
+- billing/services.py `refundable()`, `refund()`, `check_refund_request`
+- clinics/settings.py (DEFAULTS, OWNER_ONLY), web/pages.py clinic_config, team.html/team.js, pay.js, web/alerts.py
+- Tests: `cd v2`, then `export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_x && .venv/Scripts/python.exe manage.py test billing finance web --noinput`
+- Deploy is manual: the scratchpad deploy5.sh (migrate + vercel --prod), then open dento-jet in Brave.
 
 ## Next step
-- Discount-type chips in the booking dialog (web/templates/web/_dialog_book.html, walk-in _dialog_walkin.html): desk picks a type, saved on the appointment, applied when the visit's invoice is made (alert fires then); cancelled booking = no discount. Money change → reviewers.
+- Fix the line endings in test_alerts.py, commit everything (end the message with "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"), push, deploy, and open dento-jet in Brave.
 
 ## Open questions
-- Every other alert: link to patient file + full details (refund/discount done; expense void, stock count, shift close, price, line remove still to enrich).
-- Blacklist for patients: doesn't exist; Saged to say if wanted.
-- give_back needs only billing.collect; judge suggests billing.refund — ask Saged.
-- Reminders: memory remind-alerts-questions (expense-void group, empty unsent supplier order); then feature shortlist B, A, dental lab.
+- Block the bill-lowering on refunds before the patient goes in? (judge finding)
+- Supplier backup work, agreed but not built; explain before building:
+  1. Supplier.backup with a one-step rule.
+  2. Missing quantity on order lines.
+  3. Auto-move short items to the backup on receive.
+  4. A "مش عنده" button on each line.
+  5. A "ناقص ومحتاج مورد" list with a supplier pick list and add-supplier in place.
+- Parked: booked-discount chips in `stash@{0}`.

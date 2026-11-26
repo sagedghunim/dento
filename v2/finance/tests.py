@@ -89,7 +89,7 @@ class RegisterTests(M2TestCase):
         self.assertEqual(r.json()["error"]["shift_id"], current_shift(self.a))
 
     def test_a_cash_refund_needs_the_register_too(self):
-        visit = self.in_room()
+        visit = self.waiting_visit()  # money goes back only before going in (Saged, 2026-11-26)
         payment = self.pay(visit, 1000, "cash").json()["payment"]
         closed = current_shift(self.a)
         self.close(1000)

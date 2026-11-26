@@ -41,6 +41,18 @@ class AlertTests(M2TestCase):
         self.assertIn("فتحها", line)
         self.assertIn("لسه مفتوحة", line)
 
+    def test_a_voided_expense_says_which_expense(self):
+        # Saged, 2026-11-26: "ألغى مصروف" alone doesn't say which one.
+        self.set_codes("assistant", granted=["expenses.manage"])
+        category = call(self.owner, "GET", "/api/v1/expense-categories").json()["items"][0]
+        r = call(self.desk, "POST", "/api/v1/expenses", {"category_id": category["id"], "amount": 4500, "note": "كهربا نوفمبر"})
+        self.assertEqual(r.status_code, 201, r.content)
+        expense = r.json()["expense"]["id"]
+        self.assertEqual(call(self.desk, "POST", f"/api/v1/expenses/{expense}/void").status_code, 200)
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn("كهربا نوفمبر", page)
+        self.assertIn(category["name"], page)
+
     def test_the_owner_only(self):
         self.assertEqual(self.owner.get("/alerts").status_code, 200)
         self.assertEqual(self.doc.get("/alerts").status_code, 403)

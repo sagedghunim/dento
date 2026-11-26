@@ -522,18 +522,47 @@ def check_refund_request(ctx, payment_id, amount):
     now, so the desk hears at once and the owner never gets a request that can't be done. One refund of a payment
     waits at a time: a second one is refused while the first is pending. The payment row stays locked until the
     request is kept (one transaction per call), so two taps at once make one request."""
-    found = sql.row(ctx, 'SELECT kind, amount - refunded FROM "billing_payment" WHERE clinic_id = %s AND id = %s '
+    found = sql.row(ctx, 'SELECT kind, amount - refunded, is_deposit FROM "billing_payment" WHERE clinic_id = %s AND id = %s '
                          "FOR NO KEY UPDATE", [ctx.clinic_id, payment_id])
     if found is None:
         raise not_found("payment")
     if found[0] != "payment":
         raise ApiError("invalid", _("Only payments can be refunded."), fields={"payment": "refund"})
+    visit = sql.row(ctx, """
+        SELECT a.id, a.status, i.paid - i.total FROM "billing_payment" p
+          JOIN "billing_invoice" i ON i.clinic_id = p.clinic_id AND i.id = p.invoice_id
+          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
+         WHERE p.clinic_id = %s AND p.id = %s""", [ctx.clinic_id, payment_id])
+    refundable(ctx, {"status": visit[1]} if visit and visit[0] else None, amount, visit[2] if visit else 0, found[2])
     if sql.row(ctx, 'SELECT 1 FROM "finance_cash_request" WHERE clinic_id = %s AND kind = \'refund\' '
                     "AND status = 'pending' AND (data->>'payment_id')::bigint = %s LIMIT 1", [ctx.clinic_id, payment_id]):
         raise ApiError("already_asked", _("A refund of this payment is already waiting for the owner's OK."), 409,
                        fields={"amount": "already_asked"})
     if amount > found[1]:
         raise over_refund(found[1])
+
+
+REFUNDABLE = ("booked", "waiting")  # before going in (Saged, 2026-11-26)
+GONE_IN = ("with_assistant", "ready", "in_room", "done")
+
+
+def refundable(ctx, appointment, amount=0, over=0, deposit=False):
+    """Money goes back only before the patient goes in: a booking called off or a patient who leaves the waiting
+    room (Saged, 2026-11-26). A no-show's deposit only when the owner's switch says so. After going in, only what
+    was paid over the bill (`over`: a deposit over a smaller bill), never the visit's own money. A bill with no
+    visit has no going in."""
+    from clinics import settings as clinic_settings
+
+    if appointment is None:
+        return
+    status = appointment["status"]
+    if status in REFUNDABLE or (status in GONE_IN and amount <= over):
+        return
+    if status == "no_show":
+        if deposit and clinic_settings.effective(ctx.clinic.settings)["deposit_back_no_show"]:
+            return
+        raise ApiError("not_refundable", _("The clinic keeps the deposit of a patient who didn't come."), 409)
+    raise ApiError("not_refundable", _("Money goes back only before the patient goes in."), 409)
 
 
 def over_refund(left):
@@ -567,6 +596,8 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, give
         raise ApiError("over_refund", _("The refund is more than what is left of this payment."), 409,
                        fields={"amount": "over_refund"})
     patient_id, doctor_id, original_method, original_amount, refunded, section_id, was_deposit = updated
+    if not given_back:
+        refundable(ctx, appointment, amount, invoice["paid"] - invoice["total"], was_deposit)
     today = business_day(ctx.clinic)
     method = method or original_method
     if method == "credit":

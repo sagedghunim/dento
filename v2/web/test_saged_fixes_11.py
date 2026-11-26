@@ -58,7 +58,7 @@ class RefundTests(M2TestCase):
     def setUp(self):
         super().setUp()
         self.sees_money()
-        self.visit = self.owed_visit()
+        self.visit = self.waiting_visit()  # money goes back only before going in (Saged, 2026-11-26)
         self.due = call(self.desk, "GET", f"/api/v1/appointments/{self.visit['id']}").json()["appointment"]["due"]
         r = call(self.desk, "POST", f"/api/v1/appointments/{self.visit['id']}/payments", {"amount": self.due, "method": "card"})
         self.assertEqual(r.status_code, 201, r.content)
@@ -77,6 +77,35 @@ class RefundTests(M2TestCase):
         r = call(self.owner, "POST", f"/api/v1/payments/{self.payment}/refund", {"amount": 1000, "lower_bill": False})
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(self.owed(), 1000)
+
+    def test_none_once_the_patient_went_in_and_an_old_request_says_refuse_it(self):
+        """Saged, 2026-11-26: a refund is for a patient who leaves the waiting room, never after going in."""
+        r = call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"approvals": ["refund"]}, "expected": {}})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.set_codes("assistant", granted=["billing.refund"])
+        url = f"/api/v1/payments/{self.payment}/refund"
+        self.assertEqual(call(self.desk, "POST", url, {"amount": 1000}).status_code, 202)  # waits for the owner
+        self.assertEqual(self.act(self.visit["id"], "call", "waiting", client=self.desk).status_code, 200)
+        for client in (self.owner, self.desk):
+            r = call(client, "POST", url, {"amount": 1000})
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_refundable"))
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn("data-request-problem", page)
+        self.assertIn("قبل ما المريض يدخل", page)
+
+
+    def test_after_going_in_only_what_was_paid_over_the_bill_goes_back(self):
+        self.assertEqual(self.act(self.visit["id"], "call", "waiting", client=self.desk).status_code, 200)
+        r = call(self.owner, "POST", "/api/v1/discount-types", {"name": "Ten", "kind": "fixed", "value": 1000})
+        self.assertEqual(r.status_code, 201, r.content)
+        bill = call(self.owner, "POST", f"/api/v1/appointments/{self.visit['id']}/invoice").json()["invoice"]
+        r = call(self.owner, "PUT", f"/api/v1/invoices/{bill['id']}/discount-type",
+                 {"type_id": r.json()["discount_type"]["id"], "expected_discount": bill["discount"]})
+        self.assertEqual(r.status_code, 200, r.content)
+        url = f"/api/v1/payments/{self.payment}/refund"
+        r = call(self.owner, "POST", url, {"amount": 1001})
+        self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_refundable"))
+        self.assertEqual(call(self.owner, "POST", url, {"amount": 1000}).status_code, 201)
 
 
 class TeethTests(M2TestCase):

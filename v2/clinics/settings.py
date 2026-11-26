@@ -20,6 +20,8 @@ DEFAULTS = {
     "booking_deposit_amount": 0,
     # Or a percent of the visit's fee (Saged, 2026-11-19): 0 means the fixed amount above.
     "booking_deposit_percent": 0,
+    # A no-show's deposit can be given back (Saged, 2026-11-26): off, the clinic keeps it.
+    "deposit_back_no_show": False,
     # The consultation costs nothing when a procedure is done in the same visit (Saged, 2026-11-19): off by default.
     "consultation_free_with_procedure": False,
     # Installments (Saged, 2026-11-19): what a new plan starts with; the desk or the doctor changes it per patient.
@@ -37,7 +39,8 @@ DEFAULTS = {
     "order_message": "",
 }
 # Money policies only the account's owner sets (Saged, 2026-11-19), even for someone with settings.manage.
-OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "consultation_free_with_procedure",
+OWNER_ONLY = {"booking_deposit", "booking_deposit_amount", "booking_deposit_percent", "deposit_back_no_show",
+              "consultation_free_with_procedure",
               "installment_down_percent", "installment_every", "installment_count", "approvals",
               "orders_auto_send", "order_message"}
 MAX_DEPOSIT = 100_000_00  # EGP 100,000
@@ -57,6 +60,7 @@ _RULES = {
     "solo": lambda v: isinstance(v, bool),
     "booking_step_minutes": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 120 and v % 5 == 0,
     "booking_deposit": lambda v: isinstance(v, bool),
+    "deposit_back_no_show": lambda v: isinstance(v, bool),
     "booking_deposit_amount": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_DEPOSIT,
     "consultation_free_with_procedure": lambda v: isinstance(v, bool),
     "booking_deposit_percent": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100,

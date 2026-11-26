@@ -180,6 +180,8 @@ def clinic_config(ctx, today):
         "deposit": clinic_settings.deposit(ctx.clinic) if ctx.can("billing.collect") else 0,
         # A percent of the visit's fee instead (Saged, 2026-11-19): Book works the amount out from the quote.
         "deposit_percent": clinic_settings.deposit_percent(ctx.clinic) if ctx.can("billing.collect") else 0,
+        # A no-show's deposit can be given back (Saged, 2026-11-26): the Pay dialog offers Refund only then.
+        "deposit_back_no_show": effective["deposit_back_no_show"],
     }
 
 

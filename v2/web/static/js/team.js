@@ -785,7 +785,8 @@ function initBooking() {
     if (card.dataset.busy) return;
     let body = submitter.unknown && submitter.unknown.body;
     if (!body) {
-      const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked };
+      const changes = { booking_deposit: on.checked, consultation_free_with_procedure: freeConsultation.checked,
+        deposit_back_no_show: form.elements.namedItem("deposit_back_no_show").checked };
       const autoSend = form.elements.namedItem("orders_auto_send");
       if (autoSend) changes.orders_auto_send = autoSend.checked;
       const message = form.elements.namedItem("order_message");
@@ -829,6 +830,7 @@ function initBooking() {
       now.booking_deposit_amount = fresh.booking_deposit_amount;
       now.consultation_free_with_procedure = fresh.consultation_free_with_procedure;
       now.booking_deposit_percent = fresh.booking_deposit_percent;
+      now.deposit_back_no_show = fresh.deposit_back_no_show;
       for (const k of ["installment_down_percent", "installment_count", "installment_every", "orders_auto_send", "order_message"]) now[k] = fresh[k];
       toast(t("settings_saved"));
       return;

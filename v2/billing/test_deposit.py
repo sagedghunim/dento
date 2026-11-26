@@ -401,6 +401,12 @@ class NoShowTests(DepositTestCase):
                                                          "deposit": DEPOSIT})
             self.assertEqual(self.act(visit["id"], "no-show", "booked").status_code, 200)
             deposit = self.bill(visit["id"])["payments"][0]
+            # The clinic keeps a no-show's deposit unless the owner's switch lets it go back (Saged, 2026-11-26).
+            r = self.refund(deposit["id"], DEPOSIT)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_refundable"))
+            self.assertIn("ما جاش", r.json()["error"]["message"])
+            self.assertEqual(call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"deposit_back_no_show": True},
+                                                                                  "expected": {}}).status_code, 200)
             self.assertEqual(self.refund(deposit["id"], DEPOSIT).status_code, 201)
             self.assertEqual(self.figures(visit["id"]), {"total": 0, "paid": 0, "due": 0, "credit": 0, "deposit": 0})
             self.assertEqual((self.day_money(DAY), self.drawer()), ((DEPOSIT, DEPOSIT), (DEPOSIT, DEPOSIT)))
@@ -439,6 +445,14 @@ class NoShowTests(DepositTestCase):
             self.assertEqual(self.act(visit["id"], "no-show", "booked").status_code, 200)
             self.assertEqual(self.figures(visit["id"]), {"total": CONSULT, "paid": CONSULT, "due": 0, "credit": 0,
                                                          "deposit": DEPOSIT})
+            # With the owner's switch on, only the deposit goes back; the other payment stays (Saged, 2026-11-26).
+            self.assertEqual(call(self.owner, "PUT", "/api/v1/settings/clinic", {"changes": {"deposit_back_no_show": True},
+                                                                                  "expected": {}}).status_code, 200)
+            deposit, other = self.bill(visit["id"])["payments"][:2]
+            self.assertTrue(deposit["deposit"])
+            r = self.refund(other["id"], 100)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_refundable"))
+            self.assertEqual(self.refund(deposit["id"], DEPOSIT).status_code, 201)
 
 
 class MoveAndCancelTests(DepositTestCase):

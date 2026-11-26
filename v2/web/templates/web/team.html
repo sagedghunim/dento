@@ -104,7 +104,9 @@
       <label class="field" data-deposit-fixed{% if booking.booking_deposit_percent %} hidden{% endif %}>{% translate "Deposit (EGP)" %}<input name="booking_deposit_amount" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>
       <label class="field" data-deposit-pct{% if not booking.booking_deposit_percent %} hidden{% endif %}>{% translate "Percent (1 to 100)" %}<input name="booking_deposit_percent" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="3"></label>
     </div>
-    <p class="muted">{% translate "The deposit is paid on the visit's bill. If the patient doesn't come, the clinic keeps it; refund it from the bill when needed." %}</p>
+    <p class="muted">{% translate "The deposit is paid on the visit's bill. Money goes back only before the patient goes in: a booking called off, or a patient who leaves the waiting room." %}</p>
+    <label class="check"><input type="checkbox" name="deposit_back_no_show"{% if booking.deposit_back_no_show %} checked{% endif %}> {% translate "The deposit can be given back when the patient doesn't come" %}</label>
+    <p class="muted">{% translate "Off: the clinic keeps a no-show's deposit." %}</p>
     <label class="check"><input type="checkbox" name="consultation_free_with_procedure"{% if booking.consultation_free_with_procedure %} checked{% endif %}> {% translate "No consultation fee when a procedure is done in the same visit" %}</label>
     <p class="muted">{% translate "For example: a patient books a consultation and gets a root canal in it. With this on, the bill has the root canal only. Off, it has both." %}</p>
     <fieldset class="group">

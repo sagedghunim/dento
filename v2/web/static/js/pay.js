@@ -106,17 +106,23 @@ export function initPay({ onChanged } = {}) {
       li.append(what, amt);
       return li;
     }));
-    const refundable = payments.filter((p) => p.kind === "payment" && p.amount > p.refunded);
     const refund = dialog.querySelector("[data-refund]");
     if (refund) {
-      refund.hidden = !refundable.length;
+      // A no-show gives back only the deposit (when the owner allows it); every other payment stays.
+      const refundable = payments.filter((p) => p.kind === "payment" && p.amount > p.refunded && (visit.status !== "no_show" || p.deposit));
+      // Only before going in (Saged, 2026-11-26); a no-show's deposit when the owner allows it. After going in,
+      // only what was paid over the bill (a deposit over a smaller bill). The server checks the same.
+      const before = ["booked", "waiting"].includes(visit.status) || (visit.status === "no_show" && config.deposit_back_no_show);
+      const over = ["with_assistant", "ready", "in_room", "done"].includes(visit.status) && invoice ? Math.max(0, invoice.paid - invoice.total) : 0;
+      refund.hidden = !refundable.length || !(before || over > 0);
+      const most = (p) => (before ? p.amount - p.refunded : Math.min(p.amount - p.refunded, over));
       field("refund_of").replaceChildren(...refundable.map((p) => {
         const option = el("option", null, `${paymentName(p)} · ${moneyText(p.amount - p.refunded)}`);
         option.value = p.id;
-        option.dataset.left = p.amount - p.refunded;
+        option.dataset.left = most(p);
         return option;
       }));
-      if (refundable.length && !field("refund_amount").dataset.touched) field("refund_amount").value = amountInput(refundable[0].amount - refundable[0].refunded);
+      if (refundable.length && !field("refund_amount").dataset.touched) field("refund_amount").value = amountInput(most(refundable[0]));
     }
     dialog.querySelectorAll("[data-print]").forEach((b) => { b.hidden = !invoice || invoice.status !== "open"; });
     status.textContent = invoice && invoice.status === "void" ? t("bill_void") : invoice ? t("bill_no", { n: localDigits(invoice.number) }) : "";

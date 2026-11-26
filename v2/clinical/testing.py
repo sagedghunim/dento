@@ -52,6 +52,15 @@ class M2TestCase(M1TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         return visit
 
+    def waiting_visit(self, fixture=None):
+        """A walk-in of the doctor, arrived and still in the waiting room (not called in)."""
+        fixture = fixture or self.a
+        body = {"service_id": self.services_a["procedure"].id if fixture is self.a else self.services_b["procedure"].id,
+                "doctor_id": fixture.membership("doctor").id, "new_patient": new_patient()}
+        r = call(self.desk if fixture is self.a else fixture.client("assistant"), "POST", "/api/v1/appointments/walk-in", body)
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["appointment"]
+
     def booked(self, hhmm="10:00"):
         """A booked (not arrived) visit of A's doctor, at one of their slots today."""
         from scheduling.testing import today

@@ -188,13 +188,25 @@ def waiting_requests(ctx):
              **about.get(r["id"], {})} for r in rows]
 
 
+def _not_refundable(ctx, status, amount, over, deposit):
+    """Why a waiting refund can no longer be done, or None (Saged, 2026-11-26: only before going in)."""
+    from billing.services import refundable
+    from core.errors import ApiError
+
+    try:
+        refundable(ctx, {"status": status} if status else None, amount, over, deposit)
+    except ApiError as refused:
+        return refused.message
+    return None
+
+
 def _requests_about(ctx, rows):
     """Whose file each waiting request is about, its bill, and for a refund the payment it takes from (Saged,
     2026-11-26: every alert shows its file). A refund that can no longer be done says so before the owner taps
     Approve. Three reads at most, only for the requests that touch a bill."""
     pay_ids = [(r["data"] or {}).get("payment_id") for r in rows if r["kind"] == "refund"]
     payments = {p[0]: p[1:] for p in sql.rows(ctx, """
-        SELECT id, invoice_id, amount, refunded, method FROM "billing_payment"
+        SELECT id, invoice_id, amount, refunded, method, is_deposit FROM "billing_payment"
          WHERE clinic_id = %s AND id = ANY(%s::bigint[])""", [ctx.clinic_id, [i for i in pay_ids if i]])} if any(pay_ids) else {}
 
     def invoice_of(r):
@@ -205,9 +217,10 @@ def _requests_about(ctx, rows):
 
     invoice_ids = [i for i in (invoice_of(r) for r in rows) if i]
     invoices = {i[0]: i[1:] for i in sql.rows(ctx, """
-        SELECT i.id, i.number, i.total, i.patient_id, p.full_name
+        SELECT i.id, i.number, i.total, i.patient_id, p.full_name, a.status, i.paid
           FROM "billing_invoice" i
           JOIN "patients_patient" p ON p.clinic_id = i.clinic_id AND p.id = i.patient_id
+          LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
          WHERE i.clinic_id = %s AND i.id = ANY(%s::bigint[])""", [ctx.clinic_id, invoice_ids])} if invoice_ids else {}
     methods = _method_labels()
     out = {}
@@ -215,17 +228,20 @@ def _requests_about(ctx, rows):
         item = {"lines": []}
         found = invoices.get(invoice_of(r))
         if found is not None:
-            number, total, patient_id, patient = found
+            number, total, patient_id, patient, visit_status, bill_paid = found
             item.update(patient_id=patient_id, patient=patient, detail=_("Bill %(number)s") % {"number": number})
             item["lines"].append(_("The bill is now %(total)s") % {"total": money_plain(total)})
         paid = payments.get((r["data"] or {}).get("payment_id")) if r["kind"] == "refund" else None
         if paid is not None:  # the warning stands even when the bill or its file can't be found
-            _invoice, amount, refunded, method = paid
+            _invoice, amount, refunded, method, was_deposit = paid
             item["lines"].append(_("Paid %(amount)s by %(method)s") % {"amount": money_plain(amount),
                                                                          "method": methods.get(method, method)})
             if r["amount"] > amount - refunded:
                 item["problem"] = _("This can't be done: only %(left)s is left of this payment. Refuse it.") % {
                     "left": money_plain(amount - refunded)}
+            elif found is not None and (why := _not_refundable(ctx, visit_status, r["amount"], bill_paid - total,
+                                                                was_deposit)):
+                item["problem"] = _("This can't be done: %(why)s Refuse it.") % {"why": why}
         if found is not None or paid is not None:
             out[r["id"]] = item
     return out
@@ -277,6 +293,16 @@ def items(ctx, group=None):
     item_ids = [r["target_id"] for r in rows if r["action"] in ("item.count", "item.short")]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
+    expense_ids = [r["target_id"] for r in rows if r["action"] == "expense.void"]
+    expenses = {}
+    if expense_ids:
+        from core.i18n import pick
+
+        for i, name, name_en, note in sql.rows(
+                ctx, """SELECT e.id, c.name, c.name_en, e.note FROM "finance_expense" e
+                  LEFT JOIN "finance_category" c ON c.clinic_id = e.clinic_id AND c.id = e.category_id
+                 WHERE e.clinic_id = %s AND e.id = ANY(%s::bigint[])""", [ctx.clinic_id, expense_ids]):
+            expenses[i] = " · ".join(x for x in (pick(name, name_en) if name else "", note or "") if x)
     from .file_history import describe
 
     late = [r for r in rows if r["action"] not in ACTIONS]
@@ -378,6 +404,7 @@ def items(ctx, group=None):
         elif action == "expense.void":
             item["what"] = _("Voided an expense")
             item["amount"] = before.get("amount")
+            item["detail"] = expenses.get(r["target_id"], "")
         elif action == "item.count":
             item["what"] = _("A stock count changed the quantity")
             item["detail"] = f"{stock.get(r['target_id'], '')} · {before.get('quantity')} → {after.get('quantity')}"
