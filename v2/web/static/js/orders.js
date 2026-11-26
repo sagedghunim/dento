@@ -718,7 +718,16 @@ function needRow(need) {
   li.dataset.need = String(need.item_id);
   li.dataset.name = need.name;
   const main = el("div", "mat-main");
-  main.append(el("strong")); main.firstChild.append(bdi(need.name));
+  main.append(el("strong"));
+  if (document.querySelector("[data-items]")) {
+    // The name takes you to the item's card under Items (Saged, 2026-11-26).
+    const go = el("button", "link-btn need-name");
+    go.type = "button";
+    go.dataset.needShow = "";
+    go.setAttribute("aria-label", t("ord_need_show_of", { name: need.name }));
+    go.append(bdi(need.name));
+    main.firstChild.append(go);
+  } else main.firstChild.append(bdi(need.name));
   main.append(el("p", "muted"));
   const qty = el("input", "qty-input");
   Object.assign(qty, { dir: "ltr", inputMode: "numeric", autocomplete: "off", maxLength: 7 });
@@ -822,6 +831,9 @@ if (needsList) {
   needsList.addEventListener("click", (event) => {
     const li = event.target.closest("[data-need]");
     if (!li) return;
+    if (event.target.closest("[data-need-show]")) {
+      window.dispatchEvent(new CustomEvent("hamada:show-item", { detail: { id: Number(li.dataset.need) } }));
+    }
     if (event.target.closest("[data-need-order]")) orderNeed(li);
     const dismiss = event.target.closest("[data-need-dismiss]");
     if (dismiss) dismissNeed(li, dismiss);

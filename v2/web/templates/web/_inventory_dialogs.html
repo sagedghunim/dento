@@ -65,6 +65,7 @@
       <label class="field">{% translate "Unit" %}<input name="unit" maxlength="20" dir="auto" autocomplete="off" placeholder="{% translate "box, piece, syringe…" %}"></label>
       <label class="field" data-new-only>{% translate "Quantity in stock now" %}<input name="quantity" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
       <label class="field">{% translate "Alert when this many or fewer are left" %}<input name="threshold" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" value="0"></label>
+      <label class="field">{% translate "The most to keep (full stock)" %}<input name="max_qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7"></label>
       {% if perms.money %}<label class="field">{% translate "Cost of one unit (EGP)" %}<input name="unit_cost" dir="ltr" inputmode="decimal" autocomplete="off" maxlength="12"></label>{% endif %}
     </div>
     <details class="more-fields">
@@ -92,9 +93,8 @@
             <option value="">{% translate "None" %}</option>
             {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
           </select></label>
-          <label class="field">{% translate "Most to keep (optional)" %}<input name="max_qty" dir="ltr" inputmode="numeric" autocomplete="off" maxlength="7" placeholder="0"></label>
         </div>
-        <p class="muted">{% translate "When the stock reaches the alert line, the item goes on its supplier's order up to this number (empty: twice the alert line)." %}</p>
+        <p class="muted">{% translate "When the stock reaches the alert line, the item goes on its supplier's order up to the most to keep (empty: twice the alert line)." %}</p>
         <p class="muted" data-no-suppliers{% if suppliers %} hidden{% endif %}>{% translate "Add the clinic's suppliers under Suppliers, then pick each item's supplier here so short items are ordered on their own." %}</p>
       </fieldset>
       <label class="field">{% translate "Notes" %}<textarea name="notes" maxlength="500" dir="auto"></textarea></label>

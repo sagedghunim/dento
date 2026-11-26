@@ -724,6 +724,9 @@ body.embedded .main { padding-block: 14px 30px; padding-inline: 18px; }
   border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface);
 }
 .inv-item.is-low { border-color: var(--red); }
+/* The card a name in "need a supplier" jumped to: marked for a moment so the eye finds it. */
+.inv-item.found { outline: 3px solid var(--teal-dark); outline-offset: 2px; animation: flash 2.4s ease-out; }
+.need-name { min-height: 0; text-align: start; font-size: inherit; }
 .inv-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
 .inv-title { min-width: 0; }
 .inv-name { font-size: 1rem; font-weight: 800; overflow-wrap: anywhere; }

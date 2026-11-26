@@ -94,7 +94,7 @@ class BackupTests(OrderHelpers):
         main, gone = self.supplier("Main Co"), self.supplier("Gone Co")
         self.set_backup(main, gone)
         call(self.owner, "PATCH", f"/api/v1/inventory/suppliers/{gone['id']}", {"is_active": False})
-        a = self.item("A", quantity=50, supplier=main)
+        a = self.item("A", quantity=1, threshold=3, supplier=main)  # low: the list shows 2 x 3 - 1 = 5
         order = self.sent_order(main, (a, 5))
         moved = self.missing(order, a).json()["moved"]
         self.assertEqual(moved, [{"item_id": a["id"], "qty": 5, "to": "list", "supplier_id": None,
@@ -105,7 +105,7 @@ class BackupTests(OrderHelpers):
         main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
         self.set_backup(backup, main)  # A -> B and B -> A is harmless
-        a = self.item("A", quantity=50, supplier=main)
+        a = self.item("A", quantity=1, threshold=3, supplier=main)  # low: the list shows 2 x 3 - 1 = 5
         self.missing(self.sent_order(main, (a, 5)), a)
         draft = [d for d in self.drafts() if d["supplier_id"] == backup["id"]][0]
         self.assertEqual(call(self.desk, "POST", f"/api/v1/inventory/orders/{draft['id']}/send").status_code, 200)
@@ -167,16 +167,24 @@ class BackupTests(OrderHelpers):
 
     def test_a_receipt_lowers_what_the_list_waits_for(self):
         main = self.supplier("Main Co")
-        a = self.item("A", quantity=50, supplier=main)
+        a = self.item("A", quantity=1, threshold=5, supplier=main)
         self.missing(self.sent_order(main, (a, 5)), a)
         self.assertEqual(self.need_qty(a), 5)
         self.receive(self.sent_order(self.supplier("Other Co"), (a, 3)), [(a, 3)])
-        self.assertEqual(self.needs(), {a["id"]: 2})
+        self.assertEqual((self.need_qty(a), self.needs()), (2, {a["id"]: 6}))  # the list shows what the item lacks: 10 - 4
+
+    def test_a_missed_item_with_enough_stock_is_not_on_the_list_or_the_badge(self):
+        main = self.supplier("Main Co")
+        a = self.item("A", quantity=50, supplier=main)
+        self.missing(self.sent_order(main, (a, 5)), a)
+        self.assertEqual(self.need_qty(a), 5)
+        r = call(self.desk, "GET", "/api/v1/inventory/orders")
+        self.assertEqual((self.needs(), r.json()["needs"]), ({}, 0))
 
     def test_cancelling_a_backup_order_sends_its_moved_lines_to_the_list(self):
         main, backup = self.supplier("Main Co"), self.supplier("Backup Co")
         self.set_backup(main, backup)
-        a = self.item("A", quantity=50, supplier=main)
+        a = self.item("A", quantity=1, threshold=3, supplier=main)  # low: the list shows 2 x 3 - 1 = 5
         self.missing(self.sent_order(main, (a, 5)), a)
         draft = [d for d in self.drafts() if d["supplier_id"] == backup["id"]][0]
         self.assertEqual(call(self.desk, "POST", f"/api/v1/inventory/orders/{draft['id']}/cancel").status_code, 200)
@@ -190,8 +198,8 @@ class BackupTests(OrderHelpers):
         self.use(loose, 2)  # low, nobody sells it: 2 x 2 - 1 = 3
         a = self.item("A", quantity=50, threshold=2, supplier=main)
         self.missing(self.sent_order(main, (a, 5)), a)
-        self.use(a, 49)  # low too, but it is already on the list
-        self.assertEqual(self.needs(), {loose["id"]: 3, a["id"]: 5})
+        self.use(a, 49)  # low: on the list once, with what it lacks (2 x 2 - 1)
+        self.assertEqual(self.needs(), {loose["id"]: 3, a["id"]: 3})
         call(self.desk, "POST", "/api/v1/inventory/orders/refill")
         self.assertEqual(self.draft_lines(main), {})
         r = call(self.desk, "GET", "/api/v1/inventory/orders")
@@ -235,7 +243,7 @@ class BackupTests(OrderHelpers):
 
     def test_another_place_cant_see_or_touch_the_list(self):
         main = self.supplier("Main Co")
-        a = self.item("A", quantity=50, supplier=main)
+        a = self.item("A", quantity=1, threshold=3, supplier=main)  # low: the list shows 2 x 3 - 1 = 5
         order = self.sent_order(main, (a, 5))
         self.missing(order, a)
         self.assertEqual(self.needs(self.b.client("owner")), {})

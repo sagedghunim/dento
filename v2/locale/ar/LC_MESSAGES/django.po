@@ -5353,9 +5353,6 @@ msgstr "المورد"
 msgid "Backup supplier (optional)"
 msgstr "مورد احتياطي (اختياري)"
 
-msgid "Most to keep (optional)"
-msgstr "أقصى كمية تتخزن (اختياري)"
-
 msgid "Order from"
 msgstr "طلب من"
 
@@ -5463,13 +5460,6 @@ msgid ""
 msgstr ""
 "لما صنف يوصل لحد التنبيه بيتضاف لطلب المورد بتاعه لوحده. راجع الطلب وابعته "
 "على واتساب."
-
-msgid ""
-"When the stock reaches the alert line, the item goes on its supplier's order"
-" up to this number (empty: twice the alert line)."
-msgstr ""
-"لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الرقم ده (لو فاضي:"
-" ضعف حد التنبيه)."
 
 msgid "Item: {name}"
 msgstr "الصنف: {name}"
@@ -5649,6 +5639,9 @@ msgstr "{item} وصل مع إنه كان اتنقل لطلب {name}. راجع ا
 msgid "{n} {unit} short"
 msgstr "ناقص {n} {unit}"
 
+msgid "Show {name} under Items"
+msgstr "افتح {name} في الأصناف"
+
 msgid "No supplier for this item · {n} {unit} needed"
 msgstr "ما فيش مورد للصنف ده · محتاج {n} {unit}"
 
@@ -5723,3 +5716,19 @@ msgstr "افتحه"
 
 msgid "Select all"
 msgstr "اختار الكل"
+
+msgid "of"
+msgstr "من"
+
+msgid "The most to keep (full stock)"
+msgstr "الحد الأقصى (المخزون الكامل)"
+
+msgid "The most to keep must be more than the alert number."
+msgstr "الحد الأقصى لازم يكون أكبر من رقم التنبيه."
+
+msgid ""
+"When the stock reaches the alert line, the item goes on its supplier's order"
+" up to the most to keep (empty: twice the alert line)."
+msgstr ""
+"لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الحد الأقصى (لو"
+" فاضي: ضعف حد التنبيه)."

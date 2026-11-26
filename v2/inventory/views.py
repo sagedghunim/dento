@@ -4,6 +4,7 @@ from core import paging, validate
 from core.api import Result, api
 from core.errors import ApiError
 from core.numbers import parse_int, parse_money
+from django.utils.translation import gettext as _
 
 from billing import visibility
 
@@ -50,6 +51,9 @@ def _item_values(data, partial):
             values[name] = validate.ident(data[name], name) if data[name] is not None else None
     if "max_qty" in data:
         values["max_qty"] = parse_int(data.get("max_qty"), "max_qty", 0, MAX_QTY)
+        if values["max_qty"] and "threshold" in values and values["max_qty"] <= values["threshold"]:
+            raise ApiError("invalid", _("The most to keep must be more than the alert number."),
+                           fields={"max_qty": "not_above_threshold"})
     return values
 
 

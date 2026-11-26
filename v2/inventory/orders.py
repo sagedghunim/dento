@@ -431,31 +431,31 @@ NEED_LIMIT = 200
 
 
 def needs(ctx):
-    """The "needs a supplier" list: items short with nobody to bring them (need_qty), then low items with no active
-    supplier on no open order (qty as refill counts it). Each item once."""
+    """The "needs a supplier" list: low items (as the items page marks them) that a supplier didn't bring (need_qty),
+    or with no active supplier on no open order. The qty is what the item lacks now, as refill counts it
+    (Saged, 2026-11-26: the number is the item's shortage, not what an old order missed). Each item once."""
     from core.i18n import pick
 
     rows = sql.rows(ctx, """
-        SELECT i.id, i.name, i.name_en, i.unit, i.need_qty, 'short' FROM "inventory_item" i
-         WHERE i.clinic_id = %s AND i.is_active AND i.need_qty > 0
-        UNION ALL
         SELECT i.id, i.name, i.name_en, i.unit,
-               GREATEST(CASE WHEN i.max_qty > 0 THEN i.max_qty ELSE 2 * i.threshold END - i.quantity, 1), 'no_supplier'
+               GREATEST(CASE WHEN i.max_qty > 0 THEN i.max_qty ELSE 2 * i.threshold END - i.quantity, 1),
+               CASE WHEN i.need_qty > 0 THEN 'short' ELSE 'no_supplier' END
           FROM "inventory_item" i
           LEFT JOIN "inventory_supplier" s ON s.clinic_id = i.clinic_id AND s.id = i.supplier_id AND s.is_active
                                           AND s.kind = 'supplier'
-         WHERE i.clinic_id = %s AND i.is_active AND i.need_qty = 0 AND i.quantity <= i.threshold AND s.id IS NULL
-           AND NOT EXISTS (SELECT 1 FROM "inventory_order_line" l
-                             JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
-                            WHERE l.clinic_id = i.clinic_id AND l.item_id = i.id AND o.status IN ('draft', 'sent'))
-         ORDER BY 2, 1 LIMIT %s""", [ctx.clinic_id, ctx.clinic_id, NEED_LIMIT])
+         WHERE i.clinic_id = %s AND i.is_active AND i.quantity <= i.threshold
+           AND (i.need_qty > 0 OR (s.id IS NULL AND NOT EXISTS (
+                 SELECT 1 FROM "inventory_order_line" l
+                   JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
+                  WHERE l.clinic_id = i.clinic_id AND l.item_id = i.id AND o.status IN ('draft', 'sent'))))
+         ORDER BY 2, 1 LIMIT %s""", [ctx.clinic_id, NEED_LIMIT])
     return [{"item_id": r[0], "name": pick(r[1], r[2]), "unit": r[3], "qty": r[4], "kind": r[5]} for r in rows]
 
 
 def need_count(ctx):
     """The side bar's count of items nobody will bring (the partial index)."""
-    return sql.row(ctx, 'SELECT count(*) FROM "inventory_item" WHERE clinic_id = %s AND need_qty > 0 AND is_active',
-                   [ctx.clinic_id])[0]
+    return sql.row(ctx, 'SELECT count(*) FROM "inventory_item" WHERE clinic_id = %s AND need_qty > 0 AND is_active '
+                        "AND quantity <= threshold", [ctx.clinic_id])[0]
 
 
 def pick_supplier(ctx, item_id, supplier_id, qty):

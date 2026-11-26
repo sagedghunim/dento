@@ -40,6 +40,28 @@ async function reload() {
 
 // A received order (orders.js) changes the stock: the cards come again.
 window.addEventListener("hamada:stock-changed", () => { if (holder) reload(); });
+// A name in "need a supplier" (orders.js) brings its card into view, wherever it is in the list (Saged, 2026-11-26).
+window.addEventListener("hamada:show-item", async (event) => {
+  if (!holder) return;
+  if (showRemoved) {
+    showRemoved = false;
+    if (removedButton) removedButton.setAttribute("aria-pressed", "false");
+    await reload();
+  }
+  if (filterInput) filterInput.value = "";
+  if (lowButton) lowButton.setAttribute("aria-pressed", "false");
+  applyFilter();
+  const card = [...holder.querySelectorAll("[data-item]")].find((node) => itemOf(node).id === event.detail.id);
+  if (!card) return;
+  const title = card.querySelector(".inv-name");
+  title.tabIndex = -1;
+  title.focus({ preventScroll: true });
+  card.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  card.classList.remove("found");
+  void card.offsetWidth;  // the mark plays again on a second tap
+  card.classList.add("found");
+  setTimeout(() => card.classList.remove("found"), 2500);
+});
 if (filterInput) filterInput.addEventListener("input", applyFilter);
 if (lowButton) lowButton.addEventListener("click", () => {
   lowButton.setAttribute("aria-pressed", String(lowButton.getAttribute("aria-pressed") !== "true"));
@@ -230,8 +252,8 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
     if (field("supplier_id")) {  // design H1
       field("supplier_id").value = item.supplier_id || "";
       field("backup_supplier_id").value = item.backup_supplier_id || "";
-      field("max_qty").value = item.max_qty ? String(item.max_qty) : "";
     }
+    field("max_qty").value = item.max_qty ? String(item.max_qty) : "";
     if (item.name_en || item.category || item.sku || item.notes || item.allow_negative || item.section_id || item.supplier_id) dialog.querySelector("details").open = true;
   },
   request(item) {
@@ -251,9 +273,11 @@ const itemDialog = setup("item-dialog", ({ dialog, form, field, submitter }) => 
       v.backup_supplier_id = field("backup_supplier_id").value ? Number(field("backup_supplier_id").value) : null;
       if (v.backup_supplier_id && !v.supplier_id) { submitter.say(t("ord_need_main_supplier")); return null; }
       if (v.backup_supplier_id && v.backup_supplier_id === v.supplier_id) { submitter.say(t("ord_backup_same")); return null; }
-      v.max_qty = parseWhole(field("max_qty").value || "0");
-      if (v.max_qty === null) { submitter.say(t("bad_qty")); return null; }
     }
+    // The most to keep sits by the alert line ("28 of 40", Saged 2026-11-26); empty is 0: twice the alert line.
+    v.max_qty = parseWhole(field("max_qty").value || "0");
+    if (v.max_qty === null) { submitter.say(t("bad_qty")); field("max_qty").focus(); return null; }
+    if (v.max_qty && v.max_qty <= v.threshold) { submitter.say(t("inv_max_above_alert")); field("max_qty").focus(); return null; }
     if (!item) {
       v.quantity = parseWhole(field("quantity").value || "0");
       if (v.quantity === null) { submitter.say(t("bad_qty")); return null; }

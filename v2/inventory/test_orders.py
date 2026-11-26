@@ -55,6 +55,11 @@ class OrderHelpers(M2TestCase):
 
 
 class OrderTests(OrderHelpers):
+    def test_the_most_to_keep_must_be_above_the_alert_number(self):
+        r = call(self.owner, "POST", "/api/v1/inventory/items", {"name": "Gloves", "threshold": 10, "max_qty": 10})
+        self.assertEqual((r.status_code, r.json()["error"]["fields"]), (400, {"max_qty": "not_above_threshold"}))
+        self.assertEqual(self.item("Gloves", threshold=10, max_qty=40)["max_qty"], 40)
+
     # --- Refill ---
 
     def test_low_stock_puts_the_item_on_its_suppliers_draft_once(self):

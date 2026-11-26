@@ -17,7 +17,7 @@
       {% elif item.low %}<span class="pill red"><svg class="icon"><use href="#i-alert"/></svg>{% translate "Low stock" %}</span>
       {% else %}<span class="pill teal"><svg class="icon"><use href="#i-check"/></svg>{% translate "In stock" %}</span>{% endif %}
     </div>
-    <p class="inv-stock"><bdi class="ltr num">{{ item.quantity|digits }}</bdi> <small><bdi dir="auto">{{ item.unit }}</bdi></small></p>
+    <p class="inv-stock"><bdi class="ltr num">{{ item.quantity|digits }}</bdi>{% if item.max_qty %} <small>{% translate "of" %} <bdi class="ltr num">{{ item.max_qty|digits }}</bdi></small>{% endif %} <small><bdi dir="auto">{{ item.unit }}</bdi></small></p>
     <p class="inv-meta">{% if item.unit_cost %}{% translate "Unit cost:" %} {{ item.unit_cost|money }} · {% endif %}{% translate "Alert at:" %} <bdi class="ltr num">{{ item.threshold|digits }}</bdi></p>
     <progress class="inv-bar{% if item.low %} low{% endif %}" max="{{ item.bar_max }}" value="{{ item.bar_value }}" aria-hidden="true"></progress>
     <div class="inv-actions">

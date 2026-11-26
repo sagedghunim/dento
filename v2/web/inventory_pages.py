@@ -52,8 +52,9 @@ def _items_context(ctx, removed=False):
         item["json"] = json.dumps({k: item[k] for k in (
             "id", "name", "name_ar", "name_en", "category", "sku", "unit", "quantity", "threshold", "unit_cost", "notes",
             "allow_negative", "section_id", "is_active", "supplier_id", "backup_supplier_id", "max_qty")}, ensure_ascii=False)
-        # The bar shows the stock against four times the minimum, as the demo does (never wider than full).
-        top = max(item["threshold"] * 4, item["quantity"], 1)
+        # The bar shows the stock against the most to keep when the clinic set one ("28 of 40", Saged 2026-11-26),
+        # else against four times the minimum, as the demo does (never wider than full).
+        top = max(item["max_qty"] or item["threshold"] * 4, item["quantity"], 1)
         item["bar_max"] = top
         item["bar_value"] = max(item["quantity"], 0)
     low = [i for i in items if i["is_active"] and i["low"]]
