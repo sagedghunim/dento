@@ -31,4 +31,8 @@ urlpatterns = [
     path("api/v1/inventory/orders/<int:order_id>/send", ov.send_view),
     path("api/v1/inventory/orders/<int:order_id>/cancel", ov.cancel_view),
     path("api/v1/inventory/orders/<int:order_id>/receive", ov.receive_view),
+    path("api/v1/inventory/orders/<int:order_id>/missing", ov.missing_view),
+    path("api/v1/inventory/needs", ov.needs_view),
+    path("api/v1/inventory/needs/<int:item_id>/order", ov.pick_view),
+    path("api/v1/inventory/needs/<int:item_id>/dismiss", ov.dismiss_view),
 ]

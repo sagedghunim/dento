@@ -8,6 +8,12 @@
     </div>
   </div>
   <p class="card-sub">{% translate "When an item reaches its alert line it goes on its supplier's order by itself. Check the order, then send it on WhatsApp." %}</p>
+  {# Short items nobody is bringing (design H1 backup); orders.js fills it and hides it when empty. #}
+  <div class="notice needs-box" data-needs hidden>
+    <h3 id="needs-title" tabindex="-1">{% translate "Need a supplier" %} <span class="num" data-needs-count></span></h3>
+    <p class="muted">{% translate "These items are short and no supplier is bringing them. Pick who brings each one." %}</p>
+    <ul class="need-list" aria-labelledby="needs-title" data-needs-list></ul>
+  </div>
   <div class="chips" role="group" aria-label="{% translate "Which orders" %}">
     <button type="button" class="chip-btn" data-orders-state="open" aria-pressed="true">{% translate "Open" %}</button>
     <button type="button" class="chip-btn" data-orders-state="closed" aria-pressed="false">{% translate "Received or cancelled" %}</button>

@@ -62,6 +62,10 @@ EXPECTED = {
     ("POST", "api/v1/inventory/orders/<int:order_id>/send"): ("inventory.order",),
     ("POST", "api/v1/inventory/orders/<int:order_id>/cancel"): ("inventory.order",),
     ("POST", "api/v1/inventory/orders/<int:order_id>/receive"): ("inventory.order",),
+    ("POST", "api/v1/inventory/orders/<int:order_id>/missing"): ("inventory.order",),
+    ("GET", "api/v1/inventory/needs"): ("inventory.order",),
+    ("POST", "api/v1/inventory/needs/<int:item_id>/order"): ("inventory.order",),
+    ("POST", "api/v1/inventory/needs/<int:item_id>/dismiss"): ("inventory.order",),
     ("POST", "api/v1/inventory/defaults"): ("inventory.manage",),
     # Packages (Saged, 2026-11-25)
     # F6, F8

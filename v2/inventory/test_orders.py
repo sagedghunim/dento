@@ -11,7 +11,9 @@ from finance.models import Expense
 from inventory.models import Item, Order
 
 
-class OrderTests(M2TestCase):
+class OrderHelpers(M2TestCase):
+    """The calls the order tests share (no tests of its own)."""
+
     def supplier(self, name="Dental Co", phone="01001234567"):
         r = call(self.owner, "POST", "/api/v1/inventory/suppliers", {"name": name, "phone": phone})
         self.assertEqual(r.status_code, 201, r.content)
@@ -51,6 +53,8 @@ class OrderTests(M2TestCase):
         with clinic_transaction(self.a.id, self.a.shard):
             Membership.objects.filter(clinic_id=self.a.id, id=membership.id).update(revoked=["money.view"])
 
+
+class OrderTests(OrderHelpers):
     # --- Refill ---
 
     def test_low_stock_puts_the_item_on_its_suppliers_draft_once(self):
@@ -210,7 +214,7 @@ class OrderTests(M2TestCase):
         self.assertEqual((stored.quantity, stored.unit_cost), (15, 4000))
         self.assertEqual(call(self.desk, "GET", "/api/v1/inventory/suppliers").json()["suppliers"][0]["owed"], None)
 
-    def test_a_short_delivery_stays_open_and_closing_it_refills_the_rest(self):
+    def test_a_short_delivery_stays_open_and_closing_it_lists_the_rest(self):
         supplier = self.supplier()
         item = self.item(quantity=3, threshold=2, supplier=supplier)
         self.use(item, 2)  # 1: on the draft for 3
@@ -223,7 +227,10 @@ class OrderTests(M2TestCase):
                          (201, "sent", 1), r.content)
         r = call(self.owner, "POST", url, {"lines": [{"item_id": item["id"], "qty": 0}], "close": True})
         self.assertEqual((r.status_code, r.json()["order"]["status"]), (201, "done"), r.content)
-        self.assertEqual(len(self.drafts()), 1)  # still low (2 <= 2): back on a new draft
+        # Not back to the supplier who didn't bring it (design H1 backup): no backup, so the 2 short go to the list.
+        self.assertEqual(self.drafts(), [])
+        needs = call(self.desk, "GET", "/api/v1/inventory/needs").json()["items"]
+        self.assertEqual([(n["item_id"], n["qty"]) for n in needs], [(item["id"], 2)])
 
     def test_more_than_ordered_is_allowed_and_a_repeat_key_receives_once(self):
         supplier = self.supplier()

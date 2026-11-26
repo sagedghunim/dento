@@ -170,6 +170,9 @@ def update_item(ctx, item_id, values):
     if item["supplier_id"] and item["supplier_id"] != supplier_id:
         from . import orders
 
+        # Someone brings it now: off the "needs a supplier" list (design H1 backup), and onto the draft if low.
+        sql.run(ctx, 'UPDATE "inventory_item" SET need_qty = 0 WHERE clinic_id = %s AND id = %s AND need_qty > 0',
+                [ctx.clinic_id, item_id])
         orders.refill(ctx, [item_id])  # a supplier newly set on a low item (design H1)
     return item
 

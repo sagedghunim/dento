@@ -1,35 +1,33 @@
 # HANDOFF
 
 ## Project
-- Dento / Hamada clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql), plain JS front end, Arabic RTL. Live: dento-jet.vercel.app.
+Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql, RLS), plain JS front end, Arabic RTL first.
 
 ## State now
-- **Done, committed (8baed5e), pushed, deployed, live:** before going in (booked/waiting), a refund gives back ALL of the visit's money in one action (every payment), voids the bill and cancels the visit (off the book / out of the waiting room). A part gives `refund_all`; more than paid gives `over_refund`. The bill is never lowered by a refund (lower_bill removed). Money paid over the bill goes back alone (give-back / over refund) and the patient stays. After going in: only money paid over the bill. No-show: deposit only with the `deposit_back_no_show` switch.
-- Full suite: 862 tests OK on PostgreSQL.
-- Flaky, old: scheduling TodayTests `test_queues_counts_and_money_only_with_finances_view` (ordering).
-- Nothing half-done.
+- Works (local, NOT committed, NOT deployed): supplier backup feature (design `docs/v2/design/app-h1-supplier-backup.md`, panel + chief judge approved).
+  - Backend: Supplier.backup, OrderLine.missing/is_backup, Item.need_qty; "مش عنده" endpoint, needs list, pick supplier, dismiss; receive/cancel route short qty to the item's backup → supplier's backup → the list.
+  - Front end: "مش عنده" button + "ناقص N" on sent order lines; moved/late messages on receive; "محتاجين مورد" box on the orders page (qty, supplier pick list with "+ مورد جديد", اطلب, مش محتاجه); backup supplier select in the supplier dialog; badge = drafts + needs.
+  - Frontend review (senior-frontend) done; fixes 1,2,3,5 applied (aria on two taps, focus after a row goes, stale needs response, item name fallback). Skipped 4 (counts differ) and 6 (alert on every receipt too loud).
+- Tests: full suite 880, all pass (route list updated for the 4 new endpoints).
+- Not yet looked at in a real browser.
 
 ## Decisions
-- A refund before going in = the whole visit cancelled; no partial refunds then (Saged, 2026-11-26).
-- An old pending request carrying `lower_bill` is ignored when approved.
-- **Supplier backup plan APPROVED by Saged (2026-11-26)**, to be built next.
+- Item's own backup first, then the supplier's backup; one step only; a short backup line goes to the list.
+- Moved qty = exactly what is short.
+- Late receipt on a moved line is allowed and reported (alert names the backup supplier's order).
+- Any receipt lowers need_qty; setting an item's supplier clears it; refill skips need_qty > 0 items.
 
 ## Key paths
-- billing/services.py `refundable()`, `refund()`, `_refund_visit()`, `check_refund_request`; scheduling/services.py `cancel_refunded()`
-- pay.js (whole mode), _dialog_pay.html `data-refund-all`, web/alerts.py
-- Tests: `cd v2`, then `export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_x && .venv/Scripts/python.exe manage.py test --noinput` (about 9 min; run in background)
-- Translations: no msgfmt; compile with polib (`p.save_as_mofile`). django.po is CRLF.
-- Deploy is manual: scratchpad `bfcb25bc-.../scratchpad/deploy5.sh` (migrate + vercel --prod), then open dento-jet in Brave.
-- Many files are CRLF: edit with Edit or Python `newline=""`, never `sed -i`.
+- `v2/inventory/orders.py`, `order_views.py`, `urls.py`, `models.py`, migrations `0010_supplier_backup.py`, `0011_validate_supplier_backup.py` (applied locally only)
+- `v2/inventory/test_backup.py`, `test_orders.py`, `v2/reports/test_routes.py`
+- `v2/web/static/js/orders.js`, `templates/web/_orders_part.html`, `_order_dialogs.html`, `_strings.html`, `static/css/app.css`, `v2/web/templatetags/hamada.py`
+- Arabic: `v2/locale/ar/LC_MESSAGES/django.po` (CRLF; append entries, do not resave with polib), compile with polib `save_as_mofile`
+- Tests: `cd v2; export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_x && .venv/Scripts/python.exe manage.py test --noinput`
+- Local site: 127.0.0.1:8002; live: dento-jet.vercel.app (deploy is manual via the deploy script)
 
 ## Next step
-- Build the approved supplier backup plan (full panel review: it touches money and the data model):
-  1. Supplier.backup with a one-step rule (a backup has no backup).
-  2. Missing quantity on order lines.
-  3. On receive, short items move to the backup supplier automatically.
-  4. A "مش عنده" button on each order line.
-  5. A "ناقص ومحتاج مورد" list with a supplier pick list and add-supplier in place.
+Open 127.0.0.1:8002 in Brave → Orders: check the "مش عنده" button, the "محتاجين مورد" box and the backup select at 1280px and 390px; then ask Saged to commit and deploy (migrate + vercel --prod), then open dento-jet in Brave.
 
 ## Open questions
-- Show the audit `cancelled` flag in the alert text? (optional; the `lowered` readers in web/alerts.py are dead code for new rows)
-- Parked: booked-discount chips in `stash@{0}`.
+- Deferred: a version check on edit_draft; backup chains longer than one step.
+- After this: remind Saged about before/after photos and the feature shortlist (B then A).

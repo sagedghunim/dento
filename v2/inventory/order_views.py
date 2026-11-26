@@ -36,6 +36,8 @@ def _supplier_values(data, partial):
         values["visit_days"] = sorted(set(days))
     if "visit_time" in data:
         values["visit_time"] = _clock(data["visit_time"])
+    if "backup_id" in data:  # design H1 backup: null clears it
+        values["backup_id"] = None if data["backup_id"] in (None, "") else validate.ident(data["backup_id"], "backup_id")
     return values
 
 
@@ -140,10 +142,12 @@ def orders_view(request, ctx, data):
     if state not in ("open", "closed"):
         raise ApiError("invalid", "state must be open or closed", fields={"state": "choice"})
     if state == "open":
-        return {"orders": orders.orders(ctx, state), "next": None, "drafts": orders.draft_count(ctx)}
+        return {"orders": orders.orders(ctx, state), "next": None, "drafts": orders.draft_count(ctx),
+                "needs": orders.need_count(ctx)}
     rows = orders.orders(ctx, state, CLOSED_PAGE + 1, paging.time_cursor(request))
     found = paging.page(rows, CLOSED_PAGE, lambda o: paging.encode_time(o["created_at"], o["id"]))
-    return {"orders": found["items"], "next": found["next"], "drafts": orders.draft_count(ctx)}
+    return {"orders": found["items"], "next": found["next"], "drafts": orders.draft_count(ctx),
+            "needs": orders.need_count(ctx)}
 
 
 @api("POST", perm="inventory.order", replay=_replay_order)
@@ -235,6 +239,42 @@ def receive_view(request, ctx, data, order_id):
         paid = validate.choice(data, "paid", orders.PAID)
         if paid == "drawer":
             ctx.require("cash.collect")
-    order, expense = orders.receive(ctx, order_id, lines, paid, validate.boolean(data, "close", False))
-    return Result({"order": order, "expense_id": expense["id"] if expense else None}, status=201, target_type="order",
-                  target_id=order_id)
+    order, expense, moved, late = orders.receive(ctx, order_id, lines, paid, validate.boolean(data, "close", False))
+    return Result({"order": order, "expense_id": expense["id"] if expense else None, "moved": moved, "late": late},
+                  status=201, target_type="order", target_id=order_id)
+
+
+# --- The backup and the "needs a supplier" list (design H1 backup) ---------------------------------------------
+
+
+@api("POST", perm="inventory.order")
+def missing_view(request, ctx, data, order_id):
+    """POST {item_id}: "مش عنده" on a sent order's line. `moved` says where the rest went (empty on a repeat)."""
+    order_id = _order_id(order_id)
+    order, moved = orders.not_available(ctx, order_id, validate.ident(data.get("item_id"), "item_id"))
+    return Result({"order": order, "moved": moved}, target_type="order", target_id=order_id)
+
+
+@api("GET", perm="inventory.order")
+def needs_view(request, ctx, data):
+    return {"items": orders.needs(ctx)}
+
+
+def _need_item(value):
+    return validate.path_id(value, orders.stock.not_found("item"))
+
+
+@api("POST", perm="inventory.order")
+def pick_view(request, ctx, data, item_id):
+    """POST {supplier_id, qty}: the item goes on that supplier's draft. A repeat answers the order it is on (200)."""
+    item_id = _need_item(item_id)
+    order, created = orders.pick_supplier(ctx, item_id, validate.ident(data.get("supplier_id"), "supplier_id"),
+                                          parse_int(data.get("qty"), "qty", 1, MAX_QTY))
+    return Result({"order": order}, status=201 if created else 200, target_type="order", target_id=order["id"])
+
+
+@api("POST", perm="inventory.order")
+def dismiss_view(request, ctx, data, item_id):
+    item_id = _need_item(item_id)
+    orders.dismiss_need(ctx, item_id)
+    return Result({"items": orders.needs(ctx)}, target_type="item", target_id=item_id)

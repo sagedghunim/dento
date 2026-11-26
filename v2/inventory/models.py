@@ -49,6 +49,8 @@ class Item(models.Model):
     supplier = _ref("inventory.Supplier", null=True)
     backup_supplier = _ref("inventory.Supplier", null=True)
     max_qty = models.IntegerField(default=0, db_default=0)  # what an order fills up to; 0 = twice the minimum
+    # Short with nobody to bring it (design H1 backup): the "needs a supplier" list. Never set by stock use.
+    need_qty = models.IntegerField(default=0, db_default=0)
 
     class Meta:
         db_table = "inventory_item"
@@ -63,9 +65,13 @@ class Item(models.Model):
             models.CheckConstraint(condition=~Q(supplier=F("backup_supplier")), name="item_backup_not_supplier"),
             _fk("supplier", "inventory.Supplier", "item_supplier_fk"),
             _fk("backup_supplier", "inventory.Supplier", "item_backup_supplier_fk"),
+            # Added NOT VALID, validated in 0011 (design H1 backup).
+            models.CheckConstraint(condition=Q(need_qty__gte=0), name="item_need_qty_valid"),
         ]
         indexes = [models.Index(fields=["clinic", "supplier"], condition=Q(supplier__isnull=False),
-                                name="item_supplier")]
+                                name="item_supplier"),
+                   # The side bar's count of items nobody will bring; only those rare writes leave HOT.
+                   models.Index(fields=["clinic"], condition=Q(need_qty__gt=0), name="item_need")]
         # No partial low-stock index (design 4.7): it would make every stock use a non-HOT update.
 
 
@@ -145,6 +151,9 @@ class Supplier(models.Model):
     # and an optional time of day: the clinic's local clock time, not UTC (no date to convert it with).
     visit_days = models.SmallIntegerField(default=0, db_default=0)
     visit_time = models.TimeField(null=True, blank=True)
+    # Who to ask when this one hasn't got an item (design H1 backup): one step only, an item's own backup first.
+    backup = models.ForeignKey("self", on_delete=models.PROTECT, db_constraint=False, db_index=False,
+                               related_name="+", null=True, blank=True)
 
     class Meta:
         db_table = "inventory_supplier"
@@ -155,6 +164,8 @@ class Supplier(models.Model):
             models.CheckConstraint(condition=Q(kind__in=SUPPLIER_KINDS), name="supplier_kind_valid"),
             models.CheckConstraint(condition=Q(phone__regex=r"^[0-9]*$"), name="supplier_phone_digits"),
             models.CheckConstraint(condition=Q(visit_days__gte=0, visit_days__lte=127), name="supplier_visit_days_valid"),
+            models.CheckConstraint(condition=~Q(backup=F("id")), name="supplier_backup_not_self"),
+            _fk("backup", "inventory.Supplier", "supplier_backup_fk"),
         ]
 
 
@@ -192,12 +203,17 @@ class OrderLine(models.Model):
     qty = models.IntegerField()
     received = models.IntegerField(default=0)
     unit_price = models.BigIntegerField(default=0)  # piastres, from the last receipt
+    # What the supplier hasn't got ("مش عنده", or short when the order closed): it moved to a backup or the list.
+    missing = models.IntegerField(default=0, db_default=0)
+    # Put here by a backup move or picked by hand from the list: short again, it goes to the list (one step).
+    is_backup = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         db_table = "inventory_order_line"
         constraints = [
             models.UniqueConstraint(fields=["clinic", "order", "item"], name="order_line_uniq"),
             models.CheckConstraint(condition=Q(qty__gt=0, received__gte=0, unit_price__gte=0), name="order_line_valid"),
+            models.CheckConstraint(condition=Q(missing__gte=0, missing__lte=F("qty")), name="order_line_missing_valid"),
             _fk("order", "inventory.Order", "order_line_order_fk"),
             _fk("item", "inventory.Item", "order_line_item_fk"),
         ]

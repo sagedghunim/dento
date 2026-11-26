@@ -90,12 +90,13 @@ def alerts_unseen(ctx):
 
 @register.simple_tag
 def order_drafts(ctx):
-    """Purchase orders waiting to be sent, for the side bar (design H1): one count on the drafts' index."""
+    """Purchase orders waiting to be sent plus items nobody will bring, for the side bar (design H1 and H1 backup):
+    one count on each partial index."""
     if ctx is None or not ctx.can("inventory.order"):
         return 0
     from inventory import orders
 
-    return orders.draft_count(ctx)
+    return orders.draft_count(ctx) + orders.need_count(ctx)
 
 
 @register.simple_tag

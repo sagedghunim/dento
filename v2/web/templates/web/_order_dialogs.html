@@ -111,6 +111,10 @@
       <div class="chips">{% for day, label in supplier_days %}<label class="chip"><input type="checkbox" name="visit_day" value="{{ day }}"><span>{{ label }}</span></label>{% endfor %}</div>
     </fieldset>
     <label class="field time-field">{% translate "At (optional)" %}<input name="visit_time" type="time" dir="ltr"></label>
+    {# When this supplier doesn't have an item, what is short goes to this one's order (design H1 backup). #}
+    <label class="field">{% translate "Backup supplier (optional)" %}<select name="backup_id" data-supplier-select>
+      <option value="">{% translate "None" %}</option>
+    </select></label>
     {# Tick the items this supplier brings: a ticked item moves here from any other supplier. #}
     <fieldset class="group">
       <legend id="supplier-items-title">{% translate "Items we order from this supplier" %} <span class="muted" data-link-count role="status"></span></legend>

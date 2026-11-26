@@ -111,7 +111,8 @@ async function loadOrders(more = false) {
   renderOrders(result.data.orders, more);
   ordersNext = result.data.next || null;
   if (ordersFoot) ordersFoot.hidden = !ordersNext;
-  showDrafts(result.data.drafts);
+  showDrafts((result.data.drafts || 0) + (result.data.needs || 0));
+  if (!more) loadNeeds();
 }
 if (moreButton) moreButton.addEventListener("click", () => { if (!moreButton.disabled) loadOrders(true); });
 
@@ -143,7 +144,8 @@ if (refillButton) refillButton.addEventListener("click", async () => {
 const plain = (text) => (text || "").toLocaleLowerCase().replace(/[ً-ْـ]/g, "")
   .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
 
-function picker(input, list, source, onPick) {
+// onPick may answer the text to leave in the field; onNew (optional) adds "+ New: <typed text>" at the end.
+function picker(input, list, source, onPick, onNew = null) {
   let shown = [];
   let active = -1;
   const mark = () => {
@@ -153,18 +155,26 @@ function picker(input, list, source, onPick) {
     else input.removeAttribute("aria-activedescendant");
   };
   const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+  const choose = (item) => {
+    const after = item.isNew ? onNew(item.name) : onPick(item);
+    input.value = typeof after === "string" ? after : "";
+    close();
+  };
   const open = () => {
     const q = plain(input.value.trim());
     shown = source().filter((item) => !q || plain(item.name).includes(q))
       .sort((a, b) => (q && plain(a.name).startsWith(q) ? 0 : 1) - (q && plain(b.name).startsWith(q) ? 0 : 1)).slice(0, 40);
+    const typed = input.value.trim();
+    if (onNew && typed && !shown.some((item) => plain(item.name) === q)) shown.push({ isNew: true, name: typed });
     list.replaceChildren(...shown.map((item, i) => {
       const li = el("li");
       li.id = `${list.id}-${i}`;
       li.setAttribute("role", "option");
-      const side = el("small", "muted", t("ord_have", { n: localDigits(item.quantity), unit: item.unit || "" }));
-      li.append(bdi(item.name), side);
+      if (item.isNew) li.append(t("ord_add_new"), " ", bdi(item.name));
+      else li.append(bdi(item.name));
+      if (item.quantity != null) li.append(el("small", "muted", t("ord_have", { n: localDigits(item.quantity), unit: item.unit || "" })));
       li.addEventListener("mousedown", (e) => e.preventDefault());
-      li.addEventListener("click", () => { onPick(item); input.value = ""; close(); });
+      li.addEventListener("click", () => choose(item));
       return li;
     }));
     if (!shown.length) {
@@ -191,7 +201,7 @@ function picker(input, list, source, onPick) {
       mark();
     } else if (event.key === "Enter") {
       event.preventDefault();  // never submits the form from the pick list
-      if (!list.hidden && shown[active]) { onPick(shown[active]); input.value = ""; close(); }
+      if (!list.hidden && shown[active]) choose(shown[active]);
     } else if (event.key === "Escape" && !list.hidden) {
       event.preventDefault();
       event.stopPropagation();
@@ -203,12 +213,27 @@ function picker(input, list, source, onPick) {
 
 // Two taps for what can't be undone: the first changes the words for a few seconds.
 function twoTaps(node) {
-  if (node.dataset.armed) { delete node.dataset.armed; node.textContent = node.dataset.label; return true; }
+  // A button with its own aria-label says "tap again" there too, or a screen reader never hears it.
+  const reset = () => {
+    delete node.dataset.armed;
+    node.textContent = node.dataset.label;
+    if (node.dataset.aria) { node.setAttribute("aria-label", node.dataset.aria); delete node.dataset.aria; }
+  };
+  if (node.dataset.armed) { reset(); return true; }
   node.dataset.label = node.textContent;
   node.dataset.armed = "1";
   node.textContent = t("ord_tap_again");
-  setTimeout(() => { if (node.dataset.armed) { delete node.dataset.armed; node.textContent = node.dataset.label; } }, 4000);
+  if (node.hasAttribute("aria-label")) { node.dataset.aria = node.getAttribute("aria-label"); node.setAttribute("aria-label", t("ord_tap_again")); }
+  setTimeout(() => { if (node.dataset.armed) reset(); }, 4000);
   return false;
+}
+
+// Where short quantities went (design H1 backup): the backup supplier's order, or the "need a supplier" list.
+const itemName = (id, fallback = "") => (items.find((i) => i.id === id) || {}).name || fallback || t("ord_an_item");
+function movedText(moved, fallback = "") {
+  return (moved || []).map((m) => (m.to === "supplier"
+    ? t("ord_moved_to", { item: itemName(m.item_id, fallback), n: localDigits(m.qty), name: m.supplier_name })
+    : t("ord_moved_list", { item: itemName(m.item_id, fallback), n: localDigits(m.qty) }))).join(" · ");
 }
 
 // --- one order (a draft is checked and sent here; a sent one received) ---
@@ -270,8 +295,15 @@ if (orderDialog) {
       li.append(main, side);
     } else {
       const got = line.received ? t("ord_got", { n: localDigits(line.received) }) : "";
-      main.append(el("p", "muted", [t("ord_asked", { n: localDigits(line.qty), unit: line.unit || "" }), got].filter(Boolean).join(" · ")));
+      const short = line.missing ? t("ord_missing_n", { n: localDigits(line.missing) }) : "";
+      main.append(el("p", "muted", [t("ord_asked", { n: localDigits(line.qty), unit: line.unit || "" }), got, short].filter(Boolean).join(" · ")));
       li.append(main);
+      // "He doesn't have it": what is still to come moves to the backup supplier or the list.
+      const left = line.qty - (line.received || 0) - (line.missing || 0);
+      if (current && current.status === "sent" && left > 0) {
+        li.append(button(t("ord_not_here"), { "data-not-here": String(line.item_id), "data-name": line.name,
+                                             "aria-label": t("ord_not_here_of", { name: line.name }) }));
+      }
     }
     return li;
   }
@@ -325,7 +357,37 @@ if (orderDialog) {
   lines.addEventListener("click", (event) => {
     const remove = event.target.closest("[data-remove-line]");
     if (remove && !orderDialog.dataset.busy && !submitter.unknown) remove.closest("li").remove();
+    const notHere = event.target.closest("[data-not-here]");
+    if (notHere) markMissing(notHere);
   });
+
+  async function markMissing(node) {
+    if (node.disabled || orderDialog.dataset.busy || !current || current.status !== "sent") return;
+    if (!twoTaps(node)) return;
+    const orderId = current.id;
+    lines.querySelectorAll("[data-not-here]").forEach((b) => { b.disabled = true; });
+    const result = await save("POST", `/api/v1/inventory/orders/${orderId}/missing`, { item_id: Number(node.dataset.notHere) },
+                              { key: newKey(), label: t("ord_not_here_of", { name: node.dataset.name }) });
+    lines.querySelectorAll("[data-not-here]").forEach((b) => { b.disabled = false; });
+    window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
+    if (!result.settled) {
+      submitter.say(t("ord_not_sure"));
+      const again = await get(`/api/v1/inventory/orders/${orderId}`);
+      if (isOk(again) && orderDialog.open && current && current.id === orderId) render(again.data.order);
+      loadOrders();
+      return;
+    }
+    if (!isOk(result)) { submitter.say(errorMessage(result, t("failed"))); return; }
+    if (orderDialog.open && current && current.id === orderId) {
+      render(result.data.order);
+      // The button is gone: keep the keyboard in the list (the next "doesn't have it", else the main button).
+      const next = lines.querySelector("[data-not-here]") || orderDialog.querySelector("[data-submit]:not([hidden])");
+      if (next) next.focus();
+    }
+    submitter.say("");
+    toast(movedText(result.data.moved, node.dataset.name) || t("ord_missing_done", { name: node.dataset.name }));
+    loadOrders();
+  }
 
   let loading = 0;
   openOrder = async (id, opener) => {
@@ -523,7 +585,12 @@ if (receiveDialog) {
       if (item) item.quantity += line.qty;
     }
     receiveDialog.close();
-    toast(t(result.data.order.status === "done" ? "ord_received_done" : "ord_received_part", { name: order.supplier_name }));
+    const moved = movedText(result.data.moved);
+    toast([t(result.data.order.status === "done" ? "ord_received_done" : "ord_received_part", { name: order.supplier_name }), moved]
+      .filter(Boolean).join(" · "));
+    // Came after it was moved to a backup supplier: that order may now bring it twice.
+    const late = (result.data.late || []).filter((l) => l.moved_to === "supplier");
+    if (late.length) alertMessage(late.map((l) => t("ord_late", { item: itemName(l.item_id), name: l.supplier_name })).join(" "));
     window.dispatchEvent(new CustomEvent("hamada:stock-changed"));
     loadOrders();
   });
@@ -579,6 +646,163 @@ if (newOrderDialog) {
     newOrderDialog.close();
     loadOrders();
     openOrder(result.data.order.id, ordersList);
+  });
+}
+
+// --- short items that nobody is bringing (design H1 backup): pick a supplier for each ---
+
+const needsBox = document.querySelector("[data-needs]");
+const needsList = document.querySelector("[data-needs-list]");
+const needsCount = document.querySelector("[data-needs-count]");
+let needsTicket = 0;
+
+async function loadNeeds() {
+  if (!needsBox) return;
+  const ticket = ++needsTicket;
+  const result = await get("/api/v1/inventory/needs");
+  if (ticket !== needsTicket || !isOk(result)) return;
+  renderNeeds(result.data.items);
+}
+
+function needText(need) {
+  const n = localDigits(need.qty);
+  return need.kind === "short" ? t("ord_need_short", { n, unit: need.unit || "" }) : t("ord_need_none", { n, unit: need.unit || "" });
+}
+
+function needRow(need) {
+  const li = el("li");
+  li.dataset.need = String(need.item_id);
+  li.dataset.name = need.name;
+  const main = el("div", "mat-main");
+  main.append(el("strong")); main.firstChild.append(bdi(need.name));
+  main.append(el("p", "muted"));
+  const qty = el("input", "qty-input");
+  Object.assign(qty, { dir: "ltr", inputMode: "numeric", autocomplete: "off", maxLength: 7 });
+  qty.setAttribute("aria-label", t("ord_qty_of", { name: need.name }));
+  const combo = el("div", "combo");
+  const sup = el("input");
+  Object.assign(sup, { dir: "auto", autocomplete: "off", maxLength: 120, placeholder: t("ord_supplier_ph") });
+  const listId = `need-sup-${need.item_id}`;
+  for (const [k, v] of Object.entries({ role: "combobox", "aria-expanded": "false", "aria-controls": listId, "aria-autocomplete": "list",
+                                        "aria-label": t("ord_supplier_for", { name: need.name }), "data-need-supplier": "" })) sup.setAttribute(k, v);
+  const drop = el("ul", "combo-list");
+  Object.assign(drop, { id: listId, hidden: true });
+  drop.setAttribute("role", "listbox");
+  combo.append(sup, drop);
+  const side = el("div", "row-actions wrap");
+  side.append(qty, el("span", "muted", need.unit || ""), combo, button(t("ord_need_order"), { "data-need-order": "" }, "btn"),
+              button(t("ord_need_dismiss"), { "data-need-dismiss": "", "aria-label": t("ord_need_dismiss_of", { name: need.name }) }));
+  const error = el("p", "form-error");
+  error.setAttribute("role", "alert");
+  li.append(main, side, error);
+  picker(sup, drop, () => suppliers.filter((x) => x.is_active), (x) => { li.dataset.supplier = String(x.id); error.textContent = ""; return x.name; },
+         perms.manage ? (name) => { newSupplier(li, name); return name; } : null);
+  sup.addEventListener("input", () => { delete li.dataset.supplier; });
+  return li;
+}
+
+// After a row goes, the keyboard moves to the next row (or the box's title), never to the page's start.
+function focusAfter(li) {
+  const next = li.nextElementSibling || li.previousElementSibling;
+  const target = next && next !== li ? next.querySelector(".qty-input") : document.getElementById("needs-title");
+  if (target) target.focus();
+}
+
+function renderNeeds(list) {
+  if (!needsBox) return;
+  // Rows stay in place when the list comes again, so what is being typed in one is kept.
+  const want = new Set(list.map((need) => String(need.item_id)));
+  for (const li of [...needsList.children]) if (!want.has(li.dataset.need)) li.remove();
+  for (const need of list) {
+    let li = needsList.querySelector(`[data-need="${need.item_id}"]`);
+    if (!li) { li = needRow(need); needsList.append(li); }
+    li.querySelector(".mat-main p").textContent = needText(need);
+    const qty = li.querySelector(".qty-input");
+    if (!qty.value || qty.value === li.dataset.qtyShown) { qty.value = String(need.qty); li.dataset.qtyShown = qty.value; }
+    li.querySelector("[data-need-dismiss]").hidden = need.kind !== "short";
+  }
+  needsBox.hidden = !list.length;
+  if (needsCount) needsCount.textContent = list.length ? `(${localDigits(list.length)})` : "";
+}
+
+async function newSupplier(li, name) {
+  const error = li.querySelector(".form-error");
+  const go = li.querySelector("[data-need-order]");
+  const sup = li.querySelector("[data-need-supplier]");
+  go.disabled = true;
+  error.textContent = "";
+  const result = await save("POST", "/api/v1/inventory/suppliers", { name }, { key: newKey(), label: t("ord_supplier_saved", { name }) });
+  go.disabled = false;
+  if (!isOk(result)) {
+    error.textContent = result.settled ? errorMessage(result, t("failed")) : t("ord_not_sure");
+    if (sup.value === name) sup.value = "";
+    loadSuppliers();
+    return;
+  }
+  if (sup.value === name) li.dataset.supplier = String(result.data.supplier.id);
+  toast(t("ord_supplier_saved", { name: result.data.supplier.name }));
+  loadSuppliers();
+}
+
+async function orderNeed(li) {
+  const error = li.querySelector(".form-error");
+  const go = li.querySelector("[data-need-order]");
+  const sup = li.querySelector("[data-need-supplier]");
+  if (go.disabled) return;
+  const qty = parseWhole(li.querySelector(".qty-input").value);
+  if (!qty || qty < 1) { error.textContent = t("ord_need_qty"); li.querySelector(".qty-input").focus(); return; }
+  let id = Number(li.dataset.supplier || 0);
+  if (!id) {
+    const typed = plain(sup.value.trim());
+    const match = typed && suppliers.find((x) => x.is_active && plain(x.name) === typed);
+    if (match) id = match.id;
+  }
+  if (!id) { error.textContent = t("ord_pick_supplier"); sup.focus(); return; }
+  go.disabled = true;
+  error.textContent = "";
+  const result = await save("POST", `/api/v1/inventory/needs/${li.dataset.need}/order`, { supplier_id: id, qty },
+                            { key: newKey(), label: t("ord_need_order_of", { name: li.dataset.name }) });
+  go.disabled = false;
+  window.dispatchEvent(new CustomEvent("hamada:pending-changed"));
+  if (!result.settled) { error.textContent = t("ord_not_sure"); loadOrders(); return; }
+  if (!isOk(result)) { error.textContent = errorMessage(result, t("failed")); return; }
+  needsTicket++;  // a list asked for before this must not bring the row back
+  toast(t("ord_need_done", { item: li.dataset.name, name: result.data.order.supplier_name }));
+  focusAfter(li);
+  li.remove();
+  if (!needsList.children.length) needsBox.hidden = true;
+  loadOrders();
+}
+
+async function dismissNeed(li, node) {
+  const error = li.querySelector(".form-error");
+  if (node.disabled || !twoTaps(node)) return;
+  node.disabled = true;
+  const result = await save("POST", `/api/v1/inventory/needs/${li.dataset.need}/dismiss`, {},
+                            { key: newKey(), label: t("ord_need_dismiss_of", { name: li.dataset.name }) });
+  node.disabled = false;
+  if (!result.settled) { error.textContent = t("ord_not_sure"); loadOrders(); return; }
+  if (!isOk(result)) { error.textContent = errorMessage(result, t("failed")); return; }
+  needsTicket++;
+  focusAfter(li);
+  renderNeeds(result.data.items);
+  loadOrders();
+}
+
+if (needsList) {
+  needsList.addEventListener("click", (event) => {
+    const li = event.target.closest("[data-need]");
+    if (!li) return;
+    if (event.target.closest("[data-need-order]")) orderNeed(li);
+    const dismiss = event.target.closest("[data-need-dismiss]");
+    if (dismiss) dismissNeed(li, dismiss);
+  });
+  // Enter in the quantity moves on to the supplier.
+  needsList.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !event.target.classList.contains("qty-input")) return;
+    event.preventDefault();
+    const li = event.target.closest("[data-need]");
+    if (li) li.querySelector("[data-need-supplier]").focus();
   });
 }
 
@@ -745,6 +969,18 @@ if (supplierDialog) {
       field("visit_time").value = supplier.visit_time || "";
       dayBoxes().forEach((box) => { box.checked = (supplier.visit_days || []).includes(Number(box.value)); });
     }
+    // The backup: any other supplier; one that stopped is still shown when it is the one chosen.
+    // (A page from before the backup field has none: the dialog still opens.)
+    const backup = field("backup_id");
+    const chosen = supplier && supplier.backup_id ? String(supplier.backup_id) : "";
+    if (backup) {
+      if (chosen && ![...backup.options].some((o) => o.value === chosen)) {
+        const gone = suppliers.find((x) => String(x.id) === chosen);
+        if (gone) backup.append(new Option(gone.name, chosen));
+      }
+      [...backup.options].forEach((o) => { o.hidden = o.disabled = Boolean(supplier) && o.value === String(supplier.id); });
+      backup.value = chosen;
+    }
     linkedBefore = new Set(supplier ? items.filter((i) => i.supplier_id === supplier.id).map((i) => i.id) : []);
     linked = new Set(linkedBefore);
     linkFilter.value = "";
@@ -762,18 +998,22 @@ if (supplierDialog) {
       if (!v.name) { submitter.say(t("ord_need_name")); return; }
       const days = dayBoxes().filter((box) => box.checked).map((box) => Number(box.value)).sort((a, b) => a - b);
       const time = field("visit_time").value;
+      const backupField = field("backup_id");
+      const backupId = backupField && backupField.value ? Number(backupField.value) : (backupField ? null : editing && editing.backup_id) || null;
       if (editing) {
         v.is_active = field("is_active").checked;
         body = {};
         for (const [k, value] of Object.entries(v)) if (value !== (editing[k] ?? "")) body[k] = value;
         if (days.join() !== [...(editing.visit_days || [])].sort((a, b) => a - b).join()) body.visit_days = days;
         if (time !== (editing.visit_time || "")) body.visit_time = time;
+        if (backupId !== (editing.backup_id || null)) body.backup_id = backupId;
         if (!sameSet(linked, linkedBefore)) body.item_ids = [...linked];
         if (!Object.keys(body).length) { supplierDialog.close(); return; }
         method = "PATCH";
         url = `/api/v1/inventory/suppliers/${editing.id}`;
       } else {
         body = { ...v, visit_days: days, visit_time: time };
+        if (backupId) body.backup_id = backupId;
         if (linked.size) body.item_ids = [...linked];
       }
     }

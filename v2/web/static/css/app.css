@@ -1318,6 +1318,16 @@ button.chip-btn[aria-pressed="true"] { background: var(--teal-tint); border-colo
 
 /* Purchase orders (design H1): a short number box per line, the receive total first, the WhatsApp fallback. */
 .qty-input { width: 5.5em; min-height: 44px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; font: inherit; text-align: center; }
+/* Short items nobody is bringing (design H1 backup), on top of the purchase orders. */
+.needs-box { display: grid; gap: 6px; margin-block: 10px; }
+.needs-box h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+.needs-box > p { margin: 0; }
+.need-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.need-list > li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding-block: 8px; border-block-end: 1px solid var(--line); }
+.need-list > li:last-child { border-block-end: 0; }
+.need-list .combo { min-width: 11rem; flex: 1 1 11rem; }
+.need-list .combo input { width: 100%; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: var(--surface); }
+.need-list .form-error { flex-basis: 100%; }
 .small-field { width: 9em; margin: 0; }
 .warn-text { color: var(--warn-text); font-size: .9rem; font-weight: 700; flex-basis: 100%; }
 .receive-total { font-size: 1.2rem; font-weight: 800; margin-block-end: 8px; }

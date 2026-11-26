@@ -24,7 +24,7 @@ from summaries.services import Deltas
 
 from . import services as stock
 
-SUPPLIER_COLUMNS = "id, name, phone, notes, kind, is_active, created_at, visit_days, visit_time"
+SUPPLIER_COLUMNS = "id, name, phone, notes, kind, is_active, created_at, visit_days, visit_time, backup_id"
 SUPPLIER_TEXT = {"name": 120, "phone": 20, "notes": 300}
 PAID = ("drawer", "outside", "account")
 OPEN = ("draft", "sent")
@@ -117,14 +117,25 @@ def _supplier_savepoint(ctx, statement, params):
         raise
 
 
+def _check_backup(ctx, supplier_id, backup_id):
+    """A supplier's backup: none, or another active supplier of this place (400 / 404, never the CHECK or key)."""
+    if backup_id is None:
+        return
+    if backup_id == supplier_id:
+        raise ApiError("invalid", _("The backup supplier can't be the same as the supplier."),
+                       fields={"backup_id": "same"})
+    check_item_suppliers(ctx, backup_id, None)
+
+
 def create_supplier(ctx, values, kind="supplier", item_ids=None):
     visit = _visit_params(values)
+    _check_backup(ctx, None, values.get("backup_id"))
     found = _supplier_savepoint(ctx, f"""
         INSERT INTO "inventory_supplier" (clinic_id, name, phone, notes, kind, is_active, created_at, visit_days,
-                                          visit_time)
-        VALUES (%s, %s, %s, %s, %s, true, %s, %s, %s) RETURNING {SUPPLIER_COLUMNS}""", [
+                                          visit_time, backup_id)
+        VALUES (%s, %s, %s, %s, %s, true, %s, %s, %s, %s) RETURNING {SUPPLIER_COLUMNS}""", [
         ctx.clinic_id, values["name"], phone_digits(values.get("phone")), values.get("notes", ""), kind, timezone.now(),
-        visit.get("visit_days", 0), visit.get("visit_time")])
+        visit.get("visit_days", 0), visit.get("visit_time"), values.get("backup_id")])
     supplier = _supplier_row(found)
     record_change(ctx, "supplier.add", "supplier", supplier["id"], after={"name": supplier["name"], "kind": kind})
     if item_ids is not None:
@@ -138,6 +149,8 @@ def update_supplier(ctx, supplier_id, values, item_ids=None):
     if "phone" in values:
         values["phone"] = phone_digits(values["phone"])
     before = get_supplier(ctx, supplier_id)
+    if "backup_id" in values:
+        _check_backup(ctx, supplier_id, values["backup_id"])
     if values:
         columns = {**{k: v for k, v in values.items() if not k.startswith("visit_")}, **_visit_params(values)}
         assignments = ", ".join(f"{name} = %s" for name in columns)
@@ -202,7 +215,7 @@ def link_items(ctx, supplier_id, item_ids):
                 [ctx.clinic_id, unlinked, supplier_id])
     moved = [r[0] for r in sql.rows(ctx, """
         UPDATE "inventory_item"
-           SET supplier_id = %s,
+           SET supplier_id = %s, need_qty = 0,
                backup_supplier_id = CASE WHEN backup_supplier_id = %s THEN NULL ELSE backup_supplier_id END
          WHERE clinic_id = %s AND id = ANY(%s::bigint[]) AND supplier_id IS DISTINCT FROM %s RETURNING id""",
              [supplier_id, supplier_id, ctx.clinic_id, wanted, supplier_id])]
@@ -258,7 +271,7 @@ def refill(ctx, item_ids=None):
           FROM "inventory_item" i
           JOIN "inventory_supplier" s ON s.clinic_id = i.clinic_id AND s.id = i.supplier_id AND s.is_active
                                      AND s.kind = 'supplier'
-         WHERE i.clinic_id = %s{where} AND i.is_active AND i.quantity <= i.threshold
+         WHERE i.clinic_id = %s{where} AND i.is_active AND i.quantity <= i.threshold AND i.need_qty = 0
            AND NOT EXISTS (SELECT 1 FROM "inventory_order_line" l
                              JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
                             WHERE l.clinic_id = i.clinic_id AND l.item_id = i.id AND o.status IN ('draft', 'sent'))
@@ -269,19 +282,209 @@ def refill(ctx, item_ids=None):
     touched = []
     now = timezone.now()
     for supplier_id, lines in by_supplier.items():
-        order_id = sql.row(ctx, """
-            INSERT INTO "inventory_order" (clinic_id, supplier_id, status, note, created_at, created_by_id)
-            VALUES (%s, %s, 'draft', '', %s, NULL)
-            ON CONFLICT (clinic_id, supplier_id) WHERE status = 'draft'
-            DO UPDATE SET note = "inventory_order".note RETURNING id""", [ctx.clinic_id, supplier_id, now])[0]
+        order_id = _draft_for(ctx, supplier_id, now)
         _add_lines(ctx, order_id, dict(lines), replace=False)
         touched.append(order_id)
-    if touched and ctx.clinic.settings.get("orders_auto_send") and whatsapp.configured():
+    _auto_send(ctx, touched)
+    return touched
+
+
+def _auto_send(ctx, order_ids):
+    """The owner's auto-send switch: the drafts just touched go out after commit."""
+    if order_ids and ctx.clinic.settings.get("orders_auto_send") and whatsapp.configured():
         from .jobs import queue_auto_send
 
-        for order_id in touched:
+        for order_id in order_ids:
             transaction.on_commit(lambda o=order_id: queue_auto_send(ctx.clinic_id, ctx.alias, o), using=ctx.alias)
-    return touched
+
+
+def _draft_for(ctx, supplier_id, now):
+    """The supplier's one draft, found or made (and locked) by the INSERT ... ON CONFLICT."""
+    return sql.row(ctx, """
+        INSERT INTO "inventory_order" (clinic_id, supplier_id, status, note, created_at, created_by_id)
+        VALUES (%s, %s, 'draft', '', %s, NULL)
+        ON CONFLICT (clinic_id, supplier_id) WHERE status = 'draft'
+        DO UPDATE SET note = "inventory_order".note RETURNING id""", [ctx.clinic_id, supplier_id, now])[0]
+
+
+def _add_backup_lines(ctx, order_id, lines):
+    """Moved or picked quantities: added to a line already there, and the line becomes a backup line. A normal line
+    that takes a moved quantity counts as backup as a whole (accepted, design H1 backup): short again, all of it goes
+    to the list."""
+    values = ", ".join(["(%s, %s, %s, %s, 0, 0, 0, true)"] * len(lines))
+    sql.run(ctx, f"""
+        INSERT INTO "inventory_order_line" (clinic_id, order_id, item_id, qty, received, unit_price, missing, is_backup)
+        VALUES {values}
+        ON CONFLICT (clinic_id, order_id, item_id)
+        DO UPDATE SET qty = "inventory_order_line".qty + EXCLUDED.qty, is_backup = true""",
+            [p for item_id in sorted(lines) for p in (ctx.clinic_id, order_id, item_id, lines[item_id])])
+
+
+# --- The backup (design H1 backup) ------------------------------------------------------------------------------
+# Lock order: items (sorted, one statement) -> the source order (sent) -> its lines -> target drafts by supplier id.
+# Sources are always sent and targets always drafts, so no cycle.
+
+
+def _route(ctx, from_supplier_id, moves):
+    """Move short quantities one step: {item_id: (qty, from_a_backup_line)}, items already locked by the caller.
+
+    The item's own backup first, else the supplier's; it must be active, kind supplier and not the one that hasn't
+    got it. A backup line, or no backup, goes to the item's need_qty (the list). Returns what went where.
+    """
+    if not moves:
+        return []
+    ids = sorted(moves)
+    targets = {r[0]: (r[1], r[2]) for r in sql.rows(ctx, """
+        SELECT i.id, COALESCE(ib.id, sb.id), COALESCE(ib.name, sb.name)
+          FROM "inventory_item" i
+          LEFT JOIN "inventory_supplier" ib ON ib.clinic_id = i.clinic_id AND ib.id = i.backup_supplier_id
+                                           AND ib.is_active AND ib.kind = 'supplier' AND ib.id <> %s
+          LEFT JOIN "inventory_supplier" f ON f.clinic_id = i.clinic_id AND f.id = %s
+          LEFT JOIN "inventory_supplier" sb ON sb.clinic_id = i.clinic_id AND sb.id = f.backup_id
+                                           AND sb.is_active AND sb.kind = 'supplier' AND sb.id <> %s
+         WHERE i.clinic_id = %s AND i.id = ANY(%s::bigint[])""",
+                                                       [from_supplier_id, from_supplier_id, from_supplier_id,
+                                                        ctx.clinic_id, ids])}
+    by_supplier, to_list, moved = {}, {}, {}
+    for item_id in ids:
+        qty, from_backup = moves[item_id]
+        supplier_id, name = (None, None) if from_backup else targets.get(item_id, (None, None))
+        if supplier_id is None:
+            to_list[item_id] = qty
+        else:
+            by_supplier.setdefault(supplier_id, {})[item_id] = qty
+        moved[item_id] = {"item_id": item_id, "qty": qty, "to": "list" if supplier_id is None else "supplier",
+                          "supplier_id": supplier_id, "supplier_name": name}
+    if to_list:
+        sql.run(ctx, """
+            UPDATE "inventory_item" i SET need_qty = i.need_qty + m.qty
+              FROM unnest(%s::bigint[], %s::int[]) AS m(id, qty)
+             WHERE i.clinic_id = %s AND i.id = m.id""", [list(to_list), list(to_list.values()), ctx.clinic_id])
+    touched, now = [], timezone.now()
+    for supplier_id in sorted(by_supplier):
+        order_id = _draft_for(ctx, supplier_id, now)
+        _add_backup_lines(ctx, order_id, by_supplier[supplier_id])
+        touched.append(order_id)
+    _auto_send(ctx, touched)
+    found = [moved[i] for i in ids]
+    record_change(ctx, "order.backup", "supplier", from_supplier_id,
+                  after={"moved": [{k: m[k] for k in ("item_id", "qty", "supplier_id")} for m in found]})
+    return found
+
+
+def _lock_order_items(ctx, order_id, extra=()):
+    """Every item on the order (read unlocked: a sent order's lines don't change) plus `extra`, locked in one sorted
+    statement before the order, as the lock order wants. Inactive items too: they may still be short on the order."""
+    ids = {r[0] for r in sql.rows(ctx, 'SELECT item_id FROM "inventory_order_line" WHERE clinic_id = %s '
+                                       "AND order_id = %s", [ctx.clinic_id, order_id])} | set(extra)
+    if ids:
+        sql.rows(ctx, 'SELECT id FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[]) '
+                      "ORDER BY id FOR NO KEY UPDATE", [ctx.clinic_id, sorted(ids)])
+    return ids
+
+
+def _close_if_accounted(ctx, order_id, now):
+    """Sent -> done when every line is in or missing."""
+    return sql.row(ctx, """
+        UPDATE "inventory_order" o SET status = 'done', closed_at = %s
+         WHERE clinic_id = %s AND id = %s AND status = 'sent'
+           AND NOT EXISTS (SELECT 1 FROM "inventory_order_line" l WHERE l.clinic_id = o.clinic_id AND l.order_id = o.id
+                             AND l.received + l.missing < l.qty) RETURNING id""", [now, ctx.clinic_id, order_id])
+
+
+def not_available(ctx, order_id, item_id):
+    """"مش عنده" on a sent order's line: what is still to come is missing and moves one step. A repeat, or a tap
+    after the order closed, moves nothing. Returns (order, moved)."""
+    on_order = sql.row(ctx, 'SELECT o.status, EXISTS (SELECT 1 FROM "inventory_order_line" l WHERE l.clinic_id = '
+                            "o.clinic_id AND l.order_id = o.id AND l.item_id = %s) FROM \"inventory_order\" o "
+                            "WHERE o.clinic_id = %s AND o.id = %s", [item_id, ctx.clinic_id, order_id])
+    if on_order is None:
+        raise _not_found("order")
+    if not on_order[1]:
+        raise ApiError("invalid", _("This item isn't on the order."), fields={"item_id": "not_on_order"})
+    _lock_order_items(ctx, order_id)
+    if _lock_order(ctx, order_id, ("sent", "done")) == "done":
+        return get_order(ctx, order_id), []
+    qty, received, missing, from_backup, supplier_id = sql.row(ctx, """
+        SELECT l.qty, l.received, l.missing, l.is_backup, o.supplier_id
+          FROM "inventory_order_line" l JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
+         WHERE l.clinic_id = %s AND l.order_id = %s AND l.item_id = %s FOR NO KEY UPDATE OF l""",
+                                                               [ctx.clinic_id, order_id, item_id])
+    remaining = max(qty - received - missing, 0)
+    if remaining == 0:
+        return get_order(ctx, order_id), []
+    sql.run(ctx, 'UPDATE "inventory_order_line" SET missing = missing + %s WHERE clinic_id = %s AND order_id = %s '
+                 "AND item_id = %s", [remaining, ctx.clinic_id, order_id, item_id])
+    moved = _route(ctx, supplier_id, {item_id: (remaining, from_backup)})
+    done = _close_if_accounted(ctx, order_id, timezone.now()) is not None
+    record_change(ctx, "order.missing", "order", order_id, after={"item_id": item_id, "qty": remaining, "done": done})
+    return get_order(ctx, order_id), moved
+
+
+NEED_LIMIT = 200
+
+
+def needs(ctx):
+    """The "needs a supplier" list: items short with nobody to bring them (need_qty), then low items with no active
+    supplier on no open order (qty as refill counts it). Each item once."""
+    from core.i18n import pick
+
+    rows = sql.rows(ctx, """
+        SELECT i.id, i.name, i.name_en, i.unit, i.need_qty, 'short' FROM "inventory_item" i
+         WHERE i.clinic_id = %s AND i.is_active AND i.need_qty > 0
+        UNION ALL
+        SELECT i.id, i.name, i.name_en, i.unit,
+               GREATEST(CASE WHEN i.max_qty > 0 THEN i.max_qty ELSE 2 * i.threshold END - i.quantity, 1), 'no_supplier'
+          FROM "inventory_item" i
+          LEFT JOIN "inventory_supplier" s ON s.clinic_id = i.clinic_id AND s.id = i.supplier_id AND s.is_active
+                                          AND s.kind = 'supplier'
+         WHERE i.clinic_id = %s AND i.is_active AND i.need_qty = 0 AND i.quantity <= i.threshold AND s.id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM "inventory_order_line" l
+                             JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
+                            WHERE l.clinic_id = i.clinic_id AND l.item_id = i.id AND o.status IN ('draft', 'sent'))
+         ORDER BY 2, 1 LIMIT %s""", [ctx.clinic_id, ctx.clinic_id, NEED_LIMIT])
+    return [{"item_id": r[0], "name": pick(r[1], r[2]), "unit": r[3], "qty": r[4], "kind": r[5]} for r in rows]
+
+
+def need_count(ctx):
+    """The side bar's count of items nobody will bring (the partial index)."""
+    return sql.row(ctx, 'SELECT count(*) FROM "inventory_item" WHERE clinic_id = %s AND need_qty > 0 AND is_active',
+                   [ctx.clinic_id])[0]
+
+
+def pick_supplier(ctx, item_id, supplier_id, qty):
+    """An item from the list goes on the chosen supplier's draft as a backup line. Its need_qty is claimed whatever
+    qty the desk chose (a deliberate choice). A repeat finds nothing to claim and the item already on an open order:
+    harmless, answers that order. Returns (order, created)."""
+    check_item_suppliers(ctx, supplier_id, None)
+    stock._lock_items(ctx, [item_id])
+    claimed = sql.row(ctx, 'UPDATE "inventory_item" SET need_qty = 0 WHERE clinic_id = %s AND id = %s '
+                           "AND need_qty > 0 RETURNING need_qty", [ctx.clinic_id, item_id])
+    if claimed is None:
+        open_order = sql.row(ctx, """
+            SELECT o.id FROM "inventory_order_line" l
+              JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
+             WHERE l.clinic_id = %s AND l.item_id = %s AND o.status IN ('draft', 'sent')
+             ORDER BY o.id DESC LIMIT 1""", [ctx.clinic_id, item_id])
+        if open_order is not None:
+            return get_order(ctx, open_order[0]), False
+    order_id = _draft_for(ctx, supplier_id, timezone.now())
+    _add_backup_lines(ctx, order_id, {item_id: qty})
+    record_change(ctx, "order.pick", "order", order_id, after={"item_id": item_id, "qty": qty})
+    _auto_send(ctx, [order_id])
+    return get_order(ctx, order_id), True
+
+
+def dismiss_need(ctx, item_id):
+    """Off the list by hand (doctors edit everything): its need_qty goes to 0."""
+    found = sql.row(ctx, 'SELECT need_qty FROM "inventory_item" WHERE clinic_id = %s AND id = %s FOR NO KEY UPDATE',
+                    [ctx.clinic_id, item_id])
+    if found is None:
+        raise stock.not_found("item")
+    if found[0]:
+        sql.run(ctx, 'UPDATE "inventory_item" SET need_qty = 0 WHERE clinic_id = %s AND id = %s',
+                [ctx.clinic_id, item_id])
+        record_change(ctx, "item.need_dismiss", "item", item_id, before={"need_qty": found[0]})
 
 
 def _add_lines(ctx, order_id, lines, replace):
@@ -349,8 +552,10 @@ def get_order(ctx, order_id):
     order = _order_row(found)
     order["lines"] = visibility.rows(ctx, [
         {"item_id": r[0], "name": pick(r[1], r[2]), "unit": r[3], "qty": r[4], "received": r[5], "unit_price": r[6],
-         "quantity": r[7], "threshold": r[8], "unit_cost": r[9]} for r in sql.rows(ctx, """
-        SELECT l.item_id, i.name, i.name_en, i.unit, l.qty, l.received, l.unit_price, i.quantity, i.threshold, i.unit_cost
+         "quantity": r[7], "threshold": r[8], "unit_cost": r[9], "missing": r[10], "is_backup": r[11]}
+        for r in sql.rows(ctx, """
+        SELECT l.item_id, i.name, i.name_en, i.unit, l.qty, l.received, l.unit_price, i.quantity, i.threshold, i.unit_cost,
+               l.missing, l.is_backup
           FROM "inventory_order_line" l JOIN "inventory_item" i ON i.clinic_id = l.clinic_id AND i.id = l.item_id
          WHERE l.clinic_id = %s AND l.order_id = %s ORDER BY i.name, l.item_id""", [ctx.clinic_id, order_id])],
         "unit_price", "unit_cost")
@@ -464,7 +669,9 @@ def send(ctx, order_id):
 
 def cancel(ctx, order_id):
     """Draft or sent -> cancelled. No stock or money changes. A sent order's items go back to refill; a draft's
-    don't (they would come straight back on a new draft)."""
+    don't (they would come straight back on a new draft). Backup lines (moved or picked) go to the list with what was
+    still to come: nobody else is left to ask (design H1 backup)."""
+    _lock_order_items(ctx, order_id)  # backup lines write need_qty: items before the order
     status = _lock_order(ctx, order_id, ("draft", "sent", "cancelled"))
     if status == "cancelled":
         return get_order(ctx, order_id)  # a harmless repeat
@@ -472,9 +679,14 @@ def cancel(ctx, order_id):
                  "WHERE clinic_id = %s AND id = %s AND status IN ('draft', 'sent')",
             [timezone.now(), ctx.clinic_id, order_id])
     record_change(ctx, "order.cancel", "order", order_id, before={"status": status})
+    lines = sql.rows(ctx, 'SELECT item_id, is_backup, GREATEST(qty - received - missing, 0) FROM "inventory_order_line" '
+                          "WHERE clinic_id = %s AND order_id = %s", [ctx.clinic_id, order_id])
+    to_list = {i: (q, True) for i, backup, q in lines if backup and q > 0}
+    if to_list:
+        _route(ctx, sql.row(ctx, 'SELECT supplier_id FROM "inventory_order" WHERE clinic_id = %s AND id = %s',
+                            [ctx.clinic_id, order_id])[0], to_list)
     if status == "sent":
-        refill(ctx, [r[0] for r in sql.rows(ctx, 'SELECT item_id FROM "inventory_order_line" WHERE clinic_id = %s '
-                                                  "AND order_id = %s", [ctx.clinic_id, order_id])])
+        refill(ctx, [i for i, backup, _q in lines if not backup])
     return get_order(ctx, order_id)
 
 
@@ -492,11 +704,12 @@ def receive(ctx, order_id, lines, paid=None, close=False):
     if paid == "drawer":
         finance.shift_for(ctx, "cash")  # the shift before the items (lock order)
     item_ids = [i for i, (q, _p) in lines.items() if q > 0]
+    _lock_order_items(ctx, order_id, item_ids)  # short lines move and write need_qty: every item before the order
     locked = stock._lock_items(ctx, item_ids) if item_ids else {}
     _lock_order(ctx, order_id, ("sent",))
-    ordered = {r[0]: (r[1], r[2]) for r in sql.rows(ctx, 'SELECT item_id, qty, received FROM "inventory_order_line" '
-                                                         "WHERE clinic_id = %s AND order_id = %s FOR NO KEY UPDATE",
-                                                    [ctx.clinic_id, order_id])}
+    ordered = {r[0]: (r[1], r[2], r[3], r[4]) for r in sql.rows(ctx, """
+        SELECT item_id, qty, received, missing, is_backup FROM "inventory_order_line"
+         WHERE clinic_id = %s AND order_id = %s FOR NO KEY UPDATE""", [ctx.clinic_id, order_id])}
     stray = sorted(set(lines) - set(ordered))
     if stray:
         raise ApiError("invalid", _("This item isn't on the order."), fields={"lines": "not_on_order"},
@@ -521,9 +734,11 @@ def receive(ctx, order_id, lines, paid=None, close=False):
         if not money or price is None:
             price = item["unit_cost"]
         new_cost = stock.average_cost(item["quantity"], item["unit_cost"], qty, price)
-        balance, threshold = sql.row(ctx, 'UPDATE "inventory_item" SET quantity = quantity + %s, unit_cost = %s '
+        # What came lowers what the list waits for (design H1 backup).
+        balance, threshold = sql.row(ctx, 'UPDATE "inventory_item" SET quantity = quantity + %s, unit_cost = %s, '
+                                          "need_qty = GREATEST(need_qty - %s, 0) "
                                           "WHERE clinic_id = %s AND id = %s RETURNING quantity, threshold",
-                                     [qty, new_cost, ctx.clinic_id, item_id])
+                                     [qty, new_cost, qty, ctx.clinic_id, item_id])
         if stock._crossed(balance - qty, balance, threshold):
             deltas.clinic_day(today)
         sql.run(ctx, 'UPDATE "inventory_order_line" SET received = received + %s, unit_price = %s '
@@ -534,18 +749,39 @@ def receive(ctx, order_id, lines, paid=None, close=False):
     stock._insert_movements(ctx, movements)
     if total > 0 and paid == "account":
         _entry(ctx, supplier[0], "bill", total, today, note, order_id=order_id)
-    short = [i for i, (q, r) in ordered.items() if r + (lines.get(i, (0, None))[0]) < q]
+    short = {i: q - r - lines.get(i, (0, None))[0] - m for i, (q, r, m, _b) in ordered.items()}
+    short = {i: s for i, s in short.items() if s > 0}
     done = close or not short
     if done:
         sql.run(ctx, "UPDATE \"inventory_order\" SET status = 'done', closed_at = %s "
                      "WHERE clinic_id = %s AND id = %s AND status = 'sent'", [now, ctx.clinic_id, order_id])
+    # Came after "مش عنده": taken in (stock is what's on the shelf) and reported, with where it had moved.
+    late = [_late(ctx, order_id, i) for i in sorted(item_ids) if ordered[i][2] > 0]
     record_change(ctx, "order.receive", "order", order_id,
                   after={"lines": {str(i): lines[i][0] for i in item_ids}, "paid": paid if total else None,
-                         "total": total if money else None, "done": done})
+                         "total": total if money else None, "done": done,
+                         "late": [l["item_id"] for l in late] or None})
     deltas.write_clinics(ctx)
+    moved = []
     if done and short:
-        refill(ctx, short)
-    return get_order(ctx, order_id), expense
+        # Closed short: exactly what's short moves one step, never back to the supplier who didn't bring it.
+        for item_id in sorted(short):
+            sql.run(ctx, 'UPDATE "inventory_order_line" SET missing = missing + %s WHERE clinic_id = %s '
+                         "AND order_id = %s AND item_id = %s", [short[item_id], ctx.clinic_id, order_id, item_id])
+        moved = _route(ctx, supplier[0], {i: (s, ordered[i][3]) for i, s in short.items()})
+    return get_order(ctx, order_id), expense, moved, late
+
+
+def _late(ctx, order_id, item_id):
+    """Where a line's missing quantity went: an open backup line elsewhere, else the list."""
+    found = sql.row(ctx, """
+        SELECT s.name FROM "inventory_order_line" l
+          JOIN "inventory_order" o ON o.clinic_id = l.clinic_id AND o.id = l.order_id
+          JOIN "inventory_supplier" s ON s.clinic_id = o.clinic_id AND s.id = o.supplier_id
+         WHERE l.clinic_id = %s AND l.item_id = %s AND l.is_backup AND o.id <> %s AND o.status IN ('draft', 'sent')
+         ORDER BY o.id DESC LIMIT 1""", [ctx.clinic_id, item_id, order_id])
+    return {"item_id": item_id, "moved_to": "list" if found is None else "supplier",
+            "supplier_name": found[0] if found else None}
 
 
 # --- The account (flow 7) ---------------------------------------------------------------------------------------
