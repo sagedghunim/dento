@@ -5,8 +5,7 @@
 
 ## State now
 - Done + pushed + deployed live (2026-11-26): suppliers work; void-bill button and its alert removed; deleting a patient removed everywhere (button, API, alert, approval switch; old hidden files can still be restored; old pending delete requests can only be refused).
-- Done, being committed/pushed/deployed at end of this session: a discount on a paid bill now goes through; the extra shows in the patient file as "paid over the bill" → give back from the drawer; discount + give-back show as ONE owner alert with full details (web/alerts.py `_fold_discounts`); credit selectors now use `paid - greatest(total, deposit)` like give_back. Reviewed: senior-backend (2 bugs, fixed + tests), judge APPROVE.
-- If the last commit is missing from `git log`, commit + push + deploy it first.
+- Done + pushed + deployed (ba5684a, full suite 853 green): a discount on a paid bill now goes through; the extra shows in the patient file as "paid over the bill" → give back from the drawer; discount + give-back show as ONE owner alert with full details (web/alerts.py `_fold_discounts`); credit selectors now use `paid - greatest(total, deposit)` like give_back. Reviewed: senior-backend (2 bugs, fixed + tests), judge APPROVE.
 
 ## Decisions
 - Paid-over money after a discount = patient credit, given back by tap (Saged's choice), not refused.
