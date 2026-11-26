@@ -38,7 +38,7 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 ## Next step
 1. Build the approved booked-service change (section below), then run the full panel review.
 2. Prescription message: wait for Saged's screenshot, then fix it.
-3. Visit-summary WhatsApp button: wait for Saged's answer on prices vs names only.
+3. Build the visit-summary WhatsApp button (names only, no prices).
 
 ## Approved by Saged 2026-11-27 (build next; money + UI → full panel)
 - If the doctor removes the booked line and adds nothing, finishing the visit is blocked.
@@ -53,14 +53,14 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - The cause is unknown. Asked Saged for a screenshot of the message he sees, or for the steps.
 - Plan once the cause is known: point at the field (which medicine, what's missing) and name it in the message. It's UI, so explain to Saged first.
 
-## Requested 2026-11-27, plan sent to Saged, waiting for his OK
+## Approved by Saged 2026-11-27: visit-summary WhatsApp button (UI → explain done, build it)
 - On the visit screen, remove the "ابعت الخطة واتساب" icon in the next-visits part.
 - At the very end of the visit screen, add one button "ابعت ملخص الزيارة للمريض". It opens WhatsApp (wa.me) with the patient's phone and a message containing:
   - what was done today
   - the prescription
   - the upcoming plan
 - NOTHING else: no medical file, no visit notes, no materials.
-- Open question asked: prices in the message or names only (proposed: names only).
+- Decided: names only, no prices.
 
 ## Open questions
 - Should waste from stock entered without a purchase (opening stock) count as a real loss somewhere? unknown
