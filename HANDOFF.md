@@ -4,30 +4,27 @@
 - Dento / Hamada clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql), plain JS front end, Arabic RTL. Live: dento-jet.vercel.app.
 
 ## State now
-- **Done, tested, NOT committed, NOT deployed:**
-  - Refund rule: money goes back only before going in (booked/waiting). After going in, only money paid over the bill can go back. A no-show keeps the deposit unless the owner switch `deposit_back_no_show` (team page, off by default) is on, and then only the deposit goes back. The billing.refund permission and the "بإذنك" approval stay. Old pending requests on a visit that went in say "ارفضه".
-  - The voided-expense alert now shows the category and note (web/alerts.py `items()`).
-  - pay.js: a no-show offers only its deposit for refund.
-  - New tests: over-bill refund after going in, no-show deposit only, voided-expense alert.
-  - billing + finance + web: 362 tests OK. The full suite was 857 OK before the last small changes.
-- **Fix before commit:** `v2/web/test_alerts.py` shows a 268-line diff. `sed -i` probably changed its line endings, so restore the original endings and keep only the new test.
+- **Done, committed (fc48d95), pushed, deployed, live:** refunds follow the visit (money back before going in; after going in only what was paid over the bill; a no-show keeps the deposit unless the owner switch `deposit_back_no_show` is on); voided-expense alert shows category + note.
+- Full suite: 860 tests OK on PostgreSQL.
 - Flaky, old: scheduling TodayTests `test_queues_counts_and_money_only_with_finances_view` (ordering).
+- Nothing half-done.
 
 ## Decisions
-- Kept the "bill goes down by the refund" option (Saged, 2026-11-23). The judge flagged it: a waiting patient refunded with the bill lowered could still go in owing nothing. The alert shows it to the owner. Ask Saged whether to block lowering before going in.
+- Kept the "bill goes down by the refund" option (Saged, 2026-11-23); the owner's alert shows it.
 - Keep billing.refund and the approval switch (approval off by default).
 
 ## Key paths
 - billing/services.py `refundable()`, `refund()`, `check_refund_request`
-- clinics/settings.py (DEFAULTS, OWNER_ONLY), web/pages.py clinic_config, team.html/team.js, pay.js, web/alerts.py
-- Tests: `cd v2`, then `export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_x && .venv/Scripts/python.exe manage.py test billing finance web --noinput`
-- Deploy is manual: the scratchpad deploy5.sh (migrate + vercel --prod), then open dento-jet in Brave.
+- clinics/settings.py (DEFAULTS, OWNER_ONLY), web/alerts.py, pay.js, team.html/team.js
+- Tests: `cd v2`, then `export PATH=/c/work/pgsql/bin:$PATH PSYCOPG_IMPL=python HAMADA_TEST_DB_SUFFIX=_x && .venv/Scripts/python.exe manage.py test --noinput` (full suite takes over 10 min; run in background)
+- Deploy is manual: scratchpad `bfcb25bc-.../scratchpad/deploy5.sh` (migrate + vercel --prod), then open dento-jet in Brave.
+- Test files are CRLF: don't edit them with `sed -i` without restoring `\r`.
 
 ## Next step
-- Fix the line endings in test_alerts.py, commit everything (end the message with "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"), push, deploy, and open dento-jet in Brave.
+- Ask Saged the open question below on refunds, then explain the supplier backup plan and wait for his OK before building.
 
 ## Open questions
-- Block the bill-lowering on refunds before the patient goes in? (judge finding)
+- Block the bill-lowering on refunds before the patient goes in? (judge finding: a waiting patient refunded with the bill lowered could go in owing nothing)
 - Supplier backup work, agreed but not built; explain before building:
   1. Supplier.backup with a one-step rule.
   2. Missing quantity on order lines.
