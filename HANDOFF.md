@@ -36,9 +36,9 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Deploy script: `deploy5.sh` in the old session scratchpad. It runs git archive, migrate_all on Neon, then vercel --prod. Open https://dento-jet.vercel.app in Brave.
 
 ## Next step
-1. Run the full panel review on the waste diff (money + index): senior-backend, senior-frontend, senior-database, judge, then chief-judge. Give each a short brief and the diff.
-2. Send the credit.js fix to senior-frontend alone.
-3. Fix what they find, commit, deploy, and tell Saged.
+1. Build the approved booked-service change (section below), then run the full panel review.
+2. Prescription message: wait for Saged's screenshot, then fix it.
+3. Visit-summary WhatsApp button: wait for Saged's answer on prices vs names only.
 
 ## Approved by Saged 2026-11-27 (build next; money + UI → full panel)
 - If the doctor removes the booked line and adds nothing, finishing the visit is blocked.
