@@ -103,6 +103,8 @@ class Movement(models.Model):
         indexes = [
             models.Index("clinic", "item", F("at").desc(), F("id").desc(), name="movement_item"),
             models.Index("clinic", F("at").desc(), F("id").desc(), condition=Q(kind="use"), name="movement_use"),
+            # The month's expired or broken stock on the expenses page (Saged, 2026-11-27).
+            models.Index("clinic", F("at").desc(), F("id").desc(), condition=Q(kind="waste"), name="movement_waste"),
             # A removed procedure gives its materials back (Saged, 2026-11-17): its movements, found by the record.
             models.Index(fields=["clinic", "visit_procedure_id"], condition=Q(visit_procedure_id__isnull=False),
                          name="movement_visit_procedure"),

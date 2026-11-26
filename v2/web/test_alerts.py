@@ -138,3 +138,48 @@ class AlertChoiceTests(AlertTests):
         # The owner only, and only known kinds.
         self.assertEqual(call(self.desk, "PUT", "/api/v1/alerts/settings", {"off": []}).status_code, 403)
         self.assertEqual(call(self.owner, "PUT", "/api/v1/alerts/settings", {"off": ["nope"]}).status_code, 400)
+
+
+class WasteTests(M2TestCase):
+    """Saged, 2026-11-27: expired or broken stock tells the owner what it cost, shows apart on the expenses page,
+    and takes nothing from the drawer nor adds to the expenses (its money left with the purchase)."""
+
+    rows = AlertChoiceTests.rows
+
+    def waste(self, qty=3, reason="انتهت صلاحيته"):
+        self.set_codes("assistant", granted=["inventory.manage"])
+        r = call(self.owner, "POST", "/api/v1/inventory/items", {"name": "بنج", "quantity": 10, "threshold": 2,
+                                                                  "unit_cost": 2500})
+        self.assertEqual(r.status_code, 201, r.content)
+        item = r.json()["item"]["id"]
+        r = call(self.desk, "POST", f"/api/v1/inventory/items/{item}/waste", {"qty": qty, "reason": reason})
+        self.assertEqual(r.status_code, 201, r.content)
+        return item
+
+    def test_the_owner_is_told_what_it_cost_and_who_and_why(self):
+        self.waste()
+        rows = self.rows()
+        self.assertIn("صنف اتشال تالف أو منتهي الصلاحية", rows)
+        self.assertIn("بنج × 3", rows)
+        self.assertIn("انتهت صلاحيته", rows)
+        self.assertIn('num">75</bdi>', rows)  # 3 × 25 pounds
+        page = self.owner.get("/alerts").content.decode()
+        self.assertIn('value="waste" checked', page)  # its switch
+        self.assertEqual(call(self.owner, "PUT", "/api/v1/alerts/settings", {"off": ["waste"]}).status_code, 200)
+        self.assertNotIn("صنف اتشال تالف", self.rows())
+
+    def test_it_shows_apart_on_the_expenses_page_and_is_not_added_to_them(self):
+        r = call(self.desk, "POST", "/api/v1/register/open", {"opening_float": 0})
+        self.assertIn(r.status_code, (201, 409), r.content)
+        drawer = call(self.owner, "GET", "/api/v1/register").json()
+        before = self.owner.get("/finances?tab=expenses").content.decode()
+        total = before.split("data-expenses-total=\"", 1)[1].split("\"", 1)[0]
+        self.waste()
+        page = self.owner.get("/finances?tab=expenses").content.decode()
+        self.assertEqual(page.split("data-expenses-total=\"", 1)[1].split("\"", 1)[0], total)
+        card = page.split("data-waste", 1)[1].split("</section>", 1)[0]
+        self.assertIn("التوالف", card)
+        self.assertIn("بنج", card)
+        self.assertIn("انتهت صلاحيته", card)
+        self.assertIn('num">75</bdi>', card)
+        self.assertEqual(call(self.owner, "GET", "/api/v1/register").json(), drawer)  # nothing from the drawer

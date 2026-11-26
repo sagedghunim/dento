@@ -44,6 +44,7 @@ KINDS = (
     ("late", (), "A file changed after its visit ended", "files"),
     ("stock", ("item.count",), "A stock count changed the quantity", "stock"),
     ("short", ("item.short",), "A visit used more than the stock showed", "stock"),
+    ("waste", ("item.waste",), "Stock was taken out as expired or broken", "stock"),
 )
 GROUPS = ("drawer", "bills", "files", "stock")
 KEYS = tuple(k[0] for k in KINDS)
@@ -112,7 +113,7 @@ def _labels():
             "auto_close": _("The register closed by itself without a count"),
             "price": _("Changed a price"), "expense": _("Voided an expense"),
             "stock": _("A stock count changed the quantity"), "short": _("A visit used more than the stock showed"),
-            "late": _("A file changed after its visit ended")}
+            "waste": _("Stock was taken out as expired or broken"), "late": _("A file changed after its visit ended")}
 
 
 def _group_labels():
@@ -290,7 +291,7 @@ def items(ctx, group=None):
         SELECT a.id, a.patient_id, p.full_name FROM "scheduling_appointment" a
           JOIN "patients_patient" p ON p.clinic_id = a.clinic_id AND p.id = a.patient_id
          WHERE a.clinic_id = %s AND a.id = ANY(%s::bigint[])""", [ctx.clinic_id, [i for i in visit_ids if i]])} if any(visit_ids) else {}
-    item_ids = [r["target_id"] for r in rows if r["action"] in ("item.count", "item.short")]
+    item_ids = [r["target_id"] for r in rows if r["action"] in ("item.count", "item.short", "item.waste")]
     stock = dict(sql.rows(ctx, 'SELECT id, name FROM "inventory_item" WHERE clinic_id = %s AND id = ANY(%s::bigint[])',
                           [ctx.clinic_id, item_ids])) if item_ids else {}
     expense_ids = [r["target_id"] for r in rows if r["action"] == "expense.void"]
@@ -414,6 +415,12 @@ def items(ctx, group=None):
             item["detail"] = _("%(item)s · the stock showed %(had)s, the visit used %(used)s. Count it.") % {
                 "item": stock.get(r["target_id"], ""), "had": before.get("quantity"), "used": after.get("used")}
             item["patient_id"], item["patient"] = visits.get(d.get("appointment"), (None, None))
+        elif action == "item.waste":
+            # What it cost and why (Saged, 2026-11-27); its money left with the purchase, not the drawer.
+            item["what"] = _("Stock was taken out as expired or broken")
+            item["amount"] = after.get("cost")
+            item["detail"] = " · ".join(x for x in (f"{stock.get(r['target_id'], '')} × {after.get('qty')}",
+                                                    after.get("reason") or "") if x)
         if item["patient_id"] is None and r["patient_id"]:  # every alert about a patient shows their file
             item["patient_id"], item["patient"] = r["patient_id"], late_names.get(r["patient_id"])
         out.append(item)

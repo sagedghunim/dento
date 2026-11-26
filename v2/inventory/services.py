@@ -260,7 +260,29 @@ def use(ctx, lines, patient_id=None, appointment_id=None, reason=""):
 
 
 def waste(ctx, item_id, qty, reason):
-    return take(ctx, {item_id: qty}, "waste", reason=reason)
+    """Expired or broken stock out (Saged, 2026-11-27): the owner is told (item.waste) with what it cost. Its money
+    left with the purchase's expense, so no new expense and nothing from the drawer; the expenses page lists the
+    month's waste apart (waste_in) and its total is not added again."""
+    taken, ids = take(ctx, {item_id: qty}, "waste", reason=reason)
+    unit_cost = taken[item_id][1]
+    record_change(ctx, "item.waste", "item", item_id, after={"qty": qty, "cost": qty * unit_cost, "reason": reason})
+    return taken, ids
+
+
+def waste_in(ctx, start, end):
+    """The expired or broken stock taken out between two instants, newest first (index movement_waste), at most 100."""
+    from core.i18n import pick
+
+    rows = sql.rows(ctx, """
+        SELECT m.id, m.at, i.name, i.name_en, i.unit, -m.qty, -m.qty * m.unit_cost, m.reason, m.created_by_id
+          FROM "inventory_movement" m JOIN "inventory_item" i ON i.clinic_id = m.clinic_id AND i.id = m.item_id
+         WHERE m.clinic_id = %s AND m.kind = 'waste' AND m.at >= %s AND m.at < %s ORDER BY m.at DESC, m.id DESC
+         LIMIT 100""", [ctx.clinic_id, start, end])
+    total = sql.row(ctx, """SELECT coalesce(sum(-qty * unit_cost), 0)::bigint FROM "inventory_movement"
+                             WHERE clinic_id = %s AND kind = 'waste' AND at >= %s AND at < %s""",
+                    [ctx.clinic_id, start, end])[0]
+    return [{"id": r[0], "at": r[1], "name": pick(r[2], r[3]), "unit": r[4], "qty": r[5], "cost": r[6], "reason": r[7],
+             "created_by_id": r[8]} for r in rows], total
 
 
 def average_cost(quantity, unit_cost, qty, price):

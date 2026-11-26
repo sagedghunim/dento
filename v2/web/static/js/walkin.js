@@ -4,7 +4,7 @@
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { hideConflict, patientFrom, patientMeta, showConflict } from "./book.js";
 import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, wireFamilies, el, openDialog, parseFragment, wireClose } from "./dialogs.js";
-import { amountInput, localDigits, moneyText, parsePiastres } from "./numbers.js";
+import { localDigits, moneyText, parsePiastres } from "./numbers.js";
 import { moneyBox } from "./credit.js";
 import { initNewPatient } from "./newpatient.js";
 import { alertMessage, toast } from "./shell.js";
@@ -209,8 +209,7 @@ export function initWalkIn({ onBooked } = {}) {
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
     // The fee, plus what is owed from before, less the credit the patient holds (Saged, 2026-11-24).
-    const ask = money.set(result.data, lastFee);
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = ask == null ? "" : amountInput(ask);
+    money.set(result.data, lastFee);  // also fills an untouched amount
   }
 
   let configCache = null;

@@ -7,7 +7,7 @@
 // server links the two in the one request, and a resend (the same key) or a second person can't book it twice.
 import { errorMessage, fetchText, get, isOk } from "./api.js";
 import { countOf, courseOf, courseService, loadCourses, showCount, Submitter, wireFamilies, When, closeDialog, el, openDialog, openPrintTab, parseFragment, receiptUrl, wireClose } from "./dialogs.js";
-import { amountInput, clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
+import { clockParts, localDigits, moneyText, parsePiastres, phoneText } from "./numbers.js";
 import { initNewPatient } from "./newpatient.js";
 import { t } from "./strings.js";
 import { alertMessage, toast } from "./shell.js";
@@ -339,8 +339,7 @@ export function initBook({ onBooked, defaults } = {}) {
     // No fee line for someone without money.view: the quote carries no amount (Saged, 2026-11-16).
     fee.textContent = lastFee == null ? "" : t(result.data.is_follow_up ? "fee_follow_up" : "fee", { amount: moneyText(lastFee) });
     // The fee, plus what is owed from before, less the credit the patient holds (Saged, 2026-11-24).
-    const ask = money.set(result.data, lastFee);
-    if (field("amount") && !field("amount").dataset.touched) field("amount").value = amountInput(ask);
+    money.set(result.data, lastFee);  // also fills an untouched amount
     labels();
   }
 

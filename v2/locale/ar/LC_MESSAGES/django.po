@@ -1504,7 +1504,7 @@ msgid "This visit was cancelled or missed."
 msgstr "هذه الزيارة أُلغيت أو لم يحضر صاحبها."
 
 msgid "Use an FDI tooth number: 11-48 or 51-85."
-msgstr "استخدم رقم سن FDI: من 11 إلى 48 أو من 51 إلى 85."
+msgstr "رقم السن ده مش موجود. الدايم: 11–18، 21–28، 31–38، 41–48. اللبني: 51–55، 61–65، 71–75، 81–85."
 
 msgid "Write prescriptions"
 msgstr "كتابة الروشتات"
@@ -4709,13 +4709,13 @@ msgid "Only {most} is owed, you wrote {typed}"
 msgstr "المطلوب {most} بس، انت كاتب {typed}"
 
 msgid "Take {typed}, the {extra} stays as the patient's credit"
-msgstr "خد {typed}، والـ{extra} تبقى رصيد ليه"
+msgstr "خد {typed}، والـ{extra} تتسجل مردود ليه في ملفه"
 
 msgid "Keep it {most}"
 msgstr "خليها {most}"
 
 msgid "The {amount} stays as the patient's credit"
-msgstr "الـ{amount} هتبقى رصيد ليه"
+msgstr "الـ{amount} هتتسجل مردود ليه في ملفه"
 
 msgid ""
 "Choose: keep what is over as the patient's credit, or take only what is "
@@ -5732,3 +5732,15 @@ msgid ""
 msgstr ""
 "لما الكمية توصل لحد التنبيه، الصنف بيتضاف لطلب المورد لحد الحد الأقصى (لو"
 " فاضي: ضعف حد التنبيه)."
+
+msgid "Stock was taken out as expired or broken"
+msgstr "صنف اتشال تالف أو منتهي الصلاحية"
+
+msgid "Expired or broken stock"
+msgstr "التوالف"
+
+msgid "This is stock lost, not money out of the drawer, so it isn't added to the expenses."
+msgstr "دي بضاعة خسرناها، مش فلوس خرجت من الخزنة، فمش بتتجمع على المصروفات."
+
+msgid "Nothing expired or broke this month."
+msgstr "مفيش توالف الشهر ده."

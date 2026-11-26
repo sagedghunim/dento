@@ -41,4 +41,27 @@
     </details>
     {% endif %}
   </section>
+
+  <section class="card" aria-labelledby="waste-title" data-waste>
+    <div class="card-head">
+      <div>
+        <h2 id="waste-title">{% translate "Expired or broken stock" %} · {{ month.label }}</h2>
+        <p class="card-sub">{% translate "Total:" %} <strong>{{ waste_total|money }}</strong></p>
+      </div>
+    </div>
+    <p class="muted">{% translate "This is stock lost, not money out of the drawer, so it isn't added to the expenses." %}</p>
+    {% if waste %}
+    <ul class="lines exp-list">
+      {% for w in waste %}
+      <li class="exp-row">
+        <div class="row-main">
+          <strong><bdi dir="auto">{{ w.name }}</bdi> × <bdi>{{ w.qty }}</bdi></strong>
+          <p class="muted">{{ w.day_text }}{% if w.reason %} · <bdi dir="auto">{{ w.reason }}</bdi>{% endif %}{% if w.by %} · <bdi dir="auto">{{ w.by }}</bdi>{% endif %}</p>
+        </div>
+        <span class="amt">{{ w.cost|money }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty-note">{% translate "Nothing expired or broke this month." %}</p>{% endif %}
+  </section>
 </div>

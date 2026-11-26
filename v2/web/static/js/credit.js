@@ -57,10 +57,17 @@ export function moneyBox(dialog, form) {
       credit = (data && data.credit) || 0;
       most = fee == null ? null : Math.max(0, fee + owed - credit);
       keep = false;
+      // The amount follows the fee until the desk types one, and before the box is drawn: drawn first, it kept
+      // the last service's amount ("you wrote 1,500" over 600, Saged, 2026-11-27).
+      if (amount && !amount.dataset.touched) amount.value = most == null ? "" : amountInput(most);
       show();
       return most;
     },
-    reset() { fee = null; owed = 0; credit = 0; most = null; keep = false; show(); },
+    reset() {
+      fee = null; owed = 0; credit = 0; most = null; keep = false;
+      if (amount && !amount.dataset.touched) amount.value = "";  // no service: no old fee to collect
+      show();
+    },
     // Something to collect even with no fee: an old debt.
     owes: () => owed > 0,
     // Adds keep_credit to the payment when the desk chose it.

@@ -286,9 +286,29 @@ def _expenses_context(ctx, month):
     choices = _pay_choices(ctx, categories)
     if len(choices["pay_categories"]) != sum(c["is_active"] for c in categories):
         categories = _categories(ctx)  # "Other" came back
+    waste, waste_total = _waste(ctx, month)
     return {"categories": categories, "active_categories": [c for c in categories if c["is_active"]],
             "removed_categories": [c for c in categories if not c["is_active"]],
-            "expenses": rows, "expenses_next": more, "expenses_total": total, **choices}
+            "expenses": rows, "expenses_next": more, "expenses_total": total, "waste": waste,
+            "waste_total": waste_total, **choices}
+
+
+def _waste(ctx, month):
+    """The month's expired or broken stock (Saged, 2026-11-27: "توالف قد ايه"), apart from the expenses: its money
+    left with the purchase's expense, so it is shown and not added to the total again."""
+    from finance import services
+    from inventory import services as stock
+
+    first, last = services.month_bounds(month)
+    ends = ctx.clinic.day_ends_at
+    start = dt.datetime.combine(first, ends, tzinfo=zone(ctx.clinic))
+    end = dt.datetime.combine(last + dt.timedelta(days=1), ends, tzinfo=zone(ctx.clinic))
+    rows, total = stock.waste_in(ctx, start, end)
+    people = _people(ctx, {r["created_by_id"] for r in rows})
+    for r in rows:
+        r["day_text"] = fmt.day(business_day(ctx.clinic, r["at"]), with_year=False)
+        r["by"] = people.get(r["created_by_id"], "")
+    return rows, total
 
 
 # --- Staff pay -----------------------------------------------------------------------------------------------------
