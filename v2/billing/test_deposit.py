@@ -499,6 +499,45 @@ class MoveAndCancelTests(DepositTestCase):
             self.assertEqual(self.drawer(), (DEPOSIT, DEPOSIT))
         MoneyInvariantTests.check_invariants(self, [DAY, day])
 
+    def test_before_going_in_all_the_money_goes_back_and_the_visit_is_cancelled(self):
+        """Saged, 2026-11-26: a refund before going in is all of it, never a part, and the patient leaves the
+        waiting room with it, so no one goes in on a refunded bill. Two payments: one refund takes both."""
+        with self.on(0, hour=10) as day:
+            self.deposit_on()
+            visit = self.book(payment=self.deposit(), **self.slot(0)).json()["appointment"]
+            self.assertEqual(self.act(visit["id"], "arrive", "booked").status_code, 200)
+            self.assertEqual(self.pay(visit["id"], 100_00).status_code, 201)
+            booked = summaries(self.a, day)[1][self.doctor_id]["booked"]
+            deposit, other = self.bill(visit["id"])["payments"][:2]
+            for part in (40_00, 100_00):  # a part, or one payment alone, leaves the patient waiting: refused
+                r = self.refund(other["id"], part)
+                self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "refund_all"))
+                self.assertEqual(r.json()["error"]["left"], DEPOSIT + 100_00)
+            self.assertEqual(self.figures(visit["id"])["paid"], DEPOSIT + 100_00)  # nothing changed
+            r = self.refund(other["id"], DEPOSIT + 100_00)  # one refund takes every payment
+            self.assertEqual(r.status_code, 201, r.content)
+            self.assertEqual((r.json()["invoice"]["status"], r.json()["invoice"]["total"]), ("void", CONSULT))
+            self.assertEqual(self.appointment(visit["id"]).status, "cancelled")
+            self.assertEqual(summaries(self.a, day)[1][self.doctor_id]["booked"], booked - 1)
+            self.assertEqual(self.drawer(), (DEPOSIT + 100_00, DEPOSIT + 100_00))
+            refunds = self.rows(Payment, kind="refund")
+            self.assertEqual(sorted((p["refund_of_id"], p["amount"]) for p in refunds),
+                             sorted([(deposit["id"], DEPOSIT), (other["id"], 100_00)]))
+            change = self.rows(AuditChange, action="payment.refund")
+            self.assertEqual([bool(c["details"].get("cancelled")) for c in change], [True, True])
+            self.assertFalse(self.rows(AuditChange, action="invoice.discount"))
+        MoneyInvariantTests.check_invariants(self, [day])
+
+    def test_a_booking_refunded_ahead_is_called_off(self):
+        with self.on(0):
+            self.deposit_on()
+            visit = self.book(payment=self.deposit(), doctor_id=self.owner_id, day=(DAY + dt.timedelta(days=3)).isoformat()).json()["appointment"]
+        with self.on(1):
+            deposit = self.bill(visit["id"])["payments"][0]
+            self.assertEqual(self.refund(deposit["id"], DEPOSIT).status_code, 201)
+            self.assertEqual(self.appointment(visit["id"]).status, "cancelled")
+            self.assertEqual(self.act(visit["id"], "cancel", "booked").status_code, 200)  # a late cancel tap is harmless
+
 
 class ArrivalTests(DepositTestCase):
     """The follow-up rule is checked again at arrival; a plan session keeps its step's fee."""

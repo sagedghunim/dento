@@ -159,17 +159,16 @@ def refund_view(request, ctx, data, payment_id):
     amount = parse_money(data.get("amount"), "amount", low=1)
     method = validate.choice(data, "method", METHODS) if method is not None else None
     note = validate.text(data, "note", 200, required=False)
-    lower_bill = validate.boolean(data, "lower_bill", True)
     from finance.services import needs_approval
     from finance.views import gate
 
     if needs_approval(ctx, "refund"):
         services.check_refund_request(ctx, payment_id, amount)  # told now, not when the owner taps Approve
     waiting = gate(ctx, "refund", "refund", amount, note, {"payment_id": payment_id, "amount": amount, "method": method,
-                                                          "note": note, "lower_bill": lower_bill})
+                                                          "note": note})
     if waiting:
         return waiting
-    refund, invoice, version = services.refund(ctx, payment_id, amount, method, note, lower_bill)
+    refund, invoice, version = services.refund(ctx, payment_id, amount, method, note)
     return Result(_payment_answer(ctx, refund, invoice, version), status=201, target_type="payment",
                   target_id=refund["id"])
 

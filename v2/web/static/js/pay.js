@@ -113,15 +113,23 @@ export function initPay({ onChanged } = {}) {
       // Only before going in (Saged, 2026-11-26); a no-show's deposit when the owner allows it. After going in,
       // only what was paid over the bill (a deposit over a smaller bill). The server checks the same.
       const before = ["booked", "waiting"].includes(visit.status) || (visit.status === "no_show" && config.deposit_back_no_show);
-      const over = ["with_assistant", "ready", "in_room", "done"].includes(visit.status) && invoice ? Math.max(0, invoice.paid - invoice.total) : 0;
+      const over = ["booked", "waiting", "with_assistant", "ready", "in_room", "done"].includes(visit.status) && invoice ? Math.max(0, invoice.paid - invoice.total) : 0;
       refund.hidden = !refundable.length || !(before || over > 0);
-      const most = (p) => (before ? p.amount - p.refunded : Math.min(p.amount - p.refunded, over));
+      // Before going in, all of the visit's money goes back at once and the visit is cancelled (Saged, 2026-11-26):
+      // the amount is the whole bill's paid money, not typed. Paid over the bill: that part is offered first (it goes
+      // back alone); before going in, all of it may still be typed.
+      const whole = ["booked", "waiting"].includes(visit.status) && !over;
+      const most = (p) => (whole ? invoice.paid : before && !over ? p.amount - p.refunded : Math.min(p.amount - p.refunded, over));
       field("refund_of").replaceChildren(...refundable.map((p) => {
         const option = el("option", null, `${paymentName(p)} · ${moneyText(p.amount - p.refunded)}`);
         option.value = p.id;
         option.dataset.left = most(p);
         return option;
       }));
+      field("refund_of").closest("label").hidden = whole;  // one refund takes every payment
+      field("refund_amount").readOnly = whole;
+      dialog.querySelector("[data-refund-all]").hidden = !whole;
+      if (whole) delete field("refund_amount").dataset.touched;
       if (refundable.length && !field("refund_amount").dataset.touched) field("refund_amount").value = amountInput(most(refundable[0]));
     }
     dialog.querySelectorAll("[data-print]").forEach((b) => { b.hidden = !invoice || invoice.status !== "open"; });
@@ -257,9 +265,9 @@ export function initPay({ onChanged } = {}) {
       const option = field("refund_of").selectedOptions[0];
       const amount = parsePiastres(field("refund_amount").value);
       if (!option || !amount) { submitter.say(t("bad_amount")); return; }
-      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount, lower_bill: !field("refund_lower") || field("refund_lower").checked }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
+      result = await submitter.run("POST", `/api/v1/payments/${option.value}/refund`, { amount }, [t("refund_row"), visit.name, moneyText(amount)].join(" · "));
       if (result && result.status === 202) { toast(t("sent_for_permission")); await load(); return; }
-      if (result && isOk(result)) { toast(t("refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
+      if (result && isOk(result)) { toast(t(result.data.invoice && result.data.invoice.status === "void" ? "refunded_cancelled" : "refunded", { amount: moneyText(amount) })); delete field("refund_amount").dataset.touched; await load(); }
     } else if (name === "give-back") {
       result = await submitter.run("POST", `/api/v1/invoices/${invoice.id}/give-back`, {}, [t("give_back"), visit.name].join(" · "));
       if (result && isOk(result)) { toast(t("given_back")); await load(); }

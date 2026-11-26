@@ -457,6 +457,18 @@ def change_status(ctx, appointment_id, action, seen, *, reason="", payment=None,
     return deltas.write_clinics(ctx)[day]
 
 
+def cancel_refunded(ctx, appointment, deltas):
+    """All of a visit's money went back before it went in (Saged, 2026-11-26): it is cancelled, out of the waiting
+    room or off the book. Under the appointment's lock (billing.refund holds it); the caller voids the bill."""
+    now = timezone.now()
+    changed = sql.row(ctx, 'UPDATE "scheduling_appointment" SET status = \'cancelled\', cancelled_at = %s, '
+                           "updated_at = %s, updated_by_id = %s, cancel_reason = %s "
+                           "WHERE clinic_id = %s AND id = %s AND status IN ('booked', 'waiting') RETURNING id",
+                      [now, now, ctx.membership_id, _("Money given back"), ctx.clinic_id, appointment["id"]])
+    if changed is not None:
+        deltas.doctor_day(appointment["day"], appointment["doctor_id"], booked=-1).clinic_day(appointment["day"])
+
+
 def _already_here(ctx, appointment):
     """A patient is in the clinic once at a time (Saged, 2026-11-17): marking a second visit of theirs arrived (one
     booked with another doctor) is refused while the first is still here. Under the same lock as booking."""

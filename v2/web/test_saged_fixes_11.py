@@ -1,6 +1,6 @@
 """Saged's fixes, part 11 (2026-11-23): the holes a deliberate wrong-input round found.
 
-1. Cash never leaves the drawer beyond what is in it (cash out, a drawer expense, a cash payout, a cash refund).
+3. Money given back before going in is all of it, and the visit is cancelled (changed 2026-11-26: the bill is never lowered).
 2. A payout only up to what the month still owes, never for a month to come.
 3. Money given back lowers the bill, so the patient doesn't owe it (unless the desk says otherwise).
 4. A patient being seen, owing money or on installments can't be deleted.
@@ -67,16 +67,18 @@ class RefundTests(M2TestCase):
     def owed(self):
         return call(self.desk, "GET", f"/api/v1/appointments/{self.visit['id']}").json()["appointment"]["due"]
 
-    def test_money_given_back_lowers_the_bill(self):
-        r = call(self.owner, "POST", f"/api/v1/payments/{self.payment}/refund", {"amount": self.due // 2})
+    def test_before_going_in_all_of_it_goes_back_and_the_patient_leaves_the_waiting_room(self):
+        """Saged, 2026-11-26: never a part, and the bill never goes down, so no one goes in on a refunded bill."""
+        url = f"/api/v1/payments/{self.payment}/refund"
+        for body in ({"amount": self.due // 2}, {"amount": 1000, "lower_bill": True}):
+            r = call(self.owner, "POST", url, body)
+            self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "refund_all"))
+        r = call(self.owner, "POST", url, {"amount": self.due})
         self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(self.owed(), 0)
-        self.assertEqual(r.json()["invoice"]["total"], self.due - self.due // 2)
-
-    def test_or_the_patient_still_owes_it_when_the_desk_says_so(self):
-        r = call(self.owner, "POST", f"/api/v1/payments/{self.payment}/refund", {"amount": 1000, "lower_bill": False})
-        self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(self.owed(), 1000)
+        self.assertEqual((r.json()["invoice"]["status"], r.json()["invoice"]["total"]), ("void", self.due))
+        self.assertEqual(self.appointment(self.visit["id"]).status, "cancelled")
+        today = self.desk.get("/today").content.decode()
+        self.assertIn(f'<li class="appt cancelled closed" data-id="{self.visit["id"]}"', today)  # out of the waiting room
 
     def test_none_once_the_patient_went_in_and_an_old_request_says_refuse_it(self):
         """Saged, 2026-11-26: a refund is for a patient who leaves the waiting room, never after going in."""
@@ -84,15 +86,24 @@ class RefundTests(M2TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.set_codes("assistant", granted=["billing.refund"])
         url = f"/api/v1/payments/{self.payment}/refund"
-        self.assertEqual(call(self.desk, "POST", url, {"amount": 1000}).status_code, 202)  # waits for the owner
+        self.assertEqual(call(self.desk, "POST", url, {"amount": self.due}).status_code, 202)  # waits for the owner
         self.assertEqual(self.act(self.visit["id"], "call", "waiting", client=self.desk).status_code, 200)
         for client in (self.owner, self.desk):
-            r = call(client, "POST", url, {"amount": 1000})
+            r = call(client, "POST", url, {"amount": self.due})
             self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_refundable"))
         page = self.owner.get("/alerts").content.decode()
         self.assertIn("data-request-problem", page)
         self.assertIn("قبل ما المريض يدخل", page)
 
+
+    def test_before_going_in_money_paid_over_the_bill_goes_back_alone_and_the_visit_stays(self):
+        bill = call(self.owner, "POST", f"/api/v1/appointments/{self.visit['id']}/invoice").json()["invoice"]
+        r = call(self.owner, "PUT", f"/api/v1/invoices/{bill['id']}/discount", {"discount": self.due, "expected_discount": 0})
+        self.assertEqual(r.status_code, 200, r.content)  # a free visit now, all of it paid over
+        r = call(self.owner, "POST", f"/api/v1/payments/{self.payment}/refund", {"amount": self.due})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["invoice"]["status"], "open")
+        self.assertEqual(self.appointment(self.visit["id"]).status, "waiting")
 
     def test_after_going_in_only_what_was_paid_over_the_bill_goes_back(self):
         self.assertEqual(self.act(self.visit["id"], "call", "waiting", client=self.desk).status_code, 200)

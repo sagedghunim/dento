@@ -145,7 +145,7 @@ def mutating(test, o):
         # Before "refund": the last entry's codes stay revoked while the reads' objects are made.
         "give back": ("POST", f"/api/v1/invoices/{o.credited_invoice}/give-back", {}, {"method": "card"},
                       ["billing.collect"]),
-        "refund": ("POST", f"/api/v1/payments/{o.payment}/refund", {"amount": 50}, {"amount": 60}, ["billing.refund"]),
+        "refund": ("POST", f"/api/v1/payments/{o.payment}/refund", {"amount": 1000}, {"amount": 999}, ["billing.refund"]),
     }
 
 

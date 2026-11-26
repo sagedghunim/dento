@@ -529,16 +529,17 @@ def check_refund_request(ctx, payment_id, amount):
     if found[0] != "payment":
         raise ApiError("invalid", _("Only payments can be refunded."), fields={"payment": "refund"})
     visit = sql.row(ctx, """
-        SELECT a.id, a.status, i.paid - i.total FROM "billing_payment" p
+        SELECT a.id, a.status, i.paid - i.total, i.paid FROM "billing_payment" p
           JOIN "billing_invoice" i ON i.clinic_id = p.clinic_id AND i.id = p.invoice_id
           LEFT JOIN "scheduling_appointment" a ON a.clinic_id = i.clinic_id AND a.id = i.appointment_id
          WHERE p.clinic_id = %s AND p.id = %s""", [ctx.clinic_id, payment_id])
-    refundable(ctx, {"status": visit[1]} if visit and visit[0] else None, amount, visit[2] if visit else 0, found[2])
+    appointment = {"status": visit[1]} if visit and visit[0] else None
+    refundable(ctx, appointment, amount, visit[2] if visit else 0, found[2], whole=visit[3] if visit else None)
     if sql.row(ctx, 'SELECT 1 FROM "finance_cash_request" WHERE clinic_id = %s AND kind = \'refund\' '
                     "AND status = 'pending' AND (data->>'payment_id')::bigint = %s LIMIT 1", [ctx.clinic_id, payment_id]):
         raise ApiError("already_asked", _("A refund of this payment is already waiting for the owner's OK."), 409,
                        fields={"amount": "already_asked"})
-    if amount > found[1]:
+    if amount > found[1] and not _whole_visit(appointment, amount, visit[2] if visit else 0):
         raise over_refund(found[1])
 
 
@@ -546,17 +547,30 @@ REFUNDABLE = ("booked", "waiting")  # before going in (Saged, 2026-11-26)
 GONE_IN = ("with_assistant", "ready", "in_room", "done")
 
 
-def refundable(ctx, appointment, amount=0, over=0, deposit=False):
+def _whole_visit(appointment, amount, over):
+    """Before going in, a refund beyond what was paid over the bill gives back all of the visit's money."""
+    return appointment is not None and appointment["status"] in REFUNDABLE and amount > over
+
+
+def refundable(ctx, appointment, amount=0, over=0, deposit=False, whole=None):
     """Money goes back only before the patient goes in: a booking called off or a patient who leaves the waiting
-    room (Saged, 2026-11-26). A no-show's deposit only when the owner's switch says so. After going in, only what
-    was paid over the bill (`over`: a deposit over a smaller bill), never the visit's own money. A bill with no
-    visit has no going in."""
+    room (Saged, 2026-11-26). Then all of the visit's money goes back at once, never a part (`whole`: what the bill
+    holds paid), and the visit is cancelled (`refund`); only money paid over the bill may go back alone. A no-show's
+    deposit only when the owner's switch says so. After going in, only what was paid over the bill (`over`: a
+    deposit over a smaller bill), never the visit's own money. A bill with no visit has no going in."""
     from clinics import settings as clinic_settings
 
     if appointment is None:
         return
     status = appointment["status"]
-    if status in REFUNDABLE or (status in GONE_IN and amount <= over):
+    if amount <= over and status in REFUNDABLE + GONE_IN:
+        return
+    if status in REFUNDABLE:
+        if whole is not None and amount > whole:
+            raise over_refund(whole)
+        if whole is not None and amount != whole:
+            raise ApiError("refund_all", _("Before going in, all of the payment goes back and the visit is cancelled."),
+                           409, fields={"amount": "refund_all"}, extra={"left": whole})
         return
     if status == "no_show":
         if deposit and clinic_settings.effective(ctx.clinic.settings)["deposit_back_no_show"]:
@@ -572,12 +586,12 @@ def over_refund(left):
                     % {"left": money_plain(left)}, 409, fields={"amount": "over_refund"}, extra={"left": left})
 
 
-def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, given_back=False):
+def refund(ctx, payment_id, amount, method=None, note="", given_back=False, cancelling=False):
     """Refund part or all of a payment (design 5.3). Audited.
 
-    `lower_bill` (Saged, 2026-11-23: money given back never leaves the patient owing it): the bill goes down by what
-    the refund would otherwise leave owed, as a discount named for it. Off for a cash slip that is paid again, and for
-    money paid over the bill (give_back), which owes nothing anyway.
+    Before going in, `amount` is all of the visit's paid money (Saged, 2026-11-26): every payment on the bill goes
+    back, this one first, and the visit is cancelled, out of the waiting room or off the book, so no one goes in on
+    a refunded bill (`_refund_visit`; `cancelling` marks its parts). The bill is never lowered by a refund.
 
     Returns (refund row, invoice, version of the visit's day).
     """
@@ -588,6 +602,8 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, give
     if original[2] != "payment":
         raise ApiError("invalid", _("Only payments can be refunded."), fields={"payment": "refund"})
     invoice, appointment = _lock_invoice(ctx, original[1])
+    if not given_back and not cancelling and _whole_visit(appointment, amount, invoice["paid"] - invoice["total"]):
+        return _refund_visit(ctx, invoice, appointment, payment_id, amount, method, note)
     updated = sql.row(ctx, 'UPDATE "billing_payment" SET refunded = refunded + %s WHERE clinic_id = %s AND id = %s '
                            "AND kind = 'payment' AND refunded + %s <= amount "
                            "RETURNING patient_id, doctor_id, method, amount, refunded, section_id, is_deposit",
@@ -596,7 +612,7 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, give
         raise ApiError("over_refund", _("The refund is more than what is left of this payment."), 409,
                        fields={"amount": "over_refund"})
     patient_id, doctor_id, original_method, original_amount, refunded, section_id, was_deposit = updated
-    if not given_back:
+    if not given_back and not cancelling:
         refundable(ctx, appointment, amount, invoice["paid"] - invoice["total"], was_deposit)
     today = business_day(ctx.clinic)
     method = method or original_method
@@ -612,21 +628,11 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, give
     invoice = _invoice(sql.row(ctx, f'UPDATE "billing_invoice" SET paid = paid - %s, deposit = deposit - %s '
                                     f"WHERE clinic_id = %s AND id = %s RETURNING {INVOICE_COLUMNS}",
                                [amount, amount if was_deposit else 0, ctx.clinic_id, invoice["id"]]))
-    lowered = False
-    if lower_bill and invoice["status"] == "open":
-        owed_before = max(0, invoice["total"] - (invoice["paid"] + amount))
-        lower = min(amount, max(0, invoice["total"] - invoice["paid"]) - owed_before)
-        if lower > 0:
-            before = invoice["discount"]
-            invoice = write_discount(ctx, invoice["id"], before + lower)
-            record_change(ctx, "invoice.discount", "invoice", invoice["id"], before={"discount": before},
-                          after={"discount": invoice["discount"]}, reason="refund", patient_id=invoice["patient_id"])
-            lowered = True
+    deltas = Deltas()
     record_change(ctx, "payment.refund", "payment", payment_id, before={"refunded": refunded - amount},
                   after={"refunded": refunded}, amount=amount, refund_id=row["id"], patient_id=invoice["patient_id"],
                   # paid over the bill (a discount or a removed line after paying): one alert tells both (2026-11-26)
-                  **({"given_back": True} if given_back else {}), **({"lowered": True} if lowered else {}))
-    deltas = Deltas()
+                  **({"given_back": True} if given_back else {}), **({"cancelled": True} if cancelling else {}))
     if doctor_id is not None:
         deltas.doctor_day(today, doctor_id, refunded=amount)
     deltas.money_day(today, section_id, method, refunded=amount)
@@ -636,6 +642,30 @@ def refund(ctx, payment_id, amount, method=None, note="", lower_bill=False, give
     deltas.write_doctors(ctx)
     versions = deltas.write_clinics(ctx)
     return row, invoice, versions[visit_day]
+
+
+def _refund_visit(ctx, invoice, appointment, payment_id, amount, method, note):
+    """All of a visit's money back before it went in, and the visit cancelled (Saged, 2026-11-26). Under the
+    appointment's lock (`refund` took it): the amount must be all the bill holds paid; each payment goes back through
+    `refund` (the drawer, the audit, the owner's alerts), the one tapped first, then the latest. Money paid over the
+    bill alone never comes here, so a free visit with a deposit stays."""
+    from scheduling.services import cancel_refunded
+
+    refundable(ctx, appointment, amount, invoice["paid"] - invoice["total"], whole=invoice["paid"])
+    payments = sql.rows(ctx, 'SELECT id, amount - refunded FROM "billing_payment" WHERE clinic_id = %s '
+                             "AND invoice_id = %s AND kind = 'payment' AND refunded < amount "
+                             "ORDER BY id = %s DESC, id DESC", [ctx.clinic_id, invoice["id"], payment_id])
+    if sum(left for _id, left in payments) != amount:
+        raise ApiError("refund_all", _("Before going in, all of the payment goes back and the visit is cancelled."),
+                       409, fields={"amount": "refund_all"}, extra={"left": invoice["paid"]})
+    for part_id, left in payments:
+        row, invoice, _version = refund(ctx, part_id, left, method, note, cancelling=True)
+    deltas = Deltas().clinic_day(appointment["day"])
+    cancel_refunded(ctx, appointment, deltas)
+    _void(ctx, invoice, reason="refund")
+    deltas.write_doctors(ctx)
+    versions = deltas.write_clinics(ctx)
+    return row, {**invoice, "status": "void"}, versions[appointment["day"]]
 
 
 def give_back(ctx, invoice_id, method="cash"):

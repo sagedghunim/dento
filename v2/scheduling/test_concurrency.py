@@ -217,9 +217,9 @@ class ConcurrencyTests(TransactionTestCase):
         c1, c2, c3 = self.clients(3)
         results = self.run_together([
             lambda: call(c1, "POST", f"/api/v1/appointments/{appt['id']}/payments", {"amount": 5000, "method": "cash"}),
-            lambda: call(c2, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 3000}),
+            lambda: call(c2, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 10000}),  # all, before going in
             lambda: call(c3, "PUT", f"/api/v1/invoices/{invoice['id']}/discount",
-                         {"discount": fee - 12000, "expected_discount": 0}),
+                         {"discount": fee - 15000, "expected_discount": 0}),
         ])
         self.assertTrue(all(r.status_code in (200, 201, 409) for r in results), [r.content for r in results])
         with clinic_transaction(self.a.id, self.a.shard):

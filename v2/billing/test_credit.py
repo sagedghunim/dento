@@ -141,7 +141,7 @@ class CreditTests(M1TestCase):
         with clinic_transaction(self.a.id, self.a.shard):
             moved = Payment.objects.get(clinic_id=self.a.id, invoice_id=second["invoice"]["id"], kind="payment")
         self.assertEqual(moved.method, "credit")
-        r = call(self.owner, "POST", f"/api/v1/payments/{moved.id}/refund", {"amount": 1000})
+        r = call(self.owner, "POST", f"/api/v1/payments/{moved.id}/refund", {"amount": moved.amount})  # all, before going in
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["payment"]["method"], "cash")
         self.assert_summaries_match()

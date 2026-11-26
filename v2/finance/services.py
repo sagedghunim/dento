@@ -625,7 +625,7 @@ def decide_cash(ctx, request_id, approve):
             if request["kind"] == "discount":
                 billing.set_discount(ctx, d["invoice_id"], d["discount"], d["expected"])
             elif request["kind"] == "refund":
-                billing.refund(ctx, d["payment_id"], d["amount"], d.get("method"), d.get("note", ""), d.get("lower_bill", True))
+                billing.refund(ctx, d["payment_id"], d["amount"], d.get("method"), d.get("note", ""))  # an old request's lower_bill is ignored
             else:
                 billing.void(ctx, d["invoice_id"])
         elif request["kind"] == "exvoid":

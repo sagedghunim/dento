@@ -91,18 +91,18 @@ class RegisterTests(M2TestCase):
     def test_a_cash_refund_needs_the_register_too(self):
         visit = self.waiting_visit()  # money goes back only before going in (Saged, 2026-11-26)
         payment = self.pay(visit, 1000, "cash").json()["payment"]
+        self.pay(visit, 500, "card")
         closed = current_shift(self.a)
         self.close(1000)
         # The new shift's drawer is empty: cash can't go back from it (Saged, 2026-11-23) until some is put in.
-        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500})
+        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 1500})  # all of the visit
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "not_enough_cash"))
         self.assertEqual(call(self.owner, "POST", "/api/v1/register/movements",
-                              {"kind": "in", "amount": 500, "reason": "float"}).status_code, 201)
-        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500})
+                              {"kind": "in", "amount": 1000, "reason": "float"}).status_code, 201)
+        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 1500})
         self.assertEqual(r.status_code, 201, r.content)  # into a shift that opened by itself
         self.assertNotIn(current_shift(self.a), (None, closed))
-        r = call(self.owner, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 500, "method": "card"})
-        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["invoice"]["status"], "void")  # the card part went back with it
 
     def test_codes_and_another_places_shift(self):
         self.set_codes("assistant", revoked=["cash.collect"])

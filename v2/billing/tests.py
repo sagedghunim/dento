@@ -213,20 +213,23 @@ class RefundAndVoidTests(BillingTestCase):
         self.grant("billing.refund")
         with frozen(dt.datetime(2026, 11, 11, 18, 0, tzinfo=CAIRO)):
             desk = self.a.client("assistant")
-            r = call(desk, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 4000})
+            # Before going in, it all goes back, never a part (Saged, 2026-11-26).
+            part = call(desk, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 4000})
+            self.assertEqual((part.status_code, part.json()["error"]["code"]), (409, "refund_all"))
+            r = call(desk, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 10000})
             self.assertEqual(r.status_code, 201, r.content)
             body = r.json()
             self.assertEqual((body["payment"]["kind"], body["payment"]["method"], body["payment"]["day"]),
                              ("refund", "card", "2026-11-11"))
-            self.assertEqual(body["invoice"]["paid"], 6000)
-            over = call(desk, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 6001})
+            self.assertEqual((body["invoice"]["paid"], body["invoice"]["status"]), (0, "void"))
+            over = call(desk, "POST", f"/api/v1/payments/{payment_id}/refund", {"amount": 1})
             self.assertEqual((over.status_code, over.json()["error"]["code"]), (409, "over_refund"))
             refund_id = body["payment"]["id"]
             self.assertEqual(call(desk, "POST", f"/api/v1/payments/{refund_id}/refund", {"amount": 1}).status_code, 400)
         first, second = summaries(self.a, dt.date(2026, 11, 10)), summaries(self.a, dt.date(2026, 11, 11))
         owner = self.a.membership("owner").id
         self.assertEqual((first[0]["collected"], first[0]["refunded"]), (10000, 0))
-        self.assertEqual((second[0]["refunded"], second[1][owner]["refunded"]), (4000, 4000))
+        self.assertEqual((second[0]["refunded"], second[1][owner]["refunded"]), (10000, 10000))
         with clinic_transaction(self.a.id, self.a.shard):
             self.assertTrue(AuditChange.objects.filter(clinic_id=self.a.id, action="payment.refund").exists())
 
@@ -237,15 +240,21 @@ class RefundAndVoidTests(BillingTestCase):
         r = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/void")
         self.assertEqual((r.status_code, r.json()["error"]["code"]), (409, "void_paid"))
         payment = call(self.desk, "GET", f"/api/v1/invoices/{invoice['id']}").json()["invoice"]["payments"][0]
-        call(self.desk, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 100})
-        r = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/void")
-        self.assertEqual((r.status_code, r.json()["invoice"]["status"]), (200, "void"))
+        # All of it back before going in: the bill is void and the visit cancelled with it (Saged, 2026-11-26).
+        r = call(self.desk, "POST", f"/api/v1/payments/{payment['id']}/refund", {"amount": 100})
+        self.assertEqual(r.json()["invoice"]["status"], "void")
+        self.assertEqual(self.appointment(appt["id"]).status, "cancelled")
         self.assertEqual(call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/void").status_code, 200)  # repeat
         r = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/lines", {"kind": "other", "description": "x",
                                                                                 "unit_price": 0})
         self.assertEqual(r.json()["error"]["code"], "invoice_void")
+        # An unpaid bill voided by hand: the next payment opens a new one.
+        appt = self.visit()
+        invoice = self.invoice_of(appt["id"])
+        r = call(self.desk, "POST", f"/api/v1/invoices/{invoice['id']}/void")
+        self.assertEqual((r.status_code, r.json()["invoice"]["status"]), (200, "void"))
         again = self.pay(appt["id"], 200).json()["invoice"]
-        self.assertEqual((again["number"], again["paid"]), (2, 200))
+        self.assertEqual((again["number"], again["paid"]), (invoice["number"] + 1, 200))
         self.assertEqual(call(self.desk, "GET", f"/api/v1/appointments/{appt['id']}").json()["appointment"]["invoice"]["id"],
                          again["id"])
 
@@ -457,17 +466,17 @@ class RefundRequestTests(BillingTestCase):
         self.assertEqual((over.status_code, over.json()["error"]["code"]), (409, "over_refund"))
         self.assertIn("100", over.json()["error"]["message"])  # what is left, said at once
         key = str(uuid.uuid4())
-        asked = call(self.desk, "POST", url, {"amount": 4000}, key=key)
+        asked = call(self.desk, "POST", url, {"amount": 10000}, key=key)  # all of it, before going in
         self.assertEqual(asked.status_code, 202)
-        retried = call(self.desk, "POST", url, {"amount": 4000}, key=key)  # the same tap sent again: the same request
+        retried = call(self.desk, "POST", url, {"amount": 10000}, key=key)  # the same tap sent again: the same request
         self.assertEqual((retried.status_code, retried.json()["request"]["id"]), (202, asked.json()["request"]["id"]))
-        again = call(self.desk, "POST", url, {"amount": 1000})
+        again = call(self.desk, "POST", url, {"amount": 10000})
         self.assertEqual((again.status_code, again.json()["error"]["code"]), (409, "already_asked"))
         page = self.owner.get("/alerts").content.decode()
         self.assertIn(f'href="/patients/{invoice["patient"]["id"]}"', page)  # the file it is about
         self.assertIn(f"فاتورة {invoice['number']}", page)
         self.assertNotIn("data-request-problem", page)
-        # The owner gives most of it back meanwhile: the request can no longer be done, and says so before Approve.
-        self.assertEqual(call(self.owner, "POST", url, {"amount": 7000}).status_code, 201)
+        # The owner gives it back meanwhile: the request can no longer be done, and says so before Approve.
+        self.assertEqual(call(self.owner, "POST", url, {"amount": 10000}).status_code, 201)
         page = self.owner.get("/alerts").content.decode()
         self.assertIn("data-request-problem", page)

@@ -4586,9 +4586,6 @@ msgstr "مينفعش تصرف عن شهر لسه مجاش."
 msgid "That is more than this month still owes: %(amount)s."
 msgstr "ده أكتر من الباقي له عن الشهر ده: %(amount)s."
 
-msgid "The bill goes down by the same amount, so the patient doesn't owe it"
-msgstr "الفاتورة تقل بنفس المبلغ، فالمريض ميبقاش عليه حاجة"
-
 msgid "This procedure is for a molar. Tooth %(tooth)s isn't one."
 msgstr "الإجراء ده للضروس بس، والسنة %(tooth)s مش ضرس."
 
@@ -5615,3 +5612,12 @@ msgstr "ده ما ينفعش يتنفّذ: %(why)s ارفضه."
 
 msgid "The clinic keeps the deposit of a patient who didn't come."
 msgstr "العيادة بتحتفظ بعربون اللي ما جاش."
+
+msgid "Before going in, all of the payment goes back and the visit is cancelled."
+msgstr "قبل الدخول، الفلوس كلها بترجع والزيارة بتتلغي."
+
+msgid "Money given back"
+msgstr "الفلوس رجعت للمريض"
+
+msgid "Refunded {amount}, and the visit is cancelled"
+msgstr "رجع للمريض {amount}، والزيارة اتلغت"
