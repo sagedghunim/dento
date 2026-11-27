@@ -4,9 +4,9 @@
 Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, raw SQL via core.sql, RLS), plain JS front end, Arabic RTL first.
 
 ## State now
-- Committed, NOT deployed (commit 623bf83): a booking or walk-in payment can never be more than what is owed; the keep-as-credit choice is gone (server + UI). Full panel approved. Full suite 887 OK; billing.test_credit 11 OK.
-- Also committed, NOT deployed: booking source labels (الحجز جه منين…); test `clinical.test_remove_procedure.DearerThanPaidTests`.
-- Live on dento-jet: commit fdd5871 (waste alert + expenses card, overpaid box fix, FDI text).
+- Live on dento-jet and pushed (2026-11-27): a booking or walk-in payment can never be more than what is owed; the keep-as-credit choice is gone (server + UI, commit 623bf83). Full panel approved. Full suite 887 OK.
+- Same deploy: booking source labels (الحجز جه منين…).
+- Saged has not tested it on the live site yet.
 
 ## Decisions
 - "Owed" at booking = visit fee + old unpaid bills − credit held. Paying old debt at booking is still fine; more is refused (409 over_balance with most).
