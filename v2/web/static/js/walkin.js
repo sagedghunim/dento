@@ -231,7 +231,7 @@ export function initWalkIn({ onBooked } = {}) {
     if (qty() > 1) out.qty = qty();
     // A free follow-up has nothing to collect, unless the patient owes from before.
     if (field("collect") && field("collect").checked && (lastFee !== 0 || money.owes())) {
-      out.payment = money.fill({ amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value });
+      out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
     }
     return out;
   }

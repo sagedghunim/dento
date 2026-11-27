@@ -164,10 +164,10 @@ def book(ctx, request, deltas=None):
                            fields={"payment.amount": "changed"}, extra={"amount": asked})
     money = None
     if payment is not None and not is_deposit:
-        # The fee first, then the patient's older bills, then credit if the desk said so; credit held pays first
+        # The fee first, then the patient's older bills, never more (2026-11-27); credit held pays first
         # (Saged, 2026-11-24). The patient's open bills are locked here, before the counters (billing lock order).
         bills = billing.patient_money(ctx, patient["id"]) if fields is None else []
-        money = billing.plan_booking_money(bills, fee, payment["amount"], payment.get("keep_credit", False))
+        money = billing.plan_booking_money(bills, fee, payment["amount"])
 
     # Writes, in the global lock order.
     if fields is not None:

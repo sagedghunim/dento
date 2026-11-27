@@ -22,7 +22,7 @@ def _any_queue_code(ctx):
 
 def _payment(data, name="payment", deposit=False, booking=False):
     """{amount, method}. With `deposit` (booking only) it may also say "deposit": true: the booking deposit. A
-    booking's or a walk-in's (`booking`) may say "keep_credit": true, and be 0 (credit pays it)."""
+    booking's or a walk-in's (`booking`) may be 0 (credit pays it)."""
     value = data.get(name)
     if value is None:
         return None
@@ -34,8 +34,6 @@ def _payment(data, name="payment", deposit=False, booking=False):
                "method": validate.choice(value, "method", METHODS)}
     if deposit and value.get("deposit") and not payment["amount"]:
         raise ApiError("invalid", "amount: out of range", fields={"amount": "range"})  # a deposit is never 0
-    if booking and value.get("keep_credit") is not None:
-        payment["keep_credit"] = validate.boolean(value, "keep_credit")  # more than is owed stays as credit
     if value.get("deposit") is not None:
         if not deposit:
             raise ApiError("invalid", _("A deposit is taken only with a booking."), fields={f"{name}.deposit": "booking"})

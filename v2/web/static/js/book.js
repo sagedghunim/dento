@@ -388,7 +388,7 @@ export function initBook({ onBooked, defaults } = {}) {
     out.arrive = Boolean(today && field("arrive") && field("arrive").checked);
     const collect = today && field("collect") && field("collect").checked && (lastFee !== 0 || money.owes());
     if (collect) {
-      out.payment = money.fill({ amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value });
+      out.payment = { amount: parsePiastres(field("amount").value), method: form.querySelector('[name="method"]:checked').value };
     } else if (takesDeposit(today, false, out.arrive)) {
       out.payment = { amount: depositAmount(), method: form.querySelector('[name="deposit_method"]:checked').value, deposit: true };
     }

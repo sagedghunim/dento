@@ -4708,19 +4708,8 @@ msgstr "المقترح تحصّله {amount}"
 msgid "Only {most} is owed, you wrote {typed}"
 msgstr "المطلوب {most} بس، انت كاتب {typed}"
 
-msgid "Take {typed}, the {extra} stays as the patient's credit"
-msgstr "خد {typed}، والـ{extra} تتسجل مردود ليه في ملفه"
-
 msgid "Keep it {most}"
 msgstr "خليها {most}"
-
-msgid "The {amount} stays as the patient's credit"
-msgstr "الـ{amount} هتتسجل مردود ليه في ملفه"
-
-msgid ""
-"Choose: keep what is over as the patient's credit, or take only what is "
-"owed."
-msgstr "اختار: الزيادة تبقى رصيد ليه، ولا تاخد المطلوب بس."
 
 msgid "From the patient's credit"
 msgstr "من رصيد المريض"

@@ -797,8 +797,8 @@ def collect_earlier(ctx, invoices, appointment_id, amount, method, deltas, today
 
 # --- Old debt and credit at booking (Saged, 2026-11-24) -------------------------------------------------------
 # A payment taken with a booking (or a walk-in) pays the new visit's fee first, then the patient's older unpaid bills,
-# oldest first. More than that is the patient's credit, only when the desk says so (`keep_credit`); it stays on the
-# new bill as money paid over its total. Credit the patient already holds is used first, before any cash: it moves
+# oldest first. More than that is refused, never kept as credit (Saged, 2026-11-27). Credit the patient already
+# holds is used first, before any cash: it moves
 # from the bill that holds it to the bill it pays (a "credit" refund row there, a "credit" payment row here), so it
 # never counts as money in the drawer twice. Lock order: the patient's open bills are locked (id order, as
 # lock_patient_invoices) before the invoice counter, the shift and the doctor-days, as for the finish dialog's
@@ -825,20 +825,20 @@ def patient_money(ctx, patient_id):
     return sorted(found, key=lambda i: (i["created_at"], i["id"]))
 
 
-def plan_booking_money(bills, fee, cash, keep_credit):
+def plan_booking_money(bills, fee, cash):
     """Where a booking's payment goes. `bills` come from patient_money (none for a new patient); target 0 is the new
     visit's bill (its fee), then the older bills that owe, oldest first.
 
     Returns {"targets": [bill or None, ...], "moves": [(source bill, target index, amount)],
-    "cash": [(target index, amount)]}, the cash on target 0 including what is kept as credit. Refuses more than is
-    owed without `keep_credit` (`most`: the cash that pays everything), and a payment that pays nothing.
+    "cash": [(target index, amount)]}. Refuses more than is owed (`most`: the cash that pays everything; Saged,
+    2026-11-27: never kept as credit), and a payment that pays nothing.
     """
     owing = [b for b in bills if b["paid"] < b["total"]]
     targets, dues = [None, *owing], [fee, *(b["total"] - b["paid"] for b in owing)]
     sources = [(b, credit_of(b)) for b in bills if credit_of(b) > 0]
     need = sum(dues)
     most = need - min(need, sum(c for _b, c in sources))
-    if cash > most and not keep_credit:
+    if cash > most:
         raise ApiError("over_balance", _("The amount is more than what is owed."), 409, fields={"amount": "over_balance"},
                        extra={"most": most})
     left = list(dues)
@@ -856,11 +856,7 @@ def plan_booking_money(bills, fee, cash, keep_credit):
         if part > 0:
             paid.append([index, part])
             rest -= part
-    if rest:  # kept as credit, on the new visit's bill
-        if paid and paid[0][0] == 0:
-            paid[0][1] += rest
-        else:
-            paid.insert(0, [0, rest])
+    assert rest == 0, "cash beyond what is owed"  # `most` caps the cash at what the targets still owe
     if not moves and not paid:
         raise ApiError("invalid", _("Enter an amount."), fields={"amount": "range"})
     return {"targets": targets, "moves": moves, "cash": [tuple(p) for p in paid]}
