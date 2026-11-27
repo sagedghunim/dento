@@ -10,19 +10,7 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
   - An item name in that box opens its card under Items.
   - The item dialog has a most-to-keep number next to the alert line; the card reads "28 من 40".
   - The Team page works again (fix in commit f4644f2).
-- Done locally, NOT committed and NOT deployed. inventory + finance + web: 269 tests pass; makemigrations --check is clean.
-  1. Waste (توالف), as Saged agreed:
-     - `inventory.services.waste` records `item.waste` with {qty, cost = qty × unit_cost, reason}.
-     - No expense row and nothing from the drawer, because the money already left with the purchase expense.
-     - New alert kind `waste` in the "stock" group, with its own on/off switch.
-     - The expenses tab has a new card "التوالف · month" (`_waste` in finance_pages, `waste_in` in services). Its total is not added to the expenses total.
-     - New concurrent index `movement_waste` in migration `inventory/0012_movement_waste.py`.
-     - Tests: `web.test_alerts.WasteTests`.
-  2. The walk-in and booking "you wrote 1,500, only 600 is owed" box went stale. `credit.js` `set()` drew the box and only afterwards was the amount refilled. `set()` now fills an untouched amount before drawing. `walkin.js` and `book.js` lost their own fill lines.
-     - Checked for syntax only; no browser test was run.
-
-  3. Wording in the overpaid box: "رصيد ليه" now reads "مردود ليه في ملفه". Only the Arabic msgstr changed (.po and .mo).
-     - Behaviour was already right: money paid over a bill shows in the patient file as "ليه مردود" with "رد المبلغ من الخزنة", which opens the register.
+- Also committed, NOT deployed: test `clinical.test_remove_procedure.DearerThanPaidTests` (dearer visit → rest owed, credit 0; passes).
 
 ## Decisions
 - No new expense row for waste, because a second row would count the money twice. It is shown apart on the expenses page instead.
@@ -37,7 +25,12 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Deploy script: `deploy5.sh` in the old session scratchpad. It runs git archive, migrate_all on Neon, then vercel --prod. Open https://dento-jet.vercel.app in Brave.
 
 ## Next step
-0. Booking amount (Saged decided 2026-11-27): the field stays open and shows the service price; the desk can type LESS (the rest stays owed by the patient), never MORE than the price (block it: field max + server check; the overpaid box goes away in booking). Walk-in: the same rule (Saged said yes), so the overpaid box goes away there too. (Done and passing: `clinical.test_remove_procedure.DearerThanPaidTests`. A visit costing more than what was paid leaves the rest owed, credit 0.) Money → full panel.
+0. Booking + walk-in amount (Saged decided 2026-11-27): less than owed is fine (rest stays owed); MORE is never allowed, no keep-as-credit choice. Findings:
+   - Server already refuses more than owed (`billing.services.plan_booking_money`, error `over_balance` with `most`) UNLESS the payment says `keep_credit` (accepted in `scheduling/views.py:37-38`, used at `scheduling/services.py:170`).
+   - "Owed" = the visit's fee + the patient's old unpaid bills − credit held. Keep that: paying old debt at booking is still fine.
+   - Plan: drop `keep_credit` from the API (views) and from `plan_booking_money`; `credit.js` loses the keep button (`data-keep-credit`, `over_keep`, `over_kept`, `fill()`), the over box keeps one button "خليها {most}" (`data-keep-most`), and the amount input gets `max`. Templates with the box: grep `data-over` (book + walk-in dialogs). Remove unused msgids (CatalogueTests).
+   - `billing/test_credit.py` builds credit with `keep_credit` in 6 tests: rebuild that credit another way (e.g. M2 visit: record a procedure, pay all, remove it → credit, as `test_remove_procedure.test_removed_after_paying_leaves_the_patient_a_credit`), and turn `test_more_than_everything...` into "refused, and keep_credit no longer exists".
+   - Money → full panel review.
 1. Build the approved booked-service change (section below), then run the full panel review.
 2. (Prescription issue: Saged solved it himself.)
 3. Build the visit-summary WhatsApp button (names only, no prices).
