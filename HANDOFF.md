@@ -37,9 +37,9 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Deploy script: `deploy5.sh` in the old session scratchpad. It runs git archive, migrate_all on Neon, then vercel --prod. Open https://dento-jet.vercel.app in Brave.
 
 ## Next step
-0. Booking amount (Saged decided 2026-11-27): the field stays open and shows the service price; the desk can type LESS (the rest stays owed by the patient), never MORE than the price (block it: field max + server check; the overpaid box goes away in booking). Walk-in: the same rule (Saged said yes), so the overpaid box goes away there too. First, a test that a visit costing more than what was paid leaves the rest owed at the desk. Money → full panel.
+0. Booking amount (Saged decided 2026-11-27): the field stays open and shows the service price; the desk can type LESS (the rest stays owed by the patient), never MORE than the price (block it: field max + server check; the overpaid box goes away in booking). Walk-in: the same rule (Saged said yes), so the overpaid box goes away there too. (Done and passing: `clinical.test_remove_procedure.DearerThanPaidTests`. A visit costing more than what was paid leaves the rest owed, credit 0.) Money → full panel.
 1. Build the approved booked-service change (section below), then run the full panel review.
-2. Prescription won't close: log in to dento-jet as AHMED (doctor) and reproduce it yourself. Saged gave the logins: AHMED doctor, SARA desk, HAMADA owner; the password is in C:/Users/TECHNO~1/AppData/Local/Temp/claude/6410da52230ccd69/afa22117-add5-4c04-980b-84e44563e2d0/scratchpad/dento.logins (never print it or write it here). Then show what is missing.
+2. (Prescription issue: Saged solved it himself.)
 3. Build the visit-summary WhatsApp button (names only, no prices).
 
 ## Approved by Saged 2026-11-27 (build next; money + UI → full panel)
@@ -48,12 +48,6 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - Give the booked line an ✕ like the procedures.
 - When a change leaves money paid over, the patient file's "ليه مردود" says "اتغيّر من X لـ Y", and Hamada gets an alert.
 - The exam setting already exists: `consultation_free_with_procedure` in clinics/settings.py.
-
-## Requested 2026-11-27: the prescription won't close → say what is missing
-- The prescription dialog is in `v2/web/static/js/room.js` (rxDialog, ~line 799; submit ~980). The server side is `clinical/views.py:422` and `clinical/services.py` (~338).
-- Today the only check before sending is "no lines" (`rx_need_line`). The dose is not required on the server.
-- The cause is unknown. Asked Saged for a screenshot of the message he sees, or for the steps.
-- Plan once the cause is known: point at the field (which medicine, what's missing) and name it in the message. It's UI, so explain to Saged first.
 
 ## Approved by Saged 2026-11-27: visit-summary WhatsApp button (UI → explain done, build it)
 - On the visit screen, remove the "ابعت الخطة واتساب" icon in the next-visits part.

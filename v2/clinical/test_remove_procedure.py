@@ -258,3 +258,19 @@ class RemoveUnderDepositTests(DepositTestCase):
             self.assertEqual(self.pay(visit["id"], total - DEPOSIT).status_code, 201)
             r = call(self.owner, "DELETE", f"{url}/{second['id']}")
             self.assertEqual(r.status_code, 200, r.content)  # the patient's credit now (Saged, 2026-11-22)
+
+
+class DearerThanPaidTests(RemoveProcedureCase):
+    """Booked one thing, paid for it, and the doctor did something dearer inside (Saged, 2026-11-27): the rest is owed
+    at the desk, and nothing is a credit."""
+
+    def test_the_rest_is_owed_and_nothing_is_a_credit(self):
+        self.sees_money()
+        r = call(self.desk, "POST", f"/api/v1/appointments/{self.visit['id']}/payments", {"amount": self.fee, "method": "cash"})
+        self.assertEqual(r.status_code, 201, r.content)
+        self.record(self.filling, tooth=36)
+        bill = self.bill()
+        self.assertEqual(bill["total"], self.fee + self.filling["price"])
+        self.assertEqual(bill["paid"], self.fee)
+        self.assertEqual(bill["due"], self.filling["price"])
+        self.assertEqual(bill["credit"], 0)
