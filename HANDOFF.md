@@ -42,6 +42,6 @@ Dento / Hamada multi-clinic platform v2: Django 6.1 + PostgreSQL 18 (sharded, ra
 - At the end of the visit screen, add one button "ابعت ملخص الزيارة للمريض". It opens wa.me with the patient's phone and: what was done today, the prescription, the upcoming plan. Names only, no prices, nothing else.
 
 ## Open questions
-- A FIXED deposit bigger than a cheap or free visit's fee leaves paid > total (`scheduling/services.py:91-96`). Should the deposit be cut down to the fee, or refused? Ask Saged; write a failing test first.
+- Fixed deposit (Saged, 2026-11-27): a deposit must never be bigger than the visit's fee. Hamada uses a fixed 200 and nothing costs less, so this won't happen in practice. Proposed guard, not yet confirmed: the deposit asked = the smaller of the fixed amount and the fee (`scheduling/services.py:91-96`). Write a failing test first.
 - Should waste from opening stock count as a real loss? unknown
 - Later reminders: before/after photos; feature shortlist (B then A); inventory; phone navigation + mobile preview.
